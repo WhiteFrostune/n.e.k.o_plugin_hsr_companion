@@ -1,0 +1,40 @@
+[plugin]
+id = "hsr_companion"
+name = "星铁游戏搭子"
+description = "使用外部版本化资料组件和星铁页面分区识别，把数据库校验过的角色与场景事实交给 N.E.K.O，并在合适时机主动陪伴；不操作游戏客户端。"
+short_description = "外部资料组件、可信页面识别、玩家纠错与事件分级主动陪伴。"
+keywords = ["崩坏：星穹铁道", "星铁", "陪玩", "主动陪伴", "外部资料包", "页面识别", "角色识别", "玩家纠错", "玩家语境"]
+version = "0.8.2"
+type = "plugin"
+entry = "plugin.plugins.hsr_companion:HsrCompanionPlugin"
+
+[plugin.author]
+name = "N.E.K.O Community"
+
+[plugin.sdk]
+recommended = ">=0.1.0,<0.2.0"
+supported = ">=0.1.0,<0.3.0"
+
+[plugin.store]
+enabled = true
+
+[plugin.ui]
+enabled = true
+
+[[plugin.ui.panel]]
+id = "demo"
+title = "星铁游戏搭子 0.8.2"
+entry = "ui/panel.tsx"
+context = "demo"
+permissions = ["state:read", "action:call"]
+
+[[plugin.ui.guide]]
+id = "quickstart"
+title = "使用说明"
+entry = "docs/quickstart.md"
+permissions = ["state:read"]
+
+[plugin_runtime]
+enabled = true
+auto_start = true
+

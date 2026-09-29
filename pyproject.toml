@@ -1,0 +1,9 @@
+[project]
+name = "neko-hsr-companion"
+version = "0.8.2"
+requires-python = ">=3.11"
+license = "AGPL-3.0-only"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
