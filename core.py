@@ -6,11 +6,10 @@ profile, analysis, and event rules can be tested independently.
 
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from datetime import datetime, timezone
-import re
 from typing import Any, Iterable
-
 
 PROFILE_FIELDS = {
     "owned_characters",
@@ -130,11 +129,7 @@ def build_profile_proposal(
 
     recognized = _unique_strings(recognized_characters)
     recognized_keys = {_normalize(name) for name in recognized}
-    uncertain = [
-        name
-        for name in _unique_strings(uncertain_characters)
-        if _normalize(name) not in recognized_keys
-    ]
+    uncertain = [name for name in _unique_strings(uncertain_characters) if _normalize(name) not in recognized_keys]
     rejected = _unique_strings(rejected_characters)
     if not recognized and not uncertain and not rejected:
         raise ValueError("proposal requires at least one character candidate")
@@ -177,9 +172,7 @@ def apply_profile_proposal(
         for field in ("favorite_characters", "training_targets"):
             existing = profile.get(field, [])
             if isinstance(existing, list):
-                profile[field] = [
-                    name for name in existing if _normalize(name) in owned_keys
-                ]
+                profile[field] = [name for name in existing if _normalize(name) in owned_keys]
     return profile
 
 
@@ -205,9 +198,7 @@ class KnowledgeBase:
                 raise ValueError(f"knowledge record {record['id']} has no source_refs")
             missing = [source_id for source_id in refs if source_id not in self.sources]
             if missing:
-                raise ValueError(
-                    f"knowledge record {record['id']} references unknown sources: {missing}"
-                )
+                raise ValueError(f"knowledge record {record['id']} references unknown sources: {missing}")
 
     def _score(self, record: dict[str, Any], query: str) -> int:
         normalized_query = _normalize(query)
@@ -234,9 +225,7 @@ class KnowledgeBase:
 
     def _with_sources(self, record: dict[str, Any]) -> dict[str, Any]:
         item = deepcopy(record)
-        item["sources"] = [
-            deepcopy(self.sources[source_id]) for source_id in item.pop("source_refs", [])
-        ]
+        item["sources"] = [deepcopy(self.sources[source_id]) for source_id in item.pop("source_refs", [])]
         item["catalog"] = deepcopy(self.catalog_meta)
         return item
 
@@ -279,9 +268,7 @@ class CharacterRegistry:
 
     def __init__(self, payload: dict[str, Any]):
         self.meta = dict(payload.get("meta") or {})
-        self.records = [
-            dict(item) for item in payload.get("records", []) if isinstance(item, dict)
-        ]
+        self.records = [dict(item) for item in payload.get("records", []) if isinstance(item, dict)]
         self._by_key: dict[str, dict[str, Any]] = {}
         self._validate_and_index()
 
@@ -306,8 +293,7 @@ class CharacterRegistry:
                 existing = self._by_key.get(key)
                 if existing and existing["name"] != name:
                     raise ValueError(
-                        f"ambiguous character registry alias {candidate!r}: "
-                        f"{existing['name']!r} vs {name!r}"
+                        f"ambiguous character registry alias {candidate!r}: {existing['name']!r} vs {name!r}"
                     )
                 self._by_key[key] = record
 
@@ -342,15 +328,11 @@ def validate_character_candidates(
     recognized, rejected_recognized = registry.validate_candidates(recognized_characters)
     uncertain, rejected_uncertain = registry.validate_candidates(uncertain_characters)
     recognized_keys = {_normalize_character_name(name) for name in recognized}
-    uncertain = [
-        name for name in uncertain if _normalize_character_name(name) not in recognized_keys
-    ]
+    uncertain = [name for name in uncertain if _normalize_character_name(name) not in recognized_keys]
     return {
         "recognized_characters": recognized,
         "uncertain_characters": uncertain,
-        "rejected_characters": _unique_strings(
-            [*rejected_recognized, *rejected_uncertain]
-        ),
+        "rejected_characters": _unique_strings([*rejected_recognized, *rejected_uncertain]),
     }
 
 
@@ -373,11 +355,7 @@ def analyze_team(
         else:
             unknown.append(name)
 
-    roles = {
-        role
-        for character in known
-        for role in character.get("analysis_tags", {}).get("roles", [])
-    }
+    roles = {role for character in known for role in character.get("analysis_tags", {}).get("roles", [])}
     strengths: list[str] = []
     issues: list[str] = []
     next_steps: list[str] = []
@@ -462,4 +440,3 @@ def evaluate_event(
     if age > ttl:
         return {"accepted": False, "reason": "expired_event", "age_seconds": age}
     return {"accepted": True, "reason": "accepted", "age_seconds": age, "ttl": ttl}
-

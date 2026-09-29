@@ -23,6 +23,7 @@ from plugin.sdk.plugin import (
     unwrap_or,
 )
 
+from .adapters import LocalVisionAdapter
 from .core import (
     CharacterRegistry,
     KnowledgeBase,
@@ -32,16 +33,14 @@ from .core import (
     evaluate_event,
     merge_player_context,
 )
-from .vision import prepare_image_for_vision
-from .observer import capture_game_window, find_hsr_window, frame_difference
-from .adapters import LocalVisionAdapter
 from .data import ExternalKnowledgeCatalog
-from .runtime import CompanionRuntime, build_event_delivery
 from .game_state import (
     GAME_STATE_LABELS,
     build_game_state_observation,
     public_game_state,
 )
+from .observer import capture_game_window, find_hsr_window, frame_difference
+from .runtime import CompanionRuntime, build_event_delivery
 from .session import (
     DEFAULT_SESSION_TTL_SECONDS,
     build_companion_context,
@@ -57,7 +56,7 @@ from .session import (
     visual_fingerprint,
     visual_fingerprints_match,
 )
-
+from .vision import prepare_image_for_vision
 
 PROFILE_PROPERTIES = {
     "owned_characters": {"type": "array", "items": {"type": "string"}},
@@ -82,16 +81,12 @@ def _request_is_recent(request: object, *, max_age_seconds: float = 120.0) -> bo
     if not isinstance(request, dict) or not request.get("fingerprint"):
         return False
     try:
-        created = datetime.fromisoformat(
-            str(request.get("created_at") or "").replace("Z", "+00:00")
-        )
+        created = datetime.fromisoformat(str(request.get("created_at") or "").replace("Z", "+00:00"))
     except ValueError:
         return False
     if created.tzinfo is None:
         created = created.replace(tzinfo=timezone.utc)
-    age = (
-        datetime.now(timezone.utc) - created.astimezone(timezone.utc)
-    ).total_seconds()
+    age = (datetime.now(timezone.utc) - created.astimezone(timezone.utc)).total_seconds()
     return 0 <= age <= max(1.0, float(max_age_seconds))
 
 
@@ -153,9 +148,7 @@ class HsrCompanionPlugin(NekoPluginBase):
                 disabled_corrections,
             )
         legacy_state = await self._read_game_state()
-        if legacy_state and str(
-            legacy_state.get("verification") or "unverified"
-        ) not in {
+        if legacy_state and str(legacy_state.get("verification") or "unverified") not in {
             "verified",
             "player_confirmed",
         }:
@@ -165,9 +158,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             await self._store_value("last_unverified_game_state_hint", legacy_state)
             await self._store_value("current_game_state", {})
         session = await self._read_session()
-        if session and not session_is_active(
-            session, ttl_seconds=self._session_ttl_seconds
-        ):
+        if session and not session_is_active(session, ttl_seconds=self._session_ttl_seconds):
             session = stop_session(session, reason="expired_before_startup")
             await self._store_value("companion_session", session)
         elif session_is_active(session, ttl_seconds=self._session_ttl_seconds):
@@ -175,18 +166,14 @@ class HsrCompanionPlugin(NekoPluginBase):
         observer_settings = unwrap_or(await self.store.get("observer_settings"), {})
         if not isinstance(observer_settings, dict):
             observer_settings = {}
-        self._observer_status["proactive_enabled"] = bool(
-            observer_settings.get("proactive_enabled", True)
-        )
+        self._observer_status["proactive_enabled"] = bool(observer_settings.get("proactive_enabled", True))
         if observer_settings.get("enabled") is True:
             # startup is invoked through a transient asyncio.run() loop.  A
             # task created here would be cancelled as soon as startup returns;
             # restore it on the first panel/tool call instead.
             self._observer_status = {
                 "enabled": True,
-                "proactive_enabled": bool(
-                    observer_settings.get("proactive_enabled", True)
-                ),
+                "proactive_enabled": bool(observer_settings.get("proactive_enabled", True)),
                 "state": "waiting",
                 "message": "打开插件面板或开始聊天后恢复自动观察",
                 "updated_at": utc_now_iso(),
@@ -207,9 +194,7 @@ class HsrCompanionPlugin(NekoPluginBase):
                 "catalog": self._catalog.meta,
                 "record_count": self._catalog.record_count,
                 "coverage": self._catalog.coverage,
-                "session_active": session_is_active(
-                    session, ttl_seconds=self._session_ttl_seconds
-                ),
+                "session_active": session_is_active(session, ttl_seconds=self._session_ttl_seconds),
                 "observer_enabled": bool(self._observer_status.get("enabled")),
             }
         )
@@ -250,9 +235,7 @@ class HsrCompanionPlugin(NekoPluginBase):
     def _set_observer_status(self, state: str, message: str, **details: Any) -> None:
         self._observer_status = {
             "enabled": bool(self._observer_status.get("enabled")),
-            "proactive_enabled": bool(
-                self._observer_status.get("proactive_enabled", True)
-            ),
+            "proactive_enabled": bool(self._observer_status.get("proactive_enabled", True)),
             "state": str(state or "unknown"),
             "message": str(message or ""),
             "updated_at": utc_now_iso(),
@@ -270,17 +253,13 @@ class HsrCompanionPlugin(NekoPluginBase):
             "state": "installing",
             "message": "正在准备星铁资料组件",
         }
-        self._data_pack_task = asyncio.create_task(
-            self._install_data_pack(), name="hsr-companion-data-pack"
-        )
+        self._data_pack_task = asyncio.create_task(self._install_data_pack(), name="hsr-companion-data-pack")
 
     async def _install_data_pack(self) -> None:
         try:
             status = await asyncio.to_thread(self._catalog.install_pinned)
             self._data_pack_runtime = status
-            if session_is_active(
-                await self._read_session(), ttl_seconds=self._session_ttl_seconds
-            ):
+            if session_is_active(await self._read_session(), ttl_seconds=self._session_ttl_seconds):
                 await self._push_companion_context("knowledge_pack_ready")
         except asyncio.CancelledError:
             self._data_pack_runtime = {
@@ -327,9 +306,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             if not isinstance(candidate, dict):
                 continue
             observed_key = normalize_observed_name(candidate.get("name"))
-            candidate_region_fingerprint = str(
-                candidate.get("visual_fingerprint") or ""
-            )
+            candidate_region_fingerprint = str(candidate.get("visual_fingerprint") or "")
             matched = [
                 item
                 for item in corrections
@@ -347,13 +324,9 @@ class HsrCompanionPlugin(NekoPluginBase):
             if not matched:
                 corrected_characters.append(dict(candidate))
                 continue
-            matched.sort(
-                key=lambda item: str(item.get("updated_at") or ""), reverse=True
-            )
+            matched.sort(key=lambda item: str(item.get("updated_at") or ""), reverse=True)
             correction = matched[0]
-            record = self._catalog.resolve_character(
-                str(correction.get("canonical_name") or "")
-            )
+            record = self._catalog.resolve_character(str(correction.get("canonical_name") or ""))
             if record:
                 corrected_characters.append(
                     {
@@ -387,9 +360,7 @@ class HsrCompanionPlugin(NekoPluginBase):
         event, decisions = self._runtime.ingest(analysis)
         scene = dict(analysis.get("scene") or {})
         stable_scene = self._runtime.stable_scene
-        accepted = bool(
-            stable_scene != "unknown" and stable_scene == scene.get("primary_state")
-        )
+        accepted = bool(stable_scene != "unknown" and stable_scene == scene.get("primary_state"))
         if accepted:
             observation = build_game_state_observation(
                 primary_state=stable_scene,
@@ -438,9 +409,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             plan = build_event_delivery(
                 event,
                 catalog_revision=self._catalog.revision,
-                proactive_enabled=bool(
-                    observer_settings.get("proactive_enabled", True)
-                ),
+                proactive_enabled=bool(observer_settings.get("proactive_enabled", True)),
             )
             pushed = self.push_message(
                 visibility=[],
@@ -454,9 +423,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             delivery = dict(pushed) if isinstance(pushed, dict) else {}
             delivery["ai_behavior"] = plan.ai_behavior
             delivery["event_kind"] = event.kind
-            delivery["proactive_requested"] = bool(
-                plan.metadata.get("proactive_requested")
-            )
+            delivery["proactive_requested"] = bool(plan.metadata.get("proactive_requested"))
         return {**public_analysis, "delivery": delivery}
 
     def _start_observer_task(self, *, restored: bool = False) -> None:
@@ -468,9 +435,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             "正在寻找《崩坏：星穹铁道》窗口",
             restored=restored,
         )
-        self._observer_task = asyncio.create_task(
-            self._observer_loop(), name="hsr-companion-observer"
-        )
+        self._observer_task = asyncio.create_task(self._observer_loop(), name="hsr-companion-observer")
 
     async def _cancel_observer_task(self, *, update_status: bool = True) -> None:
         task = self._observer_task
@@ -486,9 +451,7 @@ class HsrCompanionPlugin(NekoPluginBase):
         if update_status:
             self._observer_status = {
                 "enabled": False,
-                "proactive_enabled": bool(
-                    self._observer_status.get("proactive_enabled", True)
-                ),
+                "proactive_enabled": bool(self._observer_status.get("proactive_enabled", True)),
                 "state": "stopped",
                 "message": "自动观察已关闭",
                 "updated_at": utc_now_iso(),
@@ -499,40 +462,26 @@ class HsrCompanionPlugin(NekoPluginBase):
             try:
                 window = await asyncio.to_thread(find_hsr_window)
                 if window is None:
-                    self._set_observer_status(
-                        "waiting", "没有找到星铁窗口，请先启动游戏"
-                    )
+                    self._set_observer_status("waiting", "没有找到星铁窗口，请先启动游戏")
                     await asyncio.sleep(3)
                     continue
                 public_window = window.public()
                 if window.minimized:
-                    self._set_observer_status(
-                        "paused", "星铁已最小化，自动观察已暂停", window=public_window
-                    )
+                    self._set_observer_status("paused", "星铁已最小化，自动观察已暂停", window=public_window)
                     await asyncio.sleep(3)
                     continue
                 if not window.foreground:
-                    self._set_observer_status(
-                        "paused", "切回星铁后会自动继续观察", window=public_window
-                    )
+                    self._set_observer_status("paused", "切回星铁后会自动继续观察", window=public_window)
                     await asyncio.sleep(3)
                     continue
 
-                image_bytes, mime, signature = await asyncio.to_thread(
-                    capture_game_window, window
-                )
+                image_bytes, mime, signature = await asyncio.to_thread(capture_game_window, window)
                 now = time.monotonic()
                 elapsed = now - self._observer_last_push_monotonic
                 difference = frame_difference(self._observer_last_signature, signature)
                 should_push = (
                     self._observer_last_signature is None
-                    or (
-                        elapsed >= 3
-                        and bool(
-                            self._runtime.pending_scene
-                            or self._runtime.pending_character_ids
-                        )
-                    )
+                    or (elapsed >= 3 and bool(self._runtime.pending_scene or self._runtime.pending_character_ids))
                     or (elapsed >= 8 and difference >= 0.055)
                     or elapsed >= 45
                 )
@@ -548,9 +497,7 @@ class HsrCompanionPlugin(NekoPluginBase):
                             "image_stored": False,
                         },
                     )
-                    analysis = await asyncio.to_thread(
-                        self._vision.analyze, image_bytes
-                    )
+                    analysis = await asyncio.to_thread(self._vision.analyze, image_bytes)
                     # The OCR detector supplies trusted structure; the image
                     # supplies the natural visual context that mature game
                     # companion plugins expose to N.E.K.O. It is read-only and
@@ -572,13 +519,10 @@ class HsrCompanionPlugin(NekoPluginBase):
                             "character_regions": [
                                 {
                                     "name": str(item.get("name") or ""),
-                                    "fingerprint": str(
-                                        item.get("visual_fingerprint") or ""
-                                    ),
+                                    "fingerprint": str(item.get("visual_fingerprint") or ""),
                                 }
                                 for item in analysis.get("characters") or []
-                                if isinstance(item, dict)
-                                and item.get("visual_fingerprint")
+                                if isinstance(item, dict) and item.get("visual_fingerprint")
                             ],
                         },
                     )
@@ -589,12 +533,8 @@ class HsrCompanionPlugin(NekoPluginBase):
                     )
                     self._observer_last_signature = signature
                     self._observer_last_push_monotonic = now
-                    scene_key = str(
-                        (analysis.get("scene") or {}).get("primary_state") or "unknown"
-                    )
-                    scene_label = GAME_STATE_LABELS.get(
-                        scene_key, GAME_STATE_LABELS["unknown"]
-                    )
+                    scene_key = str((analysis.get("scene") or {}).get("primary_state") or "unknown")
+                    scene_label = GAME_STATE_LABELS.get(scene_key, GAME_STATE_LABELS["unknown"])
                     names = [
                         str(item.get("name") or "")
                         for item in analysis.get("characters") or []
@@ -610,24 +550,12 @@ class HsrCompanionPlugin(NekoPluginBase):
                         ocr=dict(analysis.get("ocr") or {}),
                         runtime=self._runtime.snapshot(),
                         last_delivery={
-                            "submitted": bool(
-                                (local_result.get("delivery") or {}).get("submitted")
-                            ),
-                            "reason": str(
-                                (local_result.get("delivery") or {}).get("reason") or ""
-                            ),
-                            "ai_behavior": str(
-                                (local_result.get("delivery") or {}).get("ai_behavior")
-                                or ""
-                            ),
-                            "event_kind": str(
-                                (local_result.get("delivery") or {}).get("event_kind")
-                                or ""
-                            ),
+                            "submitted": bool((local_result.get("delivery") or {}).get("submitted")),
+                            "reason": str((local_result.get("delivery") or {}).get("reason") or ""),
+                            "ai_behavior": str((local_result.get("delivery") or {}).get("ai_behavior") or ""),
+                            "event_kind": str((local_result.get("delivery") or {}).get("event_kind") or ""),
                             "proactive_requested": bool(
-                                (local_result.get("delivery") or {}).get(
-                                    "proactive_requested"
-                                )
+                                (local_result.get("delivery") or {}).get("proactive_requested")
                             ),
                         },
                     )
@@ -647,9 +575,7 @@ class HsrCompanionPlugin(NekoPluginBase):
                 await asyncio.sleep(3)
             except Exception as exc:  # keep the plugin alive if capture fails
                 self.logger.warning("HSR observer paused: %s", exc)
-                self._set_observer_status(
-                    "error", "暂时无法读取星铁窗口，插件会自动重试"
-                )
+                self._set_observer_status("error", "暂时无法读取星铁窗口，插件会自动重试")
                 await asyncio.sleep(5)
 
     async def _store_value(self, key: str, value: Any) -> None:
@@ -673,9 +599,7 @@ class HsrCompanionPlugin(NekoPluginBase):
         if not isinstance(value, list):
             return []
         corrections = [dict(item) for item in value if isinstance(item, dict)]
-        sanitized, disabled = sanitize_character_corrections(
-            corrections, registry=self._characters
-        )
+        sanitized, disabled = sanitize_character_corrections(corrections, registry=self._characters)
         if disabled:
             # Run the migration at the read boundary as well as startup. This
             # makes a hot-reloaded plugin safe before its next full restart.
@@ -747,11 +671,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             {
                 "at": utc_now_iso(),
                 "tool": str(tool_name or ""),
-                **{
-                    key: value
-                    for key, value in details.items()
-                    if value not in (None, "")
-                },
+                **{key: value for key, value in details.items() if value not in (None, "")},
             }
         )
         await self._store_value("tool_audit", records[-self._tool_audit_limit :])
@@ -911,9 +831,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             accepted, rejected = self._characters.validate_candidates(candidates)
             if rejected:
                 raise ValueError(
-                    "角色数据库未收录："
-                    + "、".join(rejected)
-                    + "。为避免把 AI 编造内容写进档案，本次更新已全部取消。"
+                    "角色数据库未收录：" + "、".join(rejected) + "。为避免把 AI 编造内容写进档案，本次更新已全部取消。"
                 )
             validated[field] = accepted
         return validated
@@ -928,11 +846,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             return pending
         correction_id = str(applied.get("correction_id") or "")
         correction = next(
-            (
-                item
-                for item in await self._read_corrections()
-                if str(item.get("correction_id") or "") == correction_id
-            ),
+            (item for item in await self._read_corrections() if str(item.get("correction_id") or "") == correction_id),
             None,
         )
         if correction is None or correction.get("active") is not False:
@@ -941,20 +855,12 @@ class HsrCompanionPlugin(NekoPluginBase):
         # A v0.8.1 pending proposal may already contain the result of the
         # unsafe rewrite. Downgrade it in place so opening the panel cannot
         # keep resurfacing that name as a confirmable recognition.
-        recognized = [
-            str(item).strip()
-            for item in pending.get("recognized_characters") or []
-            if str(item).strip()
-        ]
+        recognized = [str(item).strip() for item in pending.get("recognized_characters") or [] if str(item).strip()]
         uncertain = list(
             dict.fromkeys(
                 [
                     *recognized,
-                    *[
-                        str(item).strip()
-                        for item in pending.get("uncertain_characters") or []
-                        if str(item).strip()
-                    ],
+                    *[str(item).strip() for item in pending.get("uncertain_characters") or [] if str(item).strip()],
                 ]
             )
         )
@@ -990,31 +896,19 @@ class HsrCompanionPlugin(NekoPluginBase):
             await self._push_companion_context(f"auto_start:{source}")
             session = await self._read_session()
         corrections = await self._read_corrections()
-        modality = (
-            "vision"
-            if source == "screenshot"
-            else "voice"
-            if source == "voice"
-            else "chat"
-        )
+        modality = "vision" if source == "screenshot" else "voice" if source == "voice" else "chat"
         visual_request: dict[str, Any] = {}
         if modality == "vision":
             visual_request = await self._read_visual_request()
             game_visual_request = await self._read_game_visual_request()
-            if _request_is_recent(game_visual_request) and str(
-                game_visual_request.get("fingerprint") or ""
-            ) == str(visual_request.get("fingerprint") or ""):
+            if _request_is_recent(game_visual_request) and str(game_visual_request.get("fingerprint") or "") == str(
+                visual_request.get("fingerprint") or ""
+            ):
                 # The generic request carries roster import mode; the local
                 # analysis request carries the OCR character-name regions.
                 visual_request = {**visual_request, **game_visual_request}
-        recent_visual_request = modality != "vision" or _request_is_recent(
-            visual_request
-        )
-        visual_id = (
-            str(visual_request.get("fingerprint") or "")
-            if recent_visual_request
-            else ""
-        )
+        recent_visual_request = modality != "vision" or _request_is_recent(visual_request)
+        visual_id = str(visual_request.get("fingerprint") or "") if recent_visual_request else ""
         recognized_input = list(recognized_characters or [])
         uncertain_input = list(uncertain_characters or [])
         visual_verification = "not_visual"
@@ -1022,15 +916,12 @@ class HsrCompanionPlugin(NekoPluginBase):
             plugin_visual_names = {
                 normalize_observed_name(item.get("name"))
                 for item in list(visual_request.get("character_regions") or [])
-                if isinstance(item, dict)
-                and item.get("name")
-                and item.get("fingerprint")
+                if isinstance(item, dict) and item.get("name") and item.get("fingerprint")
             }
             plugin_bound = [
                 name
                 for name in recognized_input
-                if recent_visual_request
-                and normalize_observed_name(name) in plugin_visual_names
+                if recent_visual_request and normalize_observed_name(name) in plugin_visual_names
             ]
             model_only = [name for name in recognized_input if name not in plugin_bound]
             # A dialog model naming a real roster entry only proves that the
@@ -1040,10 +931,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             uncertain_input = [*model_only, *uncertain_input]
             if model_only or not recent_visual_request:
                 confidence = "low"
-                note = (
-                    f"{str(note or '').strip()} "
-                    "未绑定到插件角色名区域的模型视觉候选只能作为不确定项。"
-                ).strip()
+                note = (f"{str(note or '').strip()} 未绑定到插件角色名区域的模型视觉候选只能作为不确定项。").strip()
             visual_verification = (
                 "plugin_ocr_bound"
                 if plugin_bound and not model_only
@@ -1069,11 +957,7 @@ class HsrCompanionPlugin(NekoPluginBase):
         )
         recognized = list(recognized_resolution["accepted"])
         recognized_keys = {name.casefold() for name in recognized}
-        uncertain = [
-            name
-            for name in uncertain_resolution["accepted"]
-            if name.casefold() not in recognized_keys
-        ]
+        uncertain = [name for name in uncertain_resolution["accepted"] if name.casefold() not in recognized_keys]
         ambiguous_candidates = [
             *recognized_resolution["ambiguous_candidates"],
             *uncertain_resolution["ambiguous_candidates"],
@@ -1084,11 +968,7 @@ class HsrCompanionPlugin(NekoPluginBase):
         for ambiguity in ambiguous_candidates:
             for alternative in list(ambiguity.get("alternatives") or []):
                 name = str(alternative or "").strip()
-                if (
-                    name
-                    and name.casefold() not in recognized_keys
-                    and name not in uncertain
-                ):
+                if name and name.casefold() not in recognized_keys and name not in uncertain:
                     uncertain.append(name)
         rejected = list(
             dict.fromkeys(
@@ -1236,17 +1116,11 @@ class HsrCompanionPlugin(NekoPluginBase):
                 canonical = str(record.get("canonical_name") or "")
                 recognized = list(recognized_resolution["accepted"])
                 is_confirmation_only = record.get("scope") == "confirmation_only"
-                if (
-                    canonical
-                    and canonical not in recognized
-                    and not is_confirmation_only
-                ):
+                if canonical and canonical not in recognized and not is_confirmation_only:
                     recognized.append(canonical)
                 recognized_keys = {name.casefold() for name in recognized}
                 uncertain = [
-                    name
-                    for name in uncertain_resolution["accepted"]
-                    if name.casefold() not in recognized_keys
+                    name for name in uncertain_resolution["accepted"] if name.casefold() not in recognized_keys
                 ]
                 ambiguous_candidates = [
                     *recognized_resolution["ambiguous_candidates"],
@@ -1255,11 +1129,7 @@ class HsrCompanionPlugin(NekoPluginBase):
                 for ambiguity in ambiguous_candidates:
                     for alternative in list(ambiguity.get("alternatives") or []):
                         name = str(alternative or "").strip()
-                        if (
-                            name
-                            and name.casefold() not in recognized_keys
-                            and name not in uncertain
-                        ):
+                        if name and name.casefold() not in recognized_keys and name not in uncertain:
                             uncertain.append(name)
                 rejected = [
                     item
@@ -1453,9 +1323,7 @@ class HsrCompanionPlugin(NekoPluginBase):
         note: str = "",
     ):
         try:
-            await self._record_tool_use(
-                "hsr_remember_character_correction", modality=modality
-            )
+            await self._record_tool_use("hsr_remember_character_correction", modality=modality)
             return await self._remember_correction(
                 observed_name=observed_name,
                 canonical_name=canonical_name,
@@ -1566,10 +1434,7 @@ class HsrCompanionPlugin(NekoPluginBase):
                     "reason": transition_reason,
                 },
                 "session": session,
-                "instruction": (
-                    "这只是模型视觉线索，插件不会把它当作已验证状态；"
-                    "不得据此断言角色身份或当前场景。"
-                ),
+                "instruction": ("这只是模型视觉线索，插件不会把它当作已验证状态；不得据此断言角色身份或当前场景。"),
             }
         except (ValueError, RuntimeError) as exc:
             return {
@@ -1639,11 +1504,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             pending = await self._read_pending_profile()
             corrections = await self._read_corrections()
             game_state = public_game_state(await self._read_game_state())
-            visual_id = (
-                str(pending.get("visual_fingerprint") or "")
-                if modality == "vision"
-                else ""
-            )
+            visual_id = str(pending.get("visual_fingerprint") or "") if modality == "vision" else ""
             candidates = list(observed_character_names or [])
             normalized_query = normalize_observed_name(query)
             if modality in {"voice", "chat"}:
@@ -1713,12 +1574,8 @@ class HsrCompanionPlugin(NekoPluginBase):
                     "pack": self._public_data_pack_status(),
                 },
                 "correction_status": {
-                    "active_count": sum(
-                        1 for item in corrections if item.get("active") is not False
-                    ),
-                    "disabled_count": sum(
-                        1 for item in corrections if item.get("active") is False
-                    ),
+                    "active_count": sum(1 for item in corrections if item.get("active") is not False),
+                    "disabled_count": sum(1 for item in corrections if item.get("active") is False),
                     "policy": "历史纠错不是当前事实；只使用 character_resolution.applied_corrections。",
                 },
                 "current_game_state": game_state,
@@ -1755,9 +1612,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             settings = await self._read_observer_settings()
             settings["enabled"] = True
             await self._store_value("observer_settings", settings)
-            self._observer_status["proactive_enabled"] = bool(
-                settings.get("proactive_enabled", True)
-            )
+            self._observer_status["proactive_enabled"] = bool(settings.get("proactive_enabled", True))
             self._start_observer_task()
             context = await self._start_companion_session("auto_observation_started")
             return Ok({"observer": dict(self._observer_status), **context})
@@ -1888,9 +1743,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             "tool_count": 11,
             "session": {
                 **session,
-                "active": session_is_active(
-                    session, ttl_seconds=self._session_ttl_seconds
-                ),
+                "active": session_is_active(session, ttl_seconds=self._session_ttl_seconds),
                 "ttl_seconds": self._session_ttl_seconds,
             },
             "context_delivery": context_audit[-1] if context_audit else {},
@@ -1906,21 +1759,11 @@ class HsrCompanionPlugin(NekoPluginBase):
             "local_vision": local_vision,
             "vision_backend": self._vision.status(),
             "runtime": self._runtime.snapshot(),
-            "correction_count": sum(
-                1 for item in corrections if item.get("active") is not False
-            ),
-            "disabled_correction_count": sum(
-                1 for item in corrections if item.get("active") is False
-            ),
+            "correction_count": sum(1 for item in corrections if item.get("active") is not False),
+            "disabled_correction_count": sum(1 for item in corrections if item.get("active") is False),
             "recent_corrections": list(
                 reversed(
-                    public_correction_summary(
-                        [
-                            item
-                            for item in corrections
-                            if item.get("active") is not False
-                        ]
-                    )[-8:]
+                    public_correction_summary([item for item in corrections if item.get("active") is not False])[-8:]
                 )
             ),
             "current_game_state": game_state,
@@ -1948,8 +1791,7 @@ class HsrCompanionPlugin(NekoPluginBase):
         id="submit_game_screenshot",
         name="让 N.E.K.O 判断当前星铁画面",
         description=(
-            "把用户主动选择的当前游戏截图交给 N.E.K.O，判断剧情、战斗、探索、菜单等状态；"
-            "原图不写入插件存储。"
+            "把用户主动选择的当前游戏截图交给 N.E.K.O，判断剧情、战斗、探索、菜单等状态；原图不写入插件存储。"
         ),
         input_schema={
             "type": "object",
@@ -2208,9 +2050,7 @@ class HsrCompanionPlugin(NekoPluginBase):
                     "proposal": proposal,
                     "confirmation_required": True,
                     "rejected_characters": proposal.get("rejected_characters", []),
-                    "recognition_status": proposal.get(
-                        "visual_verification", "not_visual"
-                    ),
+                    "recognition_status": proposal.get("visual_verification", "not_visual"),
                 }
             )
         except (ValueError, RuntimeError) as exc:
@@ -2355,9 +2195,7 @@ class HsrCompanionPlugin(NekoPluginBase):
     async def discard_profile_proposal(self, **_):
         pending = await self._read_pending_profile()
         await self.store.delete("pending_player_context")
-        if session_is_active(
-            await self._read_session(), ttl_seconds=self._session_ttl_seconds
-        ):
+        if session_is_active(await self._read_session(), ttl_seconds=self._session_ttl_seconds):
             await self._push_companion_context("profile_proposal_discarded")
         return Ok({"discarded": bool(pending), "profile_changed": False})
 
@@ -2370,9 +2208,7 @@ class HsrCompanionPlugin(NekoPluginBase):
         pending = await self._read_pending_profile()
         await self.store.delete("pending_player_context")
         await self._record_tool_use("hsr_discard_player_context")
-        if session_is_active(
-            await self._read_session(), ttl_seconds=self._session_ttl_seconds
-        ):
+        if session_is_active(await self._read_session(), ttl_seconds=self._session_ttl_seconds):
             await self._push_companion_context("profile_proposal_discarded")
         return {"discarded": bool(pending), "profile_changed": False}
 
@@ -2394,9 +2230,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             limit=limit,
         )
         pack = self._public_data_pack_status()
-        source = (
-            "external_v08" if pack.get("installed") else "minimal_character_registry"
-        )
+        source = "external_v08" if pack.get("installed") else "minimal_character_registry"
         return {
             "query": query,
             "count": len(results),
@@ -2468,9 +2302,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             _, started = await self._touch_session("tool:hsr_lookup")
             if started:
                 await self._push_companion_context("auto_start:hsr_lookup")
-            await self._record_tool_use(
-                "hsr_lookup", query=str(query or "")[:160], category=category
-            )
+            await self._record_tool_use("hsr_lookup", query=str(query or "")[:160], category=category)
             return self._lookup_payload(query, category, limit)
         except ValueError as exc:
             return {
@@ -2516,12 +2348,8 @@ class HsrCompanionPlugin(NekoPluginBase):
         **_,
     ):
         try:
-            profile = await self._write_profile(
-                changes, mode=mode, clear_fields=clear_fields
-            )
-            if session_is_active(
-                await self._read_session(), ttl_seconds=self._session_ttl_seconds
-            ):
+            profile = await self._write_profile(changes, mode=mode, clear_fields=clear_fields)
+            if session_is_active(await self._read_session(), ttl_seconds=self._session_ttl_seconds):
                 await self._push_companion_context("profile_updated")
             return Ok(
                 {
@@ -2567,15 +2395,9 @@ class HsrCompanionPlugin(NekoPluginBase):
         try:
             _, started = await self._touch_session("tool:hsr_update_player_context")
             if started:
-                await self._push_companion_context(
-                    "auto_start:hsr_update_player_context"
-                )
-            profile = await self._write_profile(
-                changes, mode=mode, clear_fields=clear_fields
-            )
-            await self._record_tool_use(
-                "hsr_update_player_context", mode=mode, field_count=len(changes or {})
-            )
+                await self._push_companion_context("auto_start:hsr_update_player_context")
+            profile = await self._write_profile(changes, mode=mode, clear_fields=clear_fields)
+            await self._record_tool_use("hsr_update_player_context", mode=mode, field_count=len(changes or {}))
             await self._push_companion_context("profile_updated_by_chat")
             return {
                 "profile": profile,
@@ -2625,12 +2447,8 @@ class HsrCompanionPlugin(NekoPluginBase):
             "session": session,
             "pending_profile_proposal": await self._read_pending_profile(),
             "correction_status": {
-                "active_count": sum(
-                    1 for item in corrections if item.get("active") is not False
-                ),
-                "disabled_count": sum(
-                    1 for item in corrections if item.get("active") is False
-                ),
+                "active_count": sum(1 for item in corrections if item.get("active") is not False),
+                "disabled_count": sum(1 for item in corrections if item.get("active") is False),
                 "policy": "历史纠错不会自动作为当前角色返回。",
             },
             "memory_boundary": "插件结构化档案；不等同于 N.E.K.O 长期情感记忆。",
@@ -2644,9 +2462,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             goal=goal,
         )
 
-    @ui.action(
-        id="analyze_team", label="分析队伍", tone="primary", refresh_context=False
-    )
+    @ui.action(id="analyze_team", label="分析队伍", tone="primary", refresh_context=False)
     @plugin_entry(
         id="analyze_team",
         name="分析星铁队伍",
@@ -2692,9 +2508,7 @@ class HsrCompanionPlugin(NekoPluginBase):
         _, started = await self._touch_session("tool:hsr_analyze_team")
         if started:
             await self._push_companion_context("auto_start:hsr_analyze_team")
-        await self._record_tool_use(
-            "hsr_analyze_team", member_count=len(members or []), goal=goal[:160]
-        )
+        await self._record_tool_use("hsr_analyze_team", member_count=len(members or []), goal=goal[:160])
         return await self._analysis_payload(members, goal)
 
     async def _record_experience(
@@ -2716,14 +2530,8 @@ class HsrCompanionPlugin(NekoPluginBase):
             "recorded_at": datetime.now(timezone.utc).isoformat(),
             "event_type": str(event_type or "other").strip() or "other",
             "summary": summary,
-            "importance": importance
-            if importance in {"normal", "important", "milestone"}
-            else "normal",
-            "tags": list(
-                dict.fromkeys(
-                    str(tag).strip() for tag in (tags or []) if str(tag).strip()
-                )
-            ),
+            "importance": importance if importance in {"normal", "important", "milestone"} else "normal",
+            "tags": list(dict.fromkeys(str(tag).strip() for tag in (tags or []) if str(tag).strip())),
             "memory_status": "plugin_record_only",
         }
         experiences.append(item)
@@ -2813,9 +2621,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             _, started = await self._touch_session("tool:hsr_record_experience")
             if started:
                 await self._push_companion_context("auto_start:hsr_record_experience")
-            await self._record_tool_use(
-                "hsr_record_experience", event_type=event_type, importance=importance
-            )
+            await self._record_tool_use("hsr_record_experience", event_type=event_type, importance=importance)
             return {
                 "experience": await self._record_experience(
                     event_type=event_type,
@@ -2921,9 +2727,7 @@ class HsrCompanionPlugin(NekoPluginBase):
     async def reset_demo_data(self, **_):
         await self._cancel_observer_task()
         self._runtime.reset()
-        if session_is_active(
-            await self._read_session(), ttl_seconds=self._session_ttl_seconds
-        ):
+        if session_is_active(await self._read_session(), ttl_seconds=self._session_ttl_seconds):
             await self._stop_companion_session("reset_demo_data")
         cleared: list[str] = []
         for key in (

@@ -10,7 +10,6 @@ import re
 from copy import deepcopy
 from typing import Any, Iterable
 
-
 _SEPARATORS = re.compile(r"[\s·•・:：,，。.!！?？'\"“”‘’()（）\[\]【】_-]+")
 
 
@@ -23,9 +22,7 @@ class StructuredCatalog:
 
     def __init__(self, payload: dict[str, Any], sources: dict[str, Any]):
         self.meta = dict(payload.get("meta") or {})
-        self.records = [
-            dict(item) for item in payload.get("records", []) if isinstance(item, dict)
-        ]
+        self.records = [dict(item) for item in payload.get("records", []) if isinstance(item, dict)]
         self.sources = {
             str(item.get("source_id")): dict(item)
             for item in sources.get("sources", [])
@@ -72,13 +69,9 @@ class StructuredCatalog:
 
         expected = int(self.meta.get("record_count") or 0)
         if expected and expected != len(self.records):
-            raise ValueError(
-                f"catalog record_count mismatch: metadata={expected}, actual={len(self.records)}"
-            )
+            raise ValueError(f"catalog record_count mismatch: metadata={expected}, actual={len(self.records)}")
 
-    def _index_character_alias(
-        self, alias: object, record_id: str, *, voice_only: bool
-    ) -> None:
+    def _index_character_alias(self, alias: object, record_id: str, *, voice_only: bool) -> None:
         key = normalize_lookup_text(alias)
         if not key:
             return
@@ -107,9 +100,7 @@ class StructuredCatalog:
         record = self._by_id.get(str(record_id or "").strip())
         return deepcopy(record) if record else None
 
-    def resolve_character(
-        self, candidate: str, *, modality: str = "text"
-    ) -> dict[str, Any] | None:
+    def resolve_character(self, candidate: str, *, modality: str = "text") -> dict[str, Any] | None:
         key = normalize_lookup_text(candidate)
         record_id = self._character_aliases.get(key)
         if not record_id and str(modality or "").lower() == "voice":
@@ -170,10 +161,7 @@ class StructuredCatalog:
         result: list[dict[str, Any]] = []
         for _, record in scored[: max(1, min(int(limit or 8), 30))]:
             value = deepcopy(record)
-            value["sources"] = [
-                deepcopy(self.sources[source_id])
-                for source_id in value.get("source_refs") or []
-            ]
+            value["sources"] = [deepcopy(self.sources[source_id]) for source_id in value.get("source_refs") or []]
             result.append(value)
         return result
 

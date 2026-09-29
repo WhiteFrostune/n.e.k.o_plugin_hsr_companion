@@ -2,9 +2,9 @@
 
 from .catalog import StructuredCatalog, normalize_lookup_text
 from .pack import (
-    ExternalKnowledgeCatalog,
     PACK_SCHEMA_VERSION,
     UPSTREAM_REVISION,
+    ExternalKnowledgeCatalog,
     build_pack_records,
     default_data_pack_root,
     write_pack_database,

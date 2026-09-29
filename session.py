@@ -17,7 +17,6 @@ from typing import Any, Iterable
 
 from .core import CharacterRegistry
 
-
 SESSION_SCHEMA_VERSION = 1
 DEFAULT_SESSION_TTL_SECONDS = 4 * 60 * 60
 VALID_MODALITIES = {"chat", "voice", "vision"}
@@ -63,17 +62,13 @@ def visual_fingerprint(image_bytes: bytes) -> str:
         for row in range(8):
             offset = row * 9
             for column in range(8):
-                value = (value << 1) | int(
-                    pixels[offset + column] > pixels[offset + column + 1]
-                )
+                value = (value << 1) | int(pixels[offset + column] > pixels[offset + column + 1])
         return f"dhash:{value:016x}"
     except Exception:
         return "sha256:" + sha256(image_bytes).hexdigest()[:24]
 
 
-def visual_fingerprints_match(
-    left: object, right: object, *, max_distance: int = 8
-) -> bool:
+def visual_fingerprints_match(left: object, right: object, *, max_distance: int = 8) -> bool:
     first = str(left or "").strip().lower()
     second = str(right or "").strip().lower()
     if not first or not second:
@@ -95,9 +90,7 @@ def session_is_active(
 ) -> bool:
     if not isinstance(session, dict) or not bool(session.get("active")):
         return False
-    touched_at = _parse_time(
-        session.get("last_activity_at") or session.get("started_at")
-    )
+    touched_at = _parse_time(session.get("last_activity_at") or session.get("started_at"))
     if touched_at is None:
         return False
     current = now or datetime.now(timezone.utc)
@@ -125,9 +118,7 @@ def start_session(
         "schema_version": SESSION_SCHEMA_VERSION,
         "session_id": session_id,
         "active": True,
-        "started_at": str(previous.get("started_at") or timestamp)
-        if active_before
-        else timestamp,
+        "started_at": str(previous.get("started_at") or timestamp) if active_before else timestamp,
         "last_activity_at": timestamp,
         "start_reason": str(previous.get("start_reason") or reason).strip(),
         "last_reason": str(reason or "unknown").strip(),
@@ -243,11 +234,7 @@ def remember_character_correction(
     timestamp = utc_now_iso(now)
     result = [dict(item) for item in corrections if isinstance(item, dict)]
     existing_index = next(
-        (
-            index
-            for index, item in enumerate(result)
-            if item.get("correction_id") == correction_id
-        ),
+        (index for index, item in enumerate(result) if item.get("correction_id") == correction_id),
         None,
     )
     confirmations = 1
@@ -302,17 +289,9 @@ def resolve_character_candidate(
         scope_value = str(raw.get("scope_value") or "")
         if scope == "global_alias" and direct is None:
             matching.append(raw)
-        elif (
-            scope == "visual_fingerprint"
-            and visual_id
-            and visual_fingerprints_match(scope_value, visual_id)
-        ):
+        elif scope == "visual_fingerprint" and visual_id and visual_fingerprints_match(scope_value, visual_id):
             matching.append(raw)
-        elif (
-            scope in {"current_session", "confirmation_only"}
-            and session_id
-            and scope_value == session_id
-        ):
+        elif scope in {"current_session", "confirmation_only"} and session_id and scope_value == session_id:
             confirmation_notes.append(raw)
     if matching:
         matching.sort(key=lambda item: str(item.get("updated_at") or ""), reverse=True)
@@ -327,15 +306,9 @@ def resolve_character_candidate(
 
     if direct is not None:
         if confirmation_notes:
-            confirmation_notes.sort(
-                key=lambda item: str(item.get("updated_at") or ""), reverse=True
-            )
-            alternative = registry.resolve(
-                str(confirmation_notes[0].get("canonical_name") or "")
-            )
-            if alternative is not None and alternative.get("name") != direct.get(
-                "name"
-            ):
+            confirmation_notes.sort(key=lambda item: str(item.get("updated_at") or ""), reverse=True)
+            alternative = registry.resolve(str(confirmation_notes[0].get("canonical_name") or ""))
+            if alternative is not None and alternative.get("name") != direct.get("name"):
                 return {
                     "status": "needs_confirmation",
                     "observed_name": observed,
@@ -391,9 +364,7 @@ def resolve_character_candidates(
                 {
                     "observed_name": observed,
                     "alternatives": list(result.get("alternatives") or []),
-                    "correction_id": str(
-                        (result.get("correction") or {}).get("correction_id") or ""
-                    ),
+                    "correction_id": str((result.get("correction") or {}).get("correction_id") or ""),
                 }
             )
             continue
@@ -406,9 +377,7 @@ def resolve_character_candidates(
                 {
                     "observed_name": observed,
                     "canonical_name": canonical,
-                    "correction_id": str(
-                        (result.get("correction") or {}).get("correction_id") or ""
-                    ),
+                    "correction_id": str((result.get("correction") or {}).get("correction_id") or ""),
                 }
             )
     return {
@@ -438,9 +407,7 @@ def build_companion_context(
     game_state: dict[str, Any] | None = None,
 ) -> str:
     active_correction_count = sum(
-        1
-        for item in corrections
-        if isinstance(item, dict) and item.get("active") is not False
+        1 for item in corrections if isinstance(item, dict) and item.get("active") is not False
     )
     correction_text = (
         f"- 已保存 {active_correction_count} 条受限纠错。历史纠错不是当前画面事实，"
@@ -448,14 +415,10 @@ def build_companion_context(
         if active_correction_count
         else "- 暂无生效中的玩家纠错"
     )
-    pending_text = (
-        _list_text(pending.get("recognized_characters")) if pending else "暂无"
-    )
+    pending_text = _list_text(pending.get("recognized_characters")) if pending else "暂无"
     current_game_state = game_state if isinstance(game_state, dict) else {}
     if current_game_state.get("has_observation") and current_game_state.get("verified"):
-        freshness = (
-            "当前有效" if current_game_state.get("fresh") else "已经过期，仅供历史参考"
-        )
+        freshness = "当前有效" if current_game_state.get("fresh") else "已经过期，仅供历史参考"
         state_text = (
             f"{current_game_state.get('label') or '暂时无法判断'}"
             f"（{current_game_state.get('confidence') or 'low'}，{freshness}）"

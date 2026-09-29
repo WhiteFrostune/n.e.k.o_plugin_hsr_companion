@@ -43,13 +43,9 @@ _SCENE_INSTRUCTIONS = {
         "玩家正在队伍编成或挑战准备界面。可以简短表示你在陪着，或自然询问是否需要配队建议；"
         "不要假定画面上未被数据库确认的角色。"
     ),
-    "warp": (
-        "玩家进入了跃迁界面。可以自然说一句轻松的陪伴或祝好运；"
-        "不要声称已经抽到任何角色或物品。"
-    ),
+    "warp": ("玩家进入了跃迁界面。可以自然说一句轻松的陪伴或祝好运；不要声称已经抽到任何角色或物品。"),
     "reward": (
-        "玩家进入结算或奖励画面。可以自然回应这一阶段已经结束；"
-        "未识别到具体奖励时，不得编造奖励、胜负或完成结果。"
+        "玩家进入结算或奖励画面。可以自然回应这一阶段已经结束；未识别到具体奖励时，不得编造奖励、胜负或完成结果。"
     ),
 }
 
@@ -78,11 +74,7 @@ def build_event_delivery(
         instruction = _SCENE_INSTRUCTIONS.get(current, instruction)
     elif event.kind == "characters_identified":
         names = [str(name).strip() for name in payload.get("names") or [] if str(name).strip()]
-        entity_ids = [
-            str(entity_id).strip()
-            for entity_id in payload.get("entity_ids") or []
-            if str(entity_id).strip()
-        ]
+        entity_ids = [str(entity_id).strip() for entity_id in payload.get("entity_ids") or [] if str(entity_id).strip()]
         fact_lines.extend(
             [
                 f"数据库确认角色：{'、'.join(names) if names else '无'}",
@@ -96,8 +88,7 @@ def build_event_delivery(
     elif event.kind == "exploration_idle":
         fact_lines.append("玩家已在探索状态停留一段时间，近期没有更高优先级事件。")
         instruction = (
-            "可以用符合你人格的一句轻松短句陪伴玩家；"
-            "不要假装看见了具体地点、任务、敌人或宝箱，也不要连续追问。"
+            "可以用符合你人格的一句轻松短句陪伴玩家；不要假装看见了具体地点、任务、敌人或宝箱，也不要连续追问。"
         )
     else:
         fact_lines.append(f"事件：{event.kind}")

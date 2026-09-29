@@ -32,11 +32,7 @@ class EventArbiter:
         if not survivors:
             return None, decisions
         chosen = max(survivors, key=lambda item: (item.priority, item.ts))
-        if (
-            chosen.proactive
-            and not chosen.preempt
-            and now - self._last_output_at < self.global_rate_seconds
-        ):
+        if chosen.proactive and not chosen.preempt and now - self._last_output_at < self.global_rate_seconds:
             for event in survivors:
                 decisions.append({"event_id": event.event_id, "result": "dropped", "reason": "global_rate"})
             return None, decisions

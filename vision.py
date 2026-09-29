@@ -11,7 +11,6 @@ import base64
 import binascii
 from io import BytesIO
 
-
 SUPPORTED_IMAGE_MIMES = {"image/jpeg", "image/png", "image/webp"}
 MAX_INPUT_BYTES = 10 * 1024 * 1024
 MAX_VISION_BYTES = 220 * 1024

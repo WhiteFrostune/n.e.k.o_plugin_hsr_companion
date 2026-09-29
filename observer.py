@@ -10,7 +10,6 @@ from dataclasses import asdict, dataclass
 from io import BytesIO
 from typing import Any
 
-
 HSR_PROCESS_NAMES = {"starrail.exe", "honkaistarrail.exe"}
 HSR_TITLE_TOKENS = ("崩坏：星穹铁道", "崩坏: 星穹铁道", "Honkai: Star Rail")
 
@@ -105,9 +104,11 @@ def find_hsr_window() -> GameWindow | None:
                 minimized=minimized,
                 foreground=foreground,
             )
-            score = (100 if process_name.lower() in HSR_PROCESS_NAMES else 0) + (
-                20 if foreground else 0
-            ) + min(width * height // 100_000, 10)
+            score = (
+                (100 if process_name.lower() in HSR_PROCESS_NAMES else 0)
+                + (20 if foreground else 0)
+                + min(width * height // 100_000, 10)
+            )
             candidates.append((score, window))
         except Exception:
             return

@@ -12,7 +12,6 @@ from typing import Any, Iterable
 
 from ..data import normalize_lookup_text
 
-
 PAGE_RULES: tuple[dict[str, Any], ...] = (
     {
         "page_type": "character_detail",
@@ -87,10 +86,7 @@ def _box_dict(box: Any) -> dict[str, Any]:
     elif isinstance(box, dict):
         value = dict(box)
     else:
-        value = {
-            key: getattr(box, key, None)
-            for key in ("text", "left", "top", "right", "bottom", "score")
-        }
+        value = {key: getattr(box, key, None) for key in ("text", "left", "top", "right", "bottom", "score")}
     return {
         "text": str(value.get("text") or "").strip(),
         "left": float(value.get("left") or 0.0),

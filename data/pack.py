@@ -23,21 +23,14 @@ from typing import Any, Callable, Iterable
 
 from .catalog import normalize_lookup_text
 
-
 PACK_SCHEMA_VERSION = 1
 UPSTREAM_REVISION = "541e1100dcfe9a299c6bd500c6d3c4115e0451e4"
 UPSTREAM_NAME = "Mar-7th/StarRailRes"
 UPSTREAM_URL = "https://github.com/Mar-7th/StarRailRes"
 UPSTREAM_LICENSE = "AGPL-3.0-only"
 SOURCE_ID = "starrailres_structured_cn"
-BASE_URL = (
-    "https://raw.githubusercontent.com/Mar-7th/StarRailRes/"
-    f"{UPSTREAM_REVISION}/index_min/cn"
-)
-LICENSE_URL = (
-    "https://raw.githubusercontent.com/Mar-7th/StarRailRes/"
-    f"{UPSTREAM_REVISION}/LICENSE"
-)
+BASE_URL = f"https://raw.githubusercontent.com/Mar-7th/StarRailRes/{UPSTREAM_REVISION}/index_min/cn"
+LICENSE_URL = f"https://raw.githubusercontent.com/Mar-7th/StarRailRes/{UPSTREAM_REVISION}/LICENSE"
 UPSTREAM_TABLES = (
     "characters",
     "character_skills",
@@ -122,9 +115,7 @@ def _material_ids(value: object) -> list[str]:
     return result
 
 
-def build_pack_records(
-    registry: dict[str, Any], tables: dict[str, dict[str, Any]]
-) -> list[dict[str, Any]]:
+def build_pack_records(registry: dict[str, Any], tables: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     """Transform pinned upstream tables into searchable, related records."""
 
     records: list[dict[str, Any]] = []
@@ -399,9 +390,7 @@ class ExternalKnowledgeCatalog:
                 "aliases": list(item.get("aliases") or []),
                 "speech_aliases": list(item.get("speech_aliases") or []),
                 "ocr_aliases": list(item.get("ocr_aliases") or []),
-                "form_ids": [
-                    f"character_form.{value}" for value in item.get("source_ids") or []
-                ],
+                "form_ids": [f"character_form.{value}" for value in item.get("source_ids") or []],
                 "source_refs": [SOURCE_ID],
             }
             if not record["name"]:
@@ -516,6 +505,7 @@ class ExternalKnowledgeCatalog:
         text_fetcher: TextFetcher = _download_text,
     ) -> dict[str, Any]:
         self.root.mkdir(parents=True, exist_ok=True)
+
         # Fetch independent pinned tables concurrently.  This keeps the first
         # run bounded by one network timeout instead of twelve consecutive
         # timeouts when the upstream is unavailable.
@@ -526,9 +516,7 @@ class ExternalKnowledgeCatalog:
             tables = dict(pool.map(fetch_table, UPSTREAM_TABLES))
         pack_dir = self.root / "packs" / UPSTREAM_REVISION
         pack_dir.mkdir(parents=True, exist_ok=True)
-        fd, temporary_name = tempfile.mkstemp(
-            prefix="knowledge-", suffix=".sqlite.tmp", dir=pack_dir
-        )
+        fd, temporary_name = tempfile.mkstemp(prefix="knowledge-", suffix=".sqlite.tmp", dir=pack_dir)
         os.close(fd)
         temporary = Path(temporary_name)
         database = pack_dir / "knowledge.sqlite"
@@ -587,14 +575,10 @@ class ExternalKnowledgeCatalog:
             return None
         uri = self.database_path.as_uri() + "?mode=ro"
         with closing(sqlite3.connect(uri, uri=True)) as connection:
-            row = connection.execute(
-                "SELECT payload_json FROM records WHERE id = ?", (normalized_id,)
-            ).fetchone()
+            row = connection.execute("SELECT payload_json FROM records WHERE id = ?", (normalized_id,)).fetchone()
         return self._record_with_sources(row[0]) if row else None
 
-    def resolve_character(
-        self, candidate: str, *, modality: str = "text"
-    ) -> dict[str, Any] | None:
+    def resolve_character(self, candidate: str, *, modality: str = "text") -> dict[str, Any] | None:
         key = normalize_lookup_text(candidate)
         record_id = self._aliases.get(key)
         if not record_id and str(modality or "").lower() == "voice":
@@ -653,9 +637,7 @@ class ExternalKnowledgeCatalog:
         params.append(200)
         with closing(sqlite3.connect(uri, uri=True)) as connection:
             rows = connection.execute(
-                "SELECT name_key, search_text, payload_json FROM records WHERE "
-                + " AND ".join(clauses)
-                + " LIMIT ?",
+                "SELECT name_key, search_text, payload_json FROM records WHERE " + " AND ".join(clauses) + " LIMIT ?",
                 params,
             ).fetchall()
         scored: list[tuple[int, dict[str, Any]]] = []

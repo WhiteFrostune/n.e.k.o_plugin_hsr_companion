@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
-
 GAME_STATE_TTL_SECONDS = 5 * 60
 
 GAME_STATE_LABELS = {
@@ -135,8 +134,7 @@ def public_game_state(
         "summary": str(observation.get("summary") or ""),
         "source": str(observation.get("source") or ""),
         "verification": str(observation.get("verification") or "unverified"),
-        "verified": str(observation.get("verification") or "unverified")
-        in {"verified", "player_confirmed"},
+        "verified": str(observation.get("verification") or "unverified") in {"verified", "player_confirmed"},
         "observed_at": str(observation.get("observed_at") or ""),
         "expires_at": str(observation.get("expires_at") or ""),
         "fresh": game_state_is_fresh(observation, now=now),
@@ -172,9 +170,7 @@ def evaluate_state_transition(
 
     pending_value = pending if isinstance(pending, dict) else {}
     confirmations = (
-        int(pending_value.get("confirmations") or 0) + 1
-        if pending_value.get("primary_state") == candidate_state
-        else 1
+        int(pending_value.get("confirmations") or 0) + 1 if pending_value.get("primary_state") == candidate_state else 1
     )
     next_pending = {
         "primary_state": candidate_state,

@@ -10,7 +10,6 @@ from typing import Any
 
 from ..data import normalize_lookup_text
 
-
 SCENE_TERMS: dict[str, tuple[str, ...]] = {
     "warp": ("跃迁", "星轨专票", "跃迁记录", "角色活动跃迁", "光锥活动跃迁"),
     "reward": ("挑战成功", "获得物品", "战利品", "领取奖励", "通关奖励"),
@@ -62,10 +61,7 @@ def detect_scene(text: str) -> dict[str, Any]:
         "confidence": "high" if count >= 2 else "mixed",
         "evidence": evidence,
         "classifier": "local_ocr_rules_v1",
-        "alternatives": [
-            {"state": scene, "matched_terms": hits[scene]}
-            for scene in ranked[1:3]
-        ],
+        "alternatives": [{"state": scene, "matched_terms": hits[scene]} for scene in ranked[1:3]],
     }
 
 
