@@ -405,6 +405,7 @@ def build_companion_context(
     registry_count: int,
     catalog_meta: dict[str, Any],
     game_state: dict[str, Any] | None = None,
+    current_visual: dict[str, Any] | None = None,
 ) -> str:
     active_correction_count = sum(
         1 for item in corrections if isinstance(item, dict) and item.get("active") is not False
@@ -431,8 +432,16 @@ def build_companion_context(
         state_text += f"；判断依据：{evidence}"
     else:
         state_text = "尚无插件验证的状态；不要猜测玩家当前在剧情、战斗或其他状态"
+    visual_text = ""
+    if current_visual is not None:
+        names = _list_text([item.get("name") for item in current_visual.get("characters") or []], empty="无")
+        visual_text = (
+            f"当前角色识别：{current_visual.get('message') or ''}\n"
+            f"已确认界面角色：{names}\n"
+            f"{current_visual.get('instruction') or ''}\n"
+        )
     return (
-        "[星铁陪玩会话｜插件可信上下文 v0.8.2]\n"
+        "[星铁陪玩会话｜插件可信上下文 v0.9.1]\n"
         f"会话ID：{session.get('session_id', '')}；当前状态：已开启。\n"
         "事实边界：\n"
         "1. 涉及《崩坏：星穹铁道》的角色身份、玩家档案、队伍、培养或游戏事实时，"
@@ -444,18 +453,29 @@ def build_companion_context(
         "5. 插件返回与模型旧知识冲突时，以插件中带来源和确认状态的数据为准。\n"
         "6. hsr_report_game_state 只接收模型的未验证视觉线索，不会生成插件事实；"
         "当前场景和角色身份只能以插件本地识别或玩家明确确认的结果为准。\n"
-        "7. 标记为‘星铁自动观察画面’的图片来自玩家明确开启的前台游戏窗口观察；"
-        "它是静默上下文，不应仅因收到画面而打断玩家。\n"
+        "7. 星铁自动观察来自玩家明确开启的独立游戏窗口采集，切换聊天不影响观察；"
+        "只使用插件已确认的结构化事实，不应仅因收到观察更新而打断玩家。\n"
+        "页面未知不等于游戏加载；插件未返回 followup.pending=true 时，禁止说‘等好了告诉你’。"
+        "显式问题补答消息只回答所关联的问题，不当作新游戏事件或普通闲聊。\n"
+        "8. 对‘这个技能、这件装备、当前任务、这些属性’先查询当前画面，使用 screen_context_answer；"
+        "观察字段、资料解释和分析建议分开。多个候选无选中证据时先确认指代，不随机选取。\n"
+        "9. 角色配装、配队、高难攻略也先调用同一工具并使用 guidance_answer；玩家已经说清角色或玩法时，"
+        "不必先看到画面才能提供方案。仅需辨认眼前对象/关卡时读取画面。版本攻略、参考队伍、账号拥有分开，"
+        "不能用过期期次冒充本期，不能保证最优或通关。对没有专武、缺队友、补一个角色名的追问也先调用工具，"
+        "query保留原问题，可用discussion_character携带先前明确的讨论角色，但不能当成视觉确认。"
+        "讨论对象过期先确认，不用通用加攻/回能模板自行配队，不泛搜其他游戏。\n"
         f"角色注册表：{registry_count} 名，版本 {registry_meta.get('upstream_revision', '未知')}，"
         f"状态 {registry_meta.get('verification_status', '未知')}。\n"
         f"知识目录状态：{catalog_meta.get('verification_status', '未知')}；"
-        "若仅有 minimal_registry_only，只能确认角色身份，不能补写技能或攻略。\n"
+        "若仅有 minimal_registry_only，只能确认角色身份，不能补写未提供带来源资料的技能或攻略；"
+        "另有 guidance_answer 时仅按其中已覆盖且带来源的范围回答。\n"
         "已确认玩家档案：\n"
         f"- 拥有角色：{_list_text(profile.get('owned_characters'))}\n"
         f"- 喜欢角色：{_list_text(profile.get('favorite_characters'))}\n"
         f"- 培养目标：{_list_text(profile.get('training_targets'))}\n"
         f"- 当前目标：{_list_text(profile.get('current_goals'))}\n"
         f"当前游戏画面：{state_text}\n"
+        f"{visual_text}"
         f"待确认识别：{pending_text}\n"
         "玩家纠错：\n"
         f"{correction_text}"

@@ -44,9 +44,7 @@ _SCENE_INSTRUCTIONS = {
         "不要假定画面上未被数据库确认的角色。"
     ),
     "warp": ("玩家进入了跃迁界面。可以自然说一句轻松的陪伴或祝好运；不要声称已经抽到任何角色或物品。"),
-    "reward": (
-        "玩家进入结算或奖励画面。可以自然回应这一阶段已经结束；未识别到具体奖励时，不得编造奖励、胜负或完成结果。"
-    ),
+    "reward": ("只识别到结算或奖励相关页面，不证明任务完成、挑战成功或已领取奖励；不得庆祝完成、胜利或编造奖励。"),
 }
 
 
@@ -77,13 +75,27 @@ def build_event_delivery(
         entity_ids = [str(entity_id).strip() for entity_id in payload.get("entity_ids") or [] if str(entity_id).strip()]
         fact_lines.extend(
             [
-                f"数据库确认角色：{'、'.join(names) if names else '无'}",
+                f"数据库确认角色：{'、'.join(names) if names else '无'}（仅界面名称，不是外观或操控角色判定）",
                 f"角色实体 ID：{'、'.join(entity_ids) if entity_ids else '无'}",
             ]
         )
+        scope_labels = {
+            "screen_label": "界面显示的数据库角色名，位置与用途尚未确认，不证明3D外观、操控、出战或拥有关系",
+            "hud_label": "HUD 名称，不证明当前操控角色或账号拥有关系",
+            "hud_portrait": "HUD 头像，不证明当前操控角色或账号拥有关系",
+            "dialogue_speaker": "剧情说话者名称，不证明出战角色",
+            "detail_subject": "详情页展示对象，不证明当前操控角色",
+            "team_selection": "编队页名称，不证明已出战或账号拥有",
+            "banner_label": "跃迁页名称，不证明已获得角色",
+            "reward_label": "奖励页名称，不据此写入账号档案",
+        }
+        for item in payload.get("identities") or []:
+            if isinstance(item, dict):
+                scope = scope_labels.get(str(item.get("identity_scope") or ""), "界面名称，身份范围未确认")
+                fact_lines.append(f"{item.get('name') or ''}的证据范围：{scope}")
         instruction = (
-            "这些名称经过插件数据库实体校验。可以围绕已确认角色自然说一句简短的话；"
-            "必须原样使用角色名，不得改名、猜测其他角色，也不要仅凭角色身份编造当前队伍或剧情。"
+            "只确认上述界面角色名，不代表看懂角色外观。可以围绕已确认名称自然说一句简短的话；"
+            "必须原样使用角色名，不得改名、猜测其他角色；不得据此断言当前操控角色、账号拥有关系或剧情登场人物。"
         )
     elif event.kind == "exploration_idle":
         fact_lines.append("玩家已在探索状态停留一段时间，近期没有更高优先级事件。")
@@ -93,7 +105,10 @@ def build_event_delivery(
     else:
         fact_lines.append(f"事件：{event.kind}")
 
-    should_respond = bool(proactive_enabled and event.proactive)
+    # Recognizing names updates perception; it is not itself a reason to speak.
+    # A roster cue queued just before a user query can otherwise arrive after
+    # the answer and turn one location question into two unrelated replies.
+    should_respond = bool(proactive_enabled and event.proactive and event.kind != "characters_identified")
     if not should_respond:
         instruction = "把这条信息只作为静默上下文，不需要立即发言。"
 
@@ -103,6 +118,12 @@ def build_event_delivery(
             *fact_lines,
             f"数据库版本：{catalog_revision or '最小角色注册表'}",
             instruction,
+            (
+                "这只是触发信号，不是开口时的实时画面。准备主动提及场景或角色前，先调用 "
+                "hsr_companion_prepare 查询当前画面（只问场景可用 intent=game_state）；"
+                "以新查询结果为准，若已切页或无法确认，放弃旧事件的场景和名单，不播报旧页、不随机补一个场景。"
+            ) if should_respond else "",
+            "识别名单不保证完整：未识别不等于空位或角色不在场。页面状态不证明任务完成或获得角色；没有可靠分析时不得评价配队强弱或编造问题与方案。",
         ]
     )
     return EventDelivery(
@@ -116,8 +137,9 @@ def build_event_delivery(
             "catalog_revision": catalog_revision,
             "proactive_requested": should_respond,
             "delivery_intent": "realtime_cue" if should_respond else "passive_context",
-            "interrupt_policy": "drop_if_busy",
+            "arbitration_scope": "plugin_before_submission" if should_respond else "passive_context",
             "image_stored": False,
+            "requires_current_observation": should_respond,
         },
     )
 

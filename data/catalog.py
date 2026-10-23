@@ -165,5 +165,14 @@ class StructuredCatalog:
             result.append(value)
         return result
 
+    def match_labels(self, labels: Iterable[str], *, entity_types: Iterable[str]) -> list[dict[str, Any]]:
+        keys = {normalize_lookup_text(label) for label in labels}
+        allowed = set(entity_types)
+        return [
+            {**deepcopy(record), "sources": [deepcopy(self.sources[ref]) for ref in record.get("source_refs") or []]}
+            for record in self.records
+            if record.get("entity_type") in allowed and normalize_lookup_text(record.get("name")) in keys
+        ]
+
 
 __all__ = ["StructuredCatalog", "normalize_lookup_text"]

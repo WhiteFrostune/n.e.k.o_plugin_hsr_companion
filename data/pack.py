@@ -24,7 +24,10 @@ from typing import Any, Callable, Iterable
 from .catalog import normalize_lookup_text
 
 PACK_SCHEMA_VERSION = 1
-UPSTREAM_REVISION = "541e1100dcfe9a299c6bd500c6d3c4115e0451e4"
+UPSTREAM_REVISION = "dbe8cdfcfb0bf657b9fe1cf92d5537f118ccb487"
+UPSTREAM_GAME_VERSION = "4.6.0"
+UPSTREAM_SNAPSHOT_DATE = "2026-09-29"
+PACK_BUILDER_REVISION = 2
 UPSTREAM_NAME = "Mar-7th/StarRailRes"
 UPSTREAM_URL = "https://github.com/Mar-7th/StarRailRes"
 UPSTREAM_LICENSE = "AGPL-3.0-only"
@@ -63,7 +66,7 @@ def default_data_pack_root() -> Path:
 def _download_json(url: str) -> dict[str, Any]:
     request = urllib.request.Request(
         url,
-        headers={"User-Agent": "N.E.K.O-hsr-companion-data-pack/0.8"},
+        headers={"User-Agent": "N.E.K.O-hsr-companion-data-pack/0.9"},
     )
     with urllib.request.urlopen(request, timeout=45) as response:
         payload = json.load(response)
@@ -75,7 +78,7 @@ def _download_json(url: str) -> dict[str, Any]:
 def _download_text(url: str) -> str:
     request = urllib.request.Request(
         url,
-        headers={"User-Agent": "N.E.K.O-hsr-companion-data-pack/0.8"},
+        headers={"User-Agent": "N.E.K.O-hsr-companion-data-pack/0.9"},
     )
     with urllib.request.urlopen(request, timeout=45) as response:
         return response.read().decode("utf-8")
@@ -318,6 +321,9 @@ def write_pack_database(
             "schema_version": PACK_SCHEMA_VERSION,
             "data_revision": f"starrailres:{UPSTREAM_REVISION}",
             "upstream_revision": UPSTREAM_REVISION,
+            "game_version": UPSTREAM_GAME_VERSION,
+            "snapshot_date": UPSTREAM_SNAPSHOT_DATE,
+            "builder_revision": PACK_BUILDER_REVISION,
             "language": "zh-CN",
             "record_count": len(records),
             "coverage": dict(sorted(coverage.items())),
@@ -435,6 +441,7 @@ class ExternalKnowledgeCatalog:
         return deepcopy(self._status)
 
     def reload(self) -> dict[str, Any]:
+        self._source = _source()
         pointer = self.root / "current.json"
         minimal_meta = {
             "pack_id": "hsr-minimal-character-registry",
@@ -478,7 +485,15 @@ class ExternalKnowledgeCatalog:
                 "sha256": actual_hash,
                 "installed": True,
                 "meta": meta,
+                "update_available": meta.get("upstream_revision") != UPSTREAM_REVISION or meta.get("builder_revision") != PACK_BUILDER_REVISION,
+                "available_game_version": UPSTREAM_GAME_VERSION,
             }
+            # Attribute installed records to their actual stored snapshot, not
+            # the newest revision bundled with a newer plugin.
+            with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as connection:
+                source_row = connection.execute("SELECT payload_json FROM sources WHERE source_id = ?", (SOURCE_ID,)).fetchone()
+            if source_row:
+                self._source = json.loads(source_row[0])
         except FileNotFoundError:
             pass
         except (OSError, ValueError, json.JSONDecodeError, sqlite3.Error) as exc:
@@ -585,6 +600,20 @@ class ExternalKnowledgeCatalog:
             record_id = self._voice_aliases.get(key)
         return self.get(record_id or "")
 
+    def match_labels(self, labels: Iterable[str], *, entity_types: Iterable[str]) -> list[dict[str, Any]]:
+        """One bounded read for a frame, not a database connection per OCR box."""
+        keys = sorted({normalize_lookup_text(label) for label in labels if normalize_lookup_text(label)})[:240]
+        allowed = sorted(set(entity_types))
+        if not keys or not allowed or self.database_path is None:
+            return []
+        uri = self.database_path.as_uri() + "?mode=ro"
+        with closing(sqlite3.connect(uri, uri=True)) as connection:
+            rows = connection.execute(
+                "SELECT payload_json FROM records WHERE name_key IN (" + ",".join("?" for _ in keys)
+                + ") AND entity_type IN (" + ",".join("?" for _ in allowed) + ")", [*keys, *allowed],
+            ).fetchall()
+        return [self._record_with_sources(row[0]) for row in rows]
+
     def match_characters_in_text(self, text: str) -> list[dict[str, Any]]:
         lines = [normalize_lookup_text(line) for line in str(text or "").splitlines()]
         compact = normalize_lookup_text(text)
@@ -647,7 +676,31 @@ class ExternalKnowledgeCatalog:
                 score += 5
             scored.append((score, self._record_with_sources(payload_json)))
         scored.sort(key=lambda item: (-item[0], str(item[1].get("name") or "")))
-        return [item for _, item in scored[: max(1, min(int(limit or 8), 30))]]
+        # Whole natural-language questions rarely occur verbatim in data.
+        # Resolve an exact catalogue name contained in the question first;
+        # include its related forms instead of returning only a roster entry.
+        identities = self.match_characters_in_text(query) if not allowed or "character" in allowed or "character_form" in allowed else []
+        seen = {item["id"] for item in identities}
+        selected = [*identities, *[item for _, item in scored if item["id"] not in seen]]
+        result = selected[: max(1, min(int(limit or 8), 30))]
+        for record in result:
+            if record.get("entity_type") == "character":
+                record["forms"] = []
+                for form_id in (record.get("form_ids") or [])[:10]:
+                    form = self.get(form_id)
+                    if not form:
+                        continue
+                    path = self.get(f"path.{form.get('path_id')}") or {}
+                    element = self.get(f"element.{form.get('element_id')}") or {}
+                    record["forms"].append({
+                        "id": form["id"], "name": form["name"], "rarity": form.get("rarity"),
+                        "path": path.get("name") or form.get("path_id"),
+                        "element": element.get("name") or form.get("element_id"),
+                        "skills": (form.get("skills") or [])[:12],
+                        "ranks": (form.get("ranks") or [])[:6],
+                        "sources": form.get("sources") or [],
+                    })
+        return result
 
 
 __all__ = [

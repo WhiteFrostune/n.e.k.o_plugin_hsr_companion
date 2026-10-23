@@ -1,4 +1,4 @@
-"""Build/install the external v0.8 knowledge pack from pinned public data."""
+"""Build/install the external knowledge pack from pinned public data."""
 
 from __future__ import annotations
 

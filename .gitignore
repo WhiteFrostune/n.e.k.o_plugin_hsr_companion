@@ -12,3 +12,5 @@ build/
 store.db
 .env
 .DS_Store
+.pytest_tmp*/
+README_v0.9.6_PREVIEW.md

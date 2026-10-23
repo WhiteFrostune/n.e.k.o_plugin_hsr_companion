@@ -18,6 +18,57 @@ from plugin.plugins.hsr_companion.session import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_plugin_version_metadata_and_panel_are_consistent() -> None:
+    import ast
+    import tomllib
+
+    manifest = tomllib.loads((ROOT / "plugin.toml").read_text(encoding="utf-8"))
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    version = manifest["plugin"]["version"]
+    assert version == project["project"]["version"] == "0.9.6"
+    assert manifest["plugin"]["ui"]["panel"][0]["title"].endswith(version)
+    module = ast.parse((ROOT / "__init__.py").read_text(encoding="utf-8"))
+    panel_versions = [value.value for node in ast.walk(module) if isinstance(node, ast.Dict)
+                      for key, value in zip(node.keys, node.values)
+                      if isinstance(key, ast.Constant) and key.value == "version" and isinstance(value, ast.Constant)]
+    assert panel_versions == [version]
+    for relative in ("README.md", "docs/quickstart.md"):
+        assert version in (ROOT / relative).read_text(encoding="utf-8").splitlines()[0]
+
+
+def test_assistant_build_version_is_independent_from_plugin_version() -> None:
+    from plugin.plugins.hsr_companion.scripts.build_assistant import assistant_version
+
+    assert assistant_version(ROOT) == "0.9.3"
+
+
+def test_package_rules_exclude_lint_cache_without_deleting_local_cache() -> None:
+    import tomllib
+
+    from plugin.neko_plugin_cli.core.build_rules import load_build_rules, should_skip_path
+
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    rules = load_build_rules(project)
+    assert should_skip_path(Path(".ruff_cache/0.15.4/cache"), is_dir=False, rules=rules)
+    assert not should_skip_path(Path("runtime/speech.py"), is_dir=False, rules=rules)
+
+
+def test_manifest_keeps_action_schemas_when_host_cannot_import_plugin() -> None:
+    import tomllib
+
+    from plugin.core.registry import _extract_entries_preview
+    from plugin.plugins.hsr_companion import HsrCompanionPlugin
+
+    manifest = tomllib.loads((ROOT / "plugin.toml").read_text(encoding="utf-8"))
+    decorated = _extract_entries_preview("hsr_companion", HsrCompanionPlugin, {}, {})
+    fallback = _extract_entries_preview("hsr_companion", type("UnavailablePlugin", (), {}), manifest, manifest["plugin"])
+    assert {item["id"] for item in fallback} == {item["id"] for item in decorated}
+    for original in decorated:
+        matching = next(item for item in fallback if item["id"] == original["id"])
+        for key in ("name", "description", "input_schema", "kind", "llm_result_fields", "llm_result_schema"):
+            assert matching[key] == original[key], (original["id"], key)
+
+
 def _registry() -> CharacterRegistry:
     return CharacterRegistry(json.loads((ROOT / "resources" / "character_registry.json").read_text(encoding="utf-8")))
 
@@ -44,6 +95,27 @@ def test_catalog_and_runtime_smoke() -> None:
     assert result["scene"]["primary_state"] == "menu"
     assert result["characters"][0]["entity_id"] == "character.yaoguang"
     assert CompanionRuntime().snapshot()["stable_scene"] == "unknown"
+
+
+def test_live_turn_based_battle_indicators_trigger_combat_without_character_guesses() -> None:
+    from plugin.plugins.hsr_companion.detectors.layout import classify_supported_page
+
+    page = classify_supported_page(
+        "尽快消灭所有召唤物\n剩余行动值\n2000\n敌方行动中",
+        [], width=1280, height=800,
+    )
+    assert page["scene"] == "combat"
+    assert page["confidence"] == "high"
+    assert page["supported"] is True
+    runtime = CompanionRuntime(confirmation_frames=2, global_rate_seconds=0)
+    analysis = {
+        "scene": {"primary_state": "combat", "confidence": "high", "evidence": page["evidence"], "verified": True},
+        "characters": [],
+    }
+    runtime.ingest(analysis, now=10)
+    runtime.ingest(analysis, now=20)
+    assert runtime.snapshot()["stable_scene"] == "combat"
+    assert runtime.snapshot()["stable_character_ids"] == []
 
 
 def test_market_package_contains_license_and_auditable_sources() -> None:

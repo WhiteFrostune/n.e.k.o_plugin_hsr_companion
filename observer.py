@@ -1,7 +1,7 @@
-"""Privacy-bounded observation of the foreground Honkai: Star Rail window.
+"""Privacy-bounded observation of the Honkai: Star Rail window.
 
-The observer deliberately captures only the detected game client while it is
-the foreground window. Frames stay in memory and are never written to disk.
+The observer deliberately captures only the detected game window surface.
+Frames stay in memory and are never written to disk.
 """
 
 from __future__ import annotations
@@ -9,6 +9,13 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from io import BytesIO
 from typing import Any
+
+from .assistant_runtime.window_capture import (
+    WindowCaptureError,
+    capture_error_message,
+    capture_isolated_window,
+    physical_window_coordinates,
+)
 
 HSR_PROCESS_NAMES = {"starrail.exe", "honkaistarrail.exe"}
 HSR_TITLE_TOKENS = ("崩坏：星穹铁道", "崩坏: 星穹铁道", "Honkai: Star Rail")
@@ -65,8 +72,8 @@ def find_hsr_window() -> GameWindow | None:
         import psutil
         import win32gui
         import win32process
-    except ImportError:
-        return None
+    except ImportError as exc:
+        raise RuntimeError("备用识别缺少窗口读取组件，请下载并启动独立视觉助手。") from exc
 
     candidates: list[tuple[int, GameWindow]] = []
     foreground_hwnd = int(win32gui.GetForegroundWindow() or 0)
@@ -113,7 +120,8 @@ def find_hsr_window() -> GameWindow | None:
         except Exception:
             return
 
-    win32gui.EnumWindows(visit, None)
+    with physical_window_coordinates():
+        win32gui.EnumWindows(visit, None)
     if not candidates:
         return None
     candidates.sort(key=lambda item: item[0], reverse=True)
@@ -121,62 +129,22 @@ def find_hsr_window() -> GameWindow | None:
 
 
 def capture_game_window(window: GameWindow) -> tuple[bytes, str, bytes]:
-    """Capture a foreground game client and return JPEG bytes plus signature."""
+    """Capture only the game client, independently of chat focus."""
 
     try:
-        import win32gui
-        from PIL import Image
-    except ImportError as exc:  # pragma: no cover - Windows release includes these
-        raise RuntimeError("当前系统缺少游戏画面读取组件") from exc
-
-    if window.minimized or int(win32gui.GetForegroundWindow() or 0) != window.hwnd:
-        raise RuntimeError("星铁窗口当前不在前台")
-
-    try:
-        import mss
-
-        with mss.mss() as screen:
-            shot = screen.grab(
-                {
-                    "left": window.left,
-                    "top": window.top,
-                    "width": window.width,
-                    "height": window.height,
-                }
-            )
-            image = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
-    except ImportError:
-        from PIL import ImageGrab
-
-        image = ImageGrab.grab(
-            bbox=(
-                window.left,
-                window.top,
-                window.left + window.width,
-                window.top + window.height,
-            ),
-            all_screens=True,
-        ).convert("RGB")
-
-    if int(win32gui.GetForegroundWindow() or 0) != window.hwnd:
-        raise RuntimeError("读取过程中星铁窗口离开了前台")
+        image, _ = capture_isolated_window(window)
+    except WindowCaptureError as exc:
+        raise RuntimeError(capture_error_message(str(exc))) from exc
 
     signature = frame_signature(image)
-    max_edge = 1280
-    if max(image.size) > max_edge:
-        scale = max_edge / float(max(image.size))
-        resampling = getattr(Image, "Resampling", Image).LANCZOS
-        image = image.resize(
-            (max(1, int(image.width * scale)), max(1, int(image.height * scale))),
-            resampling,
-        )
-    for quality in (76, 68, 60, 52):
-        output = BytesIO()
-        image.save(output, format="JPEG", quality=quality, optimize=True)
-        payload = output.getvalue()
-        if len(payload) <= 220 * 1024:
-            return payload, "image/jpeg", signature
-    raise RuntimeError("当前画面过于复杂，暂时无法安全送入视觉上下文")
+    if image.width * image.height > 16_000_000:
+        raise RuntimeError("游戏窗口分辨率超过当前本地识别限制")
+    output = BytesIO()
+    image.save(output, format="PNG", compress_level=1)
+    payload = output.getvalue()
+    if len(payload) > 16 * 1024 * 1024:
+        raise RuntimeError("游戏窗口画面超过当前本地识别限制")
+    return payload, "image/png", signature
 
 
 __all__ = [
