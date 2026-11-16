@@ -12,7 +12,6 @@ import time
 from pathlib import Path
 
 import pytest
-
 from plugin.plugins.hsr_companion.data import ExternalKnowledgeCatalog
 from plugin.plugins.hsr_companion.detectors.exploration import distinct_rows, task_stacks
 from plugin.plugins.hsr_companion.detectors.layout import classify_supported_page

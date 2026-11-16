@@ -3,7 +3,6 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
-
 from plugin.plugins.hsr_companion.adapters.navigation_reader import reread_navigation_lines
 from plugin.plugins.hsr_companion.adapters.text_verification import proof_key, verify_text_regions
 from plugin.plugins.hsr_companion.runtime.diagnostic_reader import diagnostic_inputs

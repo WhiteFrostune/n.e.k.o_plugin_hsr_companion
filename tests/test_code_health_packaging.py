@@ -3,7 +3,6 @@ import tomllib
 from pathlib import Path
 
 import pytest
-
 from plugin.neko_plugin_cli.core.build_rules import load_build_rules, should_skip_path
 
 ROOT = Path(__file__).resolve().parents[1]

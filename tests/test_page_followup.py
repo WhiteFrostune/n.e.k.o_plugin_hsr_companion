@@ -17,7 +17,6 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image, ImageDraw
-
 from plugin.plugins.hsr_companion.detectors.layout import classify_supported_page, scene_control_regions
 from plugin.plugins.hsr_companion.detectors.scene_preview import scene_preview
 from plugin.plugins.hsr_companion.runtime import followup

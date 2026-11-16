@@ -13,7 +13,6 @@ import threading
 from types import SimpleNamespace
 
 import pytest
-
 from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter, serial_ocr
 from plugin.plugins.hsr_companion.adapters.text_verification import proof_key
 from plugin.plugins.hsr_companion.runtime import followup, live_refresh, manual_refresh

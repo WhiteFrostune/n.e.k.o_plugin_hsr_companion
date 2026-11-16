@@ -6,7 +6,6 @@ from io import BytesIO
 from types import SimpleNamespace
 
 import pytest
-
 from plugin.plugins.hsr_companion.scripts.verify_roundtrip_c_acceptance import (
     FROZEN_C,
     first_change,

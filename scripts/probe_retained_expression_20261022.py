@@ -11,7 +11,6 @@ sys.path.insert(0, str(ROOT.parents[2]))
 
 def main():
     import pytest
-
     from plugin.plugins.hsr_companion.runtime import followup, query_reuse
     from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
     from plugin.plugins.hsr_companion.runtime.observation_store import ObservationSnapshot

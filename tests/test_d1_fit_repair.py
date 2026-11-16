@@ -15,7 +15,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from plugin.plugins.hsr_companion.runtime import followup
 from plugin.plugins.hsr_companion.runtime.equipment import equipment_card, equipment_object
 from plugin.plugins.hsr_companion.runtime.guidance import build_guidance

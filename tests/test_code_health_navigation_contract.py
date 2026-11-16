@@ -8,7 +8,6 @@ import copy
 from types import SimpleNamespace
 
 import pytest
-
 from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter
 from plugin.plugins.hsr_companion.adapters.text_verification import proof_key
 from plugin.plugins.hsr_companion.runtime.query_coordinator import satisfied_fields

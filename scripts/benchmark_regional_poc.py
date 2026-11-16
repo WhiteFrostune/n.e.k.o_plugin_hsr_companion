@@ -73,7 +73,6 @@ def fields(value):
 
 def main():
     from PIL import Image
-
     from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter
     from plugin.plugins.hsr_companion.assistant import VisionAssistantClient
     from plugin.plugins.hsr_companion.data import ExternalKnowledgeCatalog

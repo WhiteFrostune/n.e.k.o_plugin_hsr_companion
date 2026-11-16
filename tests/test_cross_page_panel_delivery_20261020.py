@@ -6,7 +6,6 @@ import json
 from types import SimpleNamespace
 
 import pytest
-
 from plugin.plugins.hsr_companion.adapters.text_verification import proof_key
 from plugin.plugins.hsr_companion.runtime.fact_lifecycle import candidate_evidence
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan

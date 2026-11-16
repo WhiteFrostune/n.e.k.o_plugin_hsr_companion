@@ -11,7 +11,6 @@ from dataclasses import FrozenInstanceError
 from types import SimpleNamespace
 
 import pytest
-
 from plugin.plugins.hsr_companion.runtime.diagnostics import build_diagnostic_report
 from plugin.plugins.hsr_companion.runtime.followup import AnswerRequest, answer_ready, reply_data
 from plugin.plugins.hsr_companion.runtime.grounding import build_grounding

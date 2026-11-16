@@ -11,7 +11,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from plugin.plugins.hsr_companion.adapters import showcase as transport
 from plugin.plugins.hsr_companion.adapters.showcase import ShowcaseError, ShowcaseResponse, validate_uid
 from plugin.plugins.hsr_companion.runtime.data_freshness import guidance_freshness

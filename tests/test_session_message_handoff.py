@@ -13,7 +13,6 @@ import importlib
 import time
 
 import pytest
-
 from plugin.plugins.hsr_companion.runtime import followup
 from plugin.plugins.hsr_companion.runtime.answer_message import render_followup
 from plugin.plugins.hsr_companion.runtime.equipment import equipment_card

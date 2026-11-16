@@ -9,7 +9,6 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image
-
 from plugin.plugins.hsr_companion.detectors.team import assign_team_slots, infer_complete_team_rows, locate_team_rows
 from plugin.plugins.hsr_companion.runtime import CompanionRuntime
 from plugin.plugins.hsr_companion.runtime.observation import public_visual_evidence

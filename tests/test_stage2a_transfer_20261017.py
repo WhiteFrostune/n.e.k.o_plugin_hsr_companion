@@ -5,7 +5,6 @@ import threading
 from types import SimpleNamespace
 
 import pytest
-
 from plugin.plugins.hsr_companion.adapters.text_reader import check_current
 from plugin.plugins.hsr_companion.runtime.live_refresh import guarded_analysis
 from plugin.plugins.hsr_companion.tests.test_current_observation import plugin_fixture

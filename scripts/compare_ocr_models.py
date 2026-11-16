@@ -9,7 +9,6 @@ from io import BytesIO
 from pathlib import Path
 
 from PIL import Image
-
 from plugin.plugins.hsr_companion.adapters.text_reader import read_native_text
 from plugin.plugins.hsr_companion.adapters.upright_ocr import UprightOCRBackend
 from plugin.plugins.hsr_companion.assistant import VisionAssistantClient

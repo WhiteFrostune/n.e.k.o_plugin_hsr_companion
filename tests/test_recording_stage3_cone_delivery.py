@@ -9,7 +9,6 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-
 from plugin.plugins.hsr_companion.data import ExternalKnowledgeCatalog
 from plugin.plugins.hsr_companion.runtime.answer_message import bridge_preview
 from plugin.plugins.hsr_companion.runtime.cone_message import summarize_cone_fit

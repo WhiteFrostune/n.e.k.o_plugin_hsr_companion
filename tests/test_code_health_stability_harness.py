@@ -5,7 +5,6 @@ import time
 from types import SimpleNamespace
 
 import pytest
-
 from plugin.plugins.hsr_companion.scripts import verify_code_health_stability as harness
 
 

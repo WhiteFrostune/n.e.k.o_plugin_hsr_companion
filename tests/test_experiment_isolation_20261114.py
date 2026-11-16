@@ -6,7 +6,6 @@ import time
 from types import SimpleNamespace
 
 import pytest
-
 from plugin.plugins.hsr_companion.runtime.engine import CompanionRuntime
 from plugin.plugins.hsr_companion.runtime.speech import SpeechArbiter
 from plugin.plugins.hsr_companion.tests.test_current_observation import analysis, plugin_fixture

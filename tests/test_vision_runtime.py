@@ -2,7 +2,6 @@ import zipfile
 from io import BytesIO
 
 import pytest
-
 from plugin.plugins.hsr_companion.data.vision_runtime import VisionMatchRuntime
 
 

@@ -12,7 +12,6 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image, ImageDraw
-
 from plugin.plugins.hsr_companion.runtime import followup
 from plugin.plugins.hsr_companion.runtime.chat_activity import latest_user_activity
 from plugin.plugins.hsr_companion.runtime.live_refresh import (

@@ -7,7 +7,6 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image, ImageDraw
-
 from plugin.plugins.hsr_companion.runtime import answer_message
 from plugin.plugins.hsr_companion.runtime.consultation import for_followup
 from plugin.plugins.hsr_companion.runtime.equipment import equipment_card

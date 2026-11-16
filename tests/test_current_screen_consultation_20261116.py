@@ -8,7 +8,6 @@ import asyncio
 import importlib
 
 import pytest
-
 from plugin.plugins.hsr_companion.tests.test_current_observation import plugin_fixture
 from plugin.plugins.hsr_companion.tests.test_prepare_failure_trace import last, resolver
 

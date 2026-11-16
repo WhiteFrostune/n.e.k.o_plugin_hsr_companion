@@ -16,7 +16,6 @@ from pathlib import Path
 
 async def run():
     import ormsgpack
-
     from plugin.plugins.hsr_companion.data import ExternalKnowledgeCatalog
     from plugin.plugins.hsr_companion.runtime.build_info import BUILD_REVISION
     from plugin.plugins.hsr_companion.runtime.observation import public_visual_evidence

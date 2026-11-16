@@ -9,7 +9,6 @@ import time
 from dataclasses import replace
 
 import pytest
-
 from plugin.plugins.hsr_companion.runtime import followup
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.tests import test_guidance as cases

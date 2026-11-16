@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
-
 from plugin.plugins.hsr_companion.adapters.text_verification import proof_key
 from plugin.plugins.hsr_companion.runtime.live_refresh import frame_stamp
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan

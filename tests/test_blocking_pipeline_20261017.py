@@ -3,7 +3,6 @@ import asyncio
 from collections import Counter
 
 import pytest
-
 from plugin.plugins.hsr_companion.runtime import live_refresh, query_reuse
 from plugin.plugins.hsr_companion.tests.test_delivery_fix_20261012 import TEXT, picture, text_result
 

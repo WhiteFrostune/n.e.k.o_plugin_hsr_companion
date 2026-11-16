@@ -8,7 +8,6 @@ from io import BytesIO
 
 import pytest
 from PIL import Image
-
 from plugin.plugins.hsr_companion.adapters.relic_values import (
     atlas_fragment_bounds,
     read_relic_table,

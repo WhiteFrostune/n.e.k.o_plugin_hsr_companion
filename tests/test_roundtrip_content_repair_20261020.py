@@ -12,7 +12,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from plugin.plugins.hsr_companion.detectors.exploration import distinct_rows, task_stacks
 from plugin.plugins.hsr_companion.detectors.layout import classify_supported_page, scene_control_regions
 from plugin.plugins.hsr_companion.runtime import answer_message, followup

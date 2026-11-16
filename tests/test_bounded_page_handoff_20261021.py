@@ -11,7 +11,6 @@ import time
 from types import SimpleNamespace
 
 import pytest
-
 from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter, serial_ocr
 from plugin.plugins.hsr_companion.adapters.text_reader import check_current
 from plugin.plugins.hsr_companion.adapters.text_verification import proof_key

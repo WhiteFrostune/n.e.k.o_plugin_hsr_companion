@@ -37,7 +37,6 @@ def binding_summary(trace):
 
 def main():
     from PIL import Image
-
     from plugin.plugins.hsr_companion.adapters import local_vision
     from plugin.plugins.hsr_companion.assistant import VisionAssistantClient
     from plugin.plugins.hsr_companion.data import ExternalKnowledgeCatalog

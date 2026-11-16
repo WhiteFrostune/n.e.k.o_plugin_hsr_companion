@@ -26,7 +26,6 @@ def main():
     if args.opencv_path:
         sys.path.insert(0, str(args.opencv_path.resolve()))
     from PIL import Image
-
     from plugin.plugins.hsr_companion.data.avatar_pack import AvatarTemplatePack
     from plugin.plugins.hsr_companion.data.pack import default_data_pack_root
 

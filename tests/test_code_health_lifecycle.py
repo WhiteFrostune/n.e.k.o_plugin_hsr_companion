@@ -6,7 +6,6 @@ from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
-
 from plugin.plugins.hsr_companion.runtime.fact_lifecycle import incomplete_same_page_read
 
 
@@ -87,7 +86,6 @@ def test_cache_review_reuses_frame_dimensions_without_decoding_on_event_loop(tmp
     import sys
 
     from PIL import Image
-
     from plugin.plugins.hsr_companion.tests import test_cached_page_controls_20261020 as cached_cases
 
     original = Image.open

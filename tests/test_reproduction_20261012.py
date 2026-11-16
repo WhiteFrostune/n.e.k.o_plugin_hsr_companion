@@ -12,7 +12,6 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
-
 from plugin.core.bus.memory import MemoryClient
 from plugin.plugins.hsr_companion.runtime import followup
 from plugin.plugins.hsr_companion.runtime.chat_activity import latest_user_activity

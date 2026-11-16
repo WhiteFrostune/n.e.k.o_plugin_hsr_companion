@@ -16,7 +16,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from plugin.plugins.hsr_companion.assistant import (
     ASSISTANT_PROTOCOL_VERSION,
     VisionAssistantClient,

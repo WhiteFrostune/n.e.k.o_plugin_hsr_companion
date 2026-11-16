@@ -5,7 +5,6 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image
-
 from plugin.plugins.hsr_companion.experiments.regional_reader import RegionalReader, select_regions, translate_boxes
 from plugin.plugins.hsr_companion.scripts.benchmark_regional_poc import arm_order, focused, read_pair
 from plugin.plugins.hsr_companion.tests.test_relic_fields import relic_boxes

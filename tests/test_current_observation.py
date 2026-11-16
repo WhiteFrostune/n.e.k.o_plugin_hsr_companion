@@ -10,7 +10,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from plugin.plugins.hsr_companion import HsrCompanionPlugin
 from plugin.plugins.hsr_companion.assistant import AssistantFrame, VisionAssistantClient
 from plugin.plugins.hsr_companion.assistant_runtime.server import CaptureState

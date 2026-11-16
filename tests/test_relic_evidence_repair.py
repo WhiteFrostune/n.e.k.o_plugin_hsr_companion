@@ -3,7 +3,6 @@ from io import BytesIO
 
 import pytest
 from PIL import Image, ImageDraw
-
 from plugin.plugins.hsr_companion.adapters.relic_values import read_relic_table, refine_relic_values
 from plugin.plugins.hsr_companion.adapters.text_verification import proof_key, verify_text_regions
 from plugin.plugins.hsr_companion.detectors.scene_preview import preview_regions

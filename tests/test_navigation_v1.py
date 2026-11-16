@@ -10,7 +10,6 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image
-
 from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter
 from plugin.plugins.hsr_companion.detectors.scene_preview import scene_preview
 from plugin.plugins.hsr_companion.runtime.grounding import asks_navigation_only, build_grounding

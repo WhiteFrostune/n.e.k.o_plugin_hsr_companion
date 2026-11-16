@@ -7,7 +7,6 @@ from io import BytesIO
 
 def compare(adapter, payload, proof):
     from PIL import Image
-
     from plugin.plugins.hsr_companion.adapters.text_reader import _box_value
     from plugin.plugins.hsr_companion.adapters.text_verification import text_key
     with Image.open(BytesIO(payload)) as opened:

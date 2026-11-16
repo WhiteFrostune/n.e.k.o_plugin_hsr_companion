@@ -14,7 +14,6 @@ import time
 from pathlib import Path
 
 import pytest
-
 from plugin.plugins.hsr_companion.runtime import answer_message, followup
 from plugin.plugins.hsr_companion.runtime.consultation import detail_preference
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan

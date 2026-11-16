@@ -16,10 +16,8 @@ from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 
-from PIL import Image, ImageDraw
-
 import pytest
-
+from PIL import Image, ImageDraw
 from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter
 from plugin.plugins.hsr_companion.runtime import live_refresh, page_handoff
 from plugin.plugins.hsr_companion.runtime.equipment import equipment_card

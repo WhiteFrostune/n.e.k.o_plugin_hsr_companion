@@ -5,7 +5,6 @@ import importlib
 from types import SimpleNamespace
 
 import pytest
-
 from plugin.plugins.hsr_companion.runtime.contracts import CompanionEvent
 from plugin.plugins.hsr_companion.runtime.speech import SpeechArbiter
 from plugin.plugins.hsr_companion.tests.test_current_observation import (

@@ -4,7 +4,6 @@ import json
 from types import SimpleNamespace
 
 import pytest
-
 from plugin.plugins.hsr_companion.runtime import service_contract as contract
 from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
 from plugin.plugins.hsr_companion.tests import test_guidance as guidance_cases

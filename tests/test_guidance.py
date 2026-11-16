@@ -9,7 +9,6 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
-
 from plugin.plugins.hsr_companion.data import ExternalKnowledgeCatalog
 from plugin.plugins.hsr_companion.runtime.guidance import GuidanceCatalog, build_guidance, plan_guidance
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan

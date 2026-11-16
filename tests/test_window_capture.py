@@ -10,7 +10,6 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image
-
 from plugin.plugins.hsr_companion.assistant import VisionAssistantClient
 from plugin.plugins.hsr_companion.assistant_runtime.window_capture import (
     WindowCaptureError,

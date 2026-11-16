@@ -9,7 +9,7 @@ The A read passed; these target the remaining three behaviors:
 """
 import json
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 from plugin.plugins.hsr_companion.data import ExternalKnowledgeCatalog

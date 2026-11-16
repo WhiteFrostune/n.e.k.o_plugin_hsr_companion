@@ -7,7 +7,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter
 from plugin.plugins.hsr_companion.data import ExternalKnowledgeCatalog
 from plugin.plugins.hsr_companion.detectors import analyze_layout

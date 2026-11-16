@@ -7,7 +7,6 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
-
 from plugin.plugins.hsr_companion.runtime import followup, live_refresh, query_reuse
 from plugin.plugins.hsr_companion.runtime.delivery_scope import coordinates
 from plugin.plugins.hsr_companion.runtime.observation_store import ObservationStore

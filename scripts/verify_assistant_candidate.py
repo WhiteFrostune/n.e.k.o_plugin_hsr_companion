@@ -13,7 +13,6 @@ from pathlib import Path
 def verify(executable: Path, port: int):
     import psutil
     from PIL import Image
-
     from plugin.plugins.hsr_companion.assistant import VisionAssistantClient
 
     root = Path(__file__).resolve().parents[1]

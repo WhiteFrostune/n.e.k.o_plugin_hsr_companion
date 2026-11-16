@@ -4,7 +4,6 @@ from copy import deepcopy
 from datetime import datetime
 
 import pytest
-
 from plugin.plugins.hsr_companion.runtime.challenge import assign_teams, build_challenge_plan
 from plugin.plugins.hsr_companion.runtime.guidance import GuidanceCatalog, build_guidance
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan

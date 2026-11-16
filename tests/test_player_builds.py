@@ -10,7 +10,6 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
-
 from plugin.plugins.hsr_companion.data.catalog import normalize_lookup_text
 from plugin.plugins.hsr_companion.runtime.player_builds import (
     STORE_KEY,

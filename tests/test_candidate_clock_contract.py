@@ -10,7 +10,6 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
-
 from plugin.plugins.hsr_companion.runtime import fact_lifecycle, live_refresh, query_reuse, review_policy
 from plugin.plugins.hsr_companion.runtime.delivery_scope import scoped_guard
 from plugin.plugins.hsr_companion.runtime.query_coordinator import answer_status

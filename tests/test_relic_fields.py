@@ -1,6 +1,5 @@
 """Relic field binding contracts, not an OCR accuracy benchmark."""
 import pytest
-
 from plugin.plugins.hsr_companion.detectors.layout import classify_supported_page
 from plugin.plugins.hsr_companion.detectors.scene_preview import scene_preview
 from plugin.plugins.hsr_companion.runtime.grounding import build_grounding
@@ -84,7 +83,6 @@ def test_title_must_be_a_heading_not_footer_or_lore_prose():
 
 def test_badge_detection_requires_round_filled_green_control_after_number():
     from PIL import Image, ImageDraw
-
     from plugin.plugins.hsr_companion.adapters.relic_values import badge_bounds
     image = Image.new("RGB", (90, 26), (20, 30, 40))
     draw = ImageDraw.Draw(image)
@@ -102,7 +100,6 @@ def test_badge_detection_requires_round_filled_green_control_after_number():
 @pytest.mark.parametrize("original", ["572", "57²"])
 def test_badge_number_is_reread_not_trimmed_or_left_as_valid_572(recognized, original):
     from PIL import Image, ImageDraw
-
     from plugin.plugins.hsr_companion.adapters.relic_values import refine_relic_values
     image = Image.new("RGB", (1280, 800), (20, 30, 40))
     boxes = relic_boxes()
@@ -129,7 +126,6 @@ def test_badge_number_is_reread_not_trimmed_or_left_as_valid_572(recognized, ori
 
 def test_merged_stat_label_and_number_is_not_dropped_from_relic_rows():
     from PIL import Image, ImageDraw
-
     from plugin.plugins.hsr_companion.adapters.relic_values import refine_relic_values
     image = Image.new("RGB", (1280, 800), (20, 30, 40))
     boxes = relic_boxes()
@@ -149,7 +145,6 @@ def test_merged_stat_label_and_number_is_not_dropped_from_relic_rows():
 @pytest.mark.parametrize("omit_row", [False, True])
 def test_whole_table_read_masks_count_controls_and_rejects_less_complete_reading(omit_row):
     from PIL import Image, ImageDraw
-
     from plugin.plugins.hsr_companion.adapters.relic_values import read_relic_table
     image = Image.new("RGB", (1280, 800), (20, 30, 40))
     boxes = relic_boxes()
@@ -180,7 +175,6 @@ def test_whole_table_read_masks_count_controls_and_rejects_less_complete_reading
 @pytest.mark.parametrize("missing", [False, True])
 def test_number_retry_can_recover_missing_or_non_numeric_text_without_guessing(missing):
     from PIL import Image
-
     from plugin.plugins.hsr_companion.adapters.relic_values import refine_relic_values
     boxes = relic_boxes()
     if missing:

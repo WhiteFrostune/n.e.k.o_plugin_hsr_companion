@@ -10,7 +10,6 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image
-
 from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter
 from plugin.plugins.hsr_companion.adapters.text_reader import split_label_geometry, verify_name_regions
 from plugin.plugins.hsr_companion.detectors import analyze_layout

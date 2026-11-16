@@ -6,7 +6,6 @@ import copy
 import time
 
 import pytest
-
 from plugin.plugins.hsr_companion.runtime.guidance import build_guidance, plan_guidance
 from plugin.plugins.hsr_companion.runtime.query_coordinator import answer_status, satisfied_fields
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan

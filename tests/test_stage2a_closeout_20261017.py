@@ -4,7 +4,6 @@ import copy
 from datetime import datetime, timedelta, timezone
 
 import pytest
-
 from plugin.plugins.hsr_companion.runtime import live_refresh
 from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
 from plugin.plugins.hsr_companion.runtime.observation_store import ObservationSnapshot, ObservationStore

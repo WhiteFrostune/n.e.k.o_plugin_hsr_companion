@@ -14,7 +14,6 @@ from unittest.mock import patch
 
 async def replay():
     import ormsgpack
-
     from plugin.plugins.hsr_companion.data import ExternalKnowledgeCatalog
     from plugin.plugins.hsr_companion.tests.test_current_observation import plugin_fixture
 

@@ -6,7 +6,6 @@ import json
 import time
 
 import pytest
-
 from plugin.plugins.hsr_companion.runtime.guidance import build_guidance
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.tests import test_guidance as guidance_cases

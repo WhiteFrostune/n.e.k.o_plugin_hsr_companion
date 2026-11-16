@@ -4,8 +4,8 @@ The host model declares meaning; this module validates structure and identity.
 It does not classify the player's words, guess aliases or certify pixels.
 """
 
-from dataclasses import replace
 import time
+from dataclasses import replace
 
 CURRENT_SCOPES = {"current_relic", "current_cone", "current_panel"}
 CORRECTION_REASONS = {"read_screen_current_scope_dropped", "current_screen_subject_inferred"}
