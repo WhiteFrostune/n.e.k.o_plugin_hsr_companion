@@ -9,6 +9,7 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 
 import pytest
+
 from plugin.plugins.hsr_companion.data.catalog import StructuredCatalog
 from plugin.plugins.hsr_companion.runtime.grounding import asks_screen_content, build_grounding
 from plugin.plugins.hsr_companion.runtime.observation import asks_scene_only, public_visual_evidence
@@ -228,6 +229,7 @@ def test_local_fact_change_guard_is_independent_of_scene_and_character_change():
     from io import BytesIO
 
     from PIL import Image
+
     from plugin.plugins.hsr_companion.runtime.live_refresh import fact_regions, frame_changed, frame_stamp
     image = Image.new("RGB", (1280, 800), "black")
     def stamp():

@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image
+
 from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter
 from plugin.plugins.hsr_companion.detectors.scene_preview import scene_preview
 from plugin.plugins.hsr_companion.runtime.grounding import asks_navigation_only, build_grounding
@@ -55,8 +56,13 @@ def test_no_team_interior_layout_not_whitelisted_by_place(width, height, place, 
 def test_social_interior_needs_all_independent_controls(missing):
     boxes = interior()
     boxes.pop(missing)
-    assert classify(boxes)["page_type"] == "unknown"
-    assert not any(f["kind"] == "current_location" for f in extract(boxes)["facts"])
+    # The corner location is content, not an independent page control.
+    # Quest-stack/chat/navigation still establish the HUD when only it is lost.
+    assert classify(boxes)["page_type"] == ("exploration_hud" if missing == 0 else "unknown")
+    facts = extract(boxes)["facts"]
+    assert not any(f["kind"] == "current_location" for f in facts)
+    if missing == 0:
+        assert {"tracked_quest", "quest_objective", "quest_destination"} <= {f["kind"] for f in facts}
 
 
 def test_chat_key_elsewhere_and_menu_overlay_are_not_exploration():

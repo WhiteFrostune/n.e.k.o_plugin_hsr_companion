@@ -4,6 +4,7 @@ import copy
 from types import SimpleNamespace
 
 import pytest
+
 from plugin.plugins.hsr_companion.adapters.text_verification import proof_key
 from plugin.plugins.hsr_companion.runtime import live_refresh
 from plugin.plugins.hsr_companion.runtime.query_reuse import region_stamp, try_reuse

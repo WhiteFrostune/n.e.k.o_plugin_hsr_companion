@@ -5,7 +5,14 @@ requires-python = ">=3.11"
 license = "AGPL-3.0-only"
 
 [tool.neko.build]
-exclude_dirs = [".ruff_cache", ".pytest_tmp*", "tests", "scripts", "experiments"]
+include = [
+    "*.py", "plugin.toml", "pyproject.toml", "README.md", "LICENSE.md",
+    "THIRD_PARTY_NOTICES.md", "RELEASE_NOTES_*.md", "resources/**", "i18n/**",
+    "ui/**", "static/**", "vendor/**", "docs/quickstart.md",
+    "assistant_runtime/THIRD_PARTY_NOTICES.md",
+]
+exclude_dirs = [".ruff_cache", ".pytest_tmp*", "tests", "scripts", "experiments", "plugin", "dist"]
+exclude_files = [".env", ".env.*", "*.db", "*.sqlite", "*.sqlite3", "*.log"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

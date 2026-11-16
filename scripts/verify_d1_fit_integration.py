@@ -46,7 +46,7 @@ async def verify():
             assert rule["available"] and rule["activation_value"] == 2400
             assert rule["cap_value"] == 6000 and rule["max_self_elation_percent"] == 140
             assert rule["trace_id"] == "character_trace.1503101" and rule["sources"]
-            assert rule["revision"] == "dbe8cdfcfb0bf657b9fe1cf92d5537f118ccb487"
+            assert rule["revision"] == "03907e798b46f9eb109a1f882055cdf49ce3d374"
             assert rule["recommended_target"] is None and not rule["graduation_threshold_available"]
             assert "上限" in reply["conclusion"] and "位面球" in reply["next_step"]
             assert not first["query_plan"]["screen"] and not first["followup"]["pending"]

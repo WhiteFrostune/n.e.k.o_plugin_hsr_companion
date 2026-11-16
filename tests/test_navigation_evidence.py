@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image
+
 from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter
 from plugin.plugins.hsr_companion.adapters.navigation_reader import recover_navigation_controls, reread_navigation_lines
 from plugin.plugins.hsr_companion.detectors.exploration import navigation_boxes, task_stacks

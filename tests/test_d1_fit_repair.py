@@ -15,6 +15,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
 from plugin.plugins.hsr_companion.runtime import followup
 from plugin.plugins.hsr_companion.runtime.equipment import equipment_card, equipment_object
 from plugin.plugins.hsr_companion.runtime.guidance import build_guidance
@@ -122,7 +123,9 @@ def test_registered_fit_completes_with_new_hands_not_old_label(book, catalog, mo
     assert card == equipment_card(current) and card["slot"] == "手部"
     assert "缔约长靴" not in received_text(sent[0])
     assert "测试手部装备" in received_text(sent[0])
-    assert "同部位" in received_text(sent[0])
+    reply = owner._test_answer_payloads[0]["guidance_answer"]["reply_plan"]
+    assert "依据：" + reply["conclusion"] in received_text(sent[0])
+    assert reply["evaluation_available"] and not reply["next_step"]  # No unasked comparison homework.
 
 
 def test_frozen_installed_policy_reproduces_exact_ready_empty_card_contradiction(book, catalog):
@@ -161,7 +164,7 @@ def reviewed_trace(catalog, monkeypatch):
     original = catalog.get
     trace = {"id": "character_trace.1503101", "name": "洞察万物", "entity_type": "character_trace",
         "owner_ids": ["character.pearl"], "params": [[2400, .32, 100, .03, 3600, .2]],
-        "sources": [{"source_id": "starrailres_structured_cn", "revision": "dbe8cdfcfb0bf657b9fe1cf92d5537f118ccb487"}]}
+        "sources": [{"source_id": "starrailres_structured_cn", "revision": "03907e798b46f9eb109a1f882055cdf49ce3d374"}]}
     monkeypatch.setattr(catalog, "get", lambda entity_id: copy.deepcopy(trace) if entity_id == trace["id"] else original(entity_id))
     return trace
 
@@ -258,14 +261,15 @@ def test_real_mixed_identity_request_is_not_removed(book, catalog):
     assert observed.fields >= {"equipment", "characters"}
 
 
-def test_partial_fit_uses_only_new_rows_and_same_slot_comparison(book, catalog):
+def test_partial_fit_uses_only_new_rows_without_unasked_comparison(book, catalog):
     current = hands()
     current["screen_facts"]["facts"] = [f for f in current["screen_facts"]["facts"]
         if f.get("kind") != "sub_stat" or f.get("value") in {"35", "2"}]
     reply = build_guidance(plan(QUERY, book, catalog), QUERY, book=book, catalog=catalog, profile={}, visual=current)["reply_plan"]
     assert reply["current_object"]["name"] == "测试手部装备" and not reply["rows_complete"]
     assert reply["fixed_main_stat"] and "固定" in reply["conclusion"]
-    assert "同部位" in reply["next_step"] and "位面球" not in reply["next_step"]
+    assert not reply["next_step"] and "位面球" not in reply["conclusion"]
+    assert reply["evaluation_available"] and reply["equipment_coverage"]["confirmed_substats"] == 2
     assert len(reply["evidence_rows"]) <= 2
 
 
@@ -320,7 +324,9 @@ def test_formal_prepare_then_real_registration_then_new_item_delivery(tmp_path, 
         assert packets[0]["equipment_answer"] == equipment_card(current)
         assert len(packets[0]["equipment_answer"]["sub_stats"]) == 4
         text = received_text(sent[0])
-        assert "测试手部装备" in text and "同部位" in text and "缔约长靴" not in text
+        assert "测试手部装备" in text and "缔约长靴" not in text
+        reply = packets[0]["guidance_answer"]["reply_plan"]
+        assert "依据：" + reply["conclusion"] in text and reply["evaluation_available"]
         full = await owner.hsr_companion_prepare(query="完整报出这件遗器主词条和四项副词条，分别是多少？")
         assert not full["followup"]["pending"] and full["equipment_answer"] == equipment_card(current)
         assert len(full["guidance_answer"]["reply_plan"]["evidence_rows"]) == 5

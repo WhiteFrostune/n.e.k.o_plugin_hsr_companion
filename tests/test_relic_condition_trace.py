@@ -2,12 +2,12 @@
 import copy
 from io import BytesIO
 
-from PIL import Image, ImageDraw
 import pytest
+from PIL import Image, ImageDraw
 
-from plugin.plugins.hsr_companion.runtime.screen_facts import extract_screen_facts
+from plugin.plugins.hsr_companion.adapters.text_verification import proof_key, verify_text_regions
 from plugin.plugins.hsr_companion.runtime.live_refresh import stable_screen_content
-from plugin.plugins.hsr_companion.adapters.text_verification import verify_text_regions, proof_key
+from plugin.plugins.hsr_companion.runtime.screen_facts import extract_screen_facts
 from plugin.plugins.hsr_companion.tests.test_relic_fields import relic_boxes
 from plugin.plugins.hsr_companion.tests.test_screen_facts import catalog
 

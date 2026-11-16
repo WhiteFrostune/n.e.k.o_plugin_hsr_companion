@@ -4,6 +4,7 @@ import copy
 import time
 
 import pytest
+
 from plugin.plugins.hsr_companion.runtime import answer_message
 from plugin.plugins.hsr_companion.runtime.consultation import for_followup, model_guidance
 from plugin.plugins.hsr_companion.runtime.guidance import build_guidance, plan_guidance

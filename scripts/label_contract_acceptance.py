@@ -13,7 +13,8 @@ def score_batch(events, environment, *, trace_errors=0, trace_dropped=0):
     for call in calls:
         name, slot, main, subs = TRUTH[call["phase"] - 1]
         card = call["card"]
-        row = lambda v: (v.get("label"), v.get("value"))
+        def row(value):
+            return value.get("label"), value.get("value")
         conditions = {
             "ready": call.get("answer", {}).get("state") == "ready",
             "complete": card.get("complete") is True and card.get("state") == "confirmed",

@@ -11,8 +11,10 @@ import asyncio
 import copy
 import importlib
 import time
+from types import SimpleNamespace
 
 import pytest
+
 from plugin.plugins.hsr_companion.runtime.guidance import build_guidance, plan_guidance
 from plugin.plugins.hsr_companion.runtime.observation_store import ObservationSnapshot
 from plugin.plugins.hsr_companion.runtime.query_coordinator import QueryObservation
@@ -136,6 +138,46 @@ def test_formal_continuation_swap_and_advice_share_canonical_path(tmp_path, monk
         advice = await owner.hsr_companion_prepare(query="我有专武，接下来选法呢？", intent="equipment_guide")
         assert not advice["query_plan"]["screen"] and not advice["followup"]["pending"]
         assert not demands[-1].fields and values["player_context"] == before and not sent
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("available", [False, True])
+def test_rows_only_misrouted_as_assessment_has_no_subject_dependency(tmp_path, monkeypatch, catalog, available):
+    owner, _, _ = plugin_fixture(tmp_path)
+    owner._catalog = catalog
+    owner.ctx = SimpleNamespace(_current_lanlan="test", bus=SimpleNamespace(memory=SimpleNamespace(get=lambda **_: None)))
+    owner._observation_serial = 1
+    current = relic(serial=1)
+    if not available:
+        current = {**current, "fresh": False}
+
+    async def resolve(plugin, demand, **kwargs):
+        assert demand.intent == "read_screen" and demand.response_detail == "full"
+        assert demand.required_equipment_kinds == {"main_stat", "sub_stat"}
+        return QueryObservation(ObservationSnapshot.select(plugin, current, fields=demand.fields),
+                                {"outcome": "reused" if available else "timeout", "stages": []},
+                                0, kwargs["generation"])
+
+    monkeypatch.setattr(importlib.import_module(type(owner).__module__), "resolve_query", resolve)
+
+    async def run():
+        result = await owner.hsr_companion_prepare(
+            query="这件遗器的主词条和副词条分别是什么？", intent="assess_relic",
+            consultation={"scope": "current_relic", "subject_state": "inherit", "answer_parts": ["rows"]},
+            response_detail="full",
+        )
+        assert not result.get("is_error"), result
+        assert not result["guidance_answer"]["requested"]
+        assert result["query_plan"]["evidence_source"] == "current_screen"
+        assert result["equipment_answer"]["complete"] is available
+        if available:
+            assert len(result["equipment_answer"]["sub_stats"]) == 4
+        else:
+            assert result["followup"]["pending"], result["followup"]
+            assert owner._pending_answer.guidance_plan is None
+            from plugin.plugins.hsr_companion.runtime.followup import cancel_followup
+            cancel_followup(owner, "test_done")
 
     asyncio.run(run())
 
@@ -284,6 +326,7 @@ def test_semantic_team_entry_keeps_two_disjoint_teams_and_off_path_warning(tmp_p
     owner._current_visual_evidence = owner._read_game_state = owner._wait_for_data_pack = forbidden
 
     async def run():
+        await owner.set_experimental_features(extended_guidance_enabled=True)
         first = await owner.hsr_companion_prepare(query="本期混沌普通12层怎么配队", intent="team_guide")
         result = first["guidance_answer"]["challenge_plan"]
         assert result["state"] == "ready" and len(result["assignments"]) == 2

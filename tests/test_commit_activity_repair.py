@@ -11,6 +11,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
+
 from plugin.plugins.hsr_companion.runtime import followup
 from plugin.plugins.hsr_companion.runtime.fact_lifecycle import late_read_proved
 from plugin.plugins.hsr_companion.runtime.query_reuse import region_stamp

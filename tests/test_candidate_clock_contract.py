@@ -11,8 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from plugin.plugins.hsr_companion.runtime import fact_lifecycle
-from plugin.plugins.hsr_companion.runtime import live_refresh, query_reuse, review_policy
+from plugin.plugins.hsr_companion.runtime import fact_lifecycle, live_refresh, query_reuse, review_policy
 from plugin.plugins.hsr_companion.runtime.delivery_scope import scoped_guard
 from plugin.plugins.hsr_companion.runtime.query_coordinator import answer_status
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
@@ -23,12 +22,35 @@ from plugin.plugins.hsr_companion.tests.test_review_policy_20261017 import QUERY
 
 
 def same_tick(monkeypatch):
-    recorded = datetime.now(timezone.utc).replace(microsecond=184040)
+    # Keep standalone candidates in the real projection's past. Integration
+    # callers must install this clock BEFORE producing any observations.
+    recorded = (datetime.now(timezone.utc) - timedelta(seconds=2)).replace(microsecond=184040)
     precise_now = math.nextafter(recorded.timestamp(), -math.inf)
     assert precise_now < recorded.timestamp()
     assert datetime.fromtimestamp(precise_now, timezone.utc) == recorded
     monkeypatch.setattr(fact_lifecycle, "time", SimpleNamespace(time=lambda: precise_now))
     return recorded
+
+
+async def clocked_resident(tmp_path, monkeypatch):
+    """One timeline for capture, raw observation, candidate and receipt.
+
+    Pinning only a receipt after real-time commits could rewind the clock by
+    almost a second. The raw observation then correctly failed future checks,
+    masking the sub-microsecond behavior this test is supposed to exercise.
+    """
+    recorded = same_tick(monkeypatch)
+    clock = SimpleNamespace(time=fact_lifecycle.time.time, monotonic=time.monotonic)
+    for module in (query_reuse, live_refresh, review_policy):
+        monkeypatch.setattr(module, "time", clock)
+    entry = __import__("plugin.plugins.hsr_companion", fromlist=["utc_now_iso"])
+    monkeypatch.setattr(entry, "utc_now_iso", lambda: recorded.isoformat())
+    owner, values, sent, calls = await resident_owner(tmp_path)
+    captured = frame(picture())
+    captured.timestamp = clock.time()
+    owner._assistant_client.fetch_frame = lambda seq: captured
+    assert owner._committed_observation["observed_at"] == recorded.isoformat()
+    return recorded, owner, values, sent, calls
 
 
 def candidate(recorded):
@@ -108,28 +130,17 @@ def test_control_only_guard_cannot_claim_an_identity_answer(tmp_path):
 @pytest.mark.parametrize("boundary", ["candidate_review", "receipt_consumption"])
 def test_iso_precision_is_shared_through_review_and_receipt(tmp_path, monkeypatch, boundary):
     async def run():
-        owner, _, _, calls = await resident_owner(tmp_path)
+        recorded, owner, _, _, calls = await clocked_resident(tmp_path, monkeypatch)
         plan = build_query_plan(QUERY)
         if boundary == "candidate_review":
-            recorded = same_tick(monkeypatch)
-            precise_now = fact_lifecycle.time.time()
-            clock = SimpleNamespace(time=lambda: precise_now, monotonic=time.monotonic)
             # Hold time within the same native tick after the ISO observation
             # was rounded up. The capture clock itself stays full precision.
             for cached in owner._reusable_observations.values():
                 cached["evidence"]["observed_at"] = recorded.isoformat()
-            monkeypatch.setattr(query_reuse, "time", clock)
-            monkeypatch.setattr(live_refresh, "time", clock)
-            monkeypatch.setattr(review_policy, "time", clock)
-            captured = frame(picture())
-            captured.timestamp = precise_now
-            owner._assistant_client.fetch_frame = lambda seq: captured
         result = await select(owner, "full")
         assert result is not None
         if boundary == "receipt_consumption":
-            recorded = same_tick(monkeypatch)
             result["reuse"]["validated_at"] = recorded.isoformat()
-            monkeypatch.setattr(review_policy, "time", SimpleNamespace(time=fact_lifecycle.time.time))
         def unexpected(*args):
             raise AssertionError("same-tick receipt must not recapture or rerun OCR")
         owner._assistant_client.fetch_frame = unexpected
@@ -140,15 +151,15 @@ def test_iso_precision_is_shared_through_review_and_receipt(tmp_path, monkeypatc
     asyncio.run(run())
 
 
-@pytest.mark.parametrize("offset", [-1, 2_000_001])
-def test_receipt_future_and_expired_boundaries_remain_closed(tmp_path, monkeypatch, offset):
+@pytest.mark.parametrize("offset,accepted", [(-1, False), (0, True), (2_000_000, True), (2_000_001, False)])
+def test_receipt_future_and_expired_boundaries_remain_closed(tmp_path, monkeypatch, offset, accepted):
     async def run():
-        owner, _, _, _ = await resident_owner(tmp_path)
+        recorded, owner, _, _, _ = await clocked_resident(tmp_path, monkeypatch)
         result = await select(owner, "full")
         assert result is not None
-        recorded = same_tick(monkeypatch)
+        plan = build_query_plan(QUERY)
+        assert review_policy.checked_receipt(owner, result, plan=plan)
         result["reuse"]["validated_at"] = (recorded - timedelta(microseconds=offset)).isoformat()
-        monkeypatch.setattr(review_policy, "time", SimpleNamespace(time=fact_lifecycle.time.time))
-        assert not review_policy.checked_receipt(owner, result, plan=build_query_plan(QUERY))
+        assert review_policy.checked_receipt(owner, result, plan=plan) is accepted
 
     asyncio.run(run())

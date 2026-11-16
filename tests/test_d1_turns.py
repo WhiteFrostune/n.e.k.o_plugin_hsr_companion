@@ -8,9 +8,13 @@ import pytest
 
 from plugin.plugins.hsr_companion.runtime.guidance import build_guidance
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
-from plugin.plugins.hsr_companion.tests.test_guidance import book, catalog, plan
-from plugin.plugins.hsr_companion.tests.test_stage2_assessment import assess, relic
+from plugin.plugins.hsr_companion.tests import test_guidance as guidance_cases
 from plugin.plugins.hsr_companion.tests.test_d1_closeout import panel
+from plugin.plugins.hsr_companion.tests.test_guidance import plan
+from plugin.plugins.hsr_companion.tests.test_stage2_assessment import assess, relic
+
+book = guidance_cases.book
+catalog = guidance_cases.catalog
 
 FIRST = "真珠这个面板养得怎么样？接下来优先关注什么？"
 
@@ -236,7 +240,7 @@ def test_formal_entry_answers_panel_then_waits_for_player_no_stray_followup(tmp_
         second = await owner.hsr_companion_prepare(query="我应该先关注什么好？")
         assert second["guidance_answer"]["reply_plan"]["goal"] == "priority"
         assert not second["followup"]["pending"]
-        assert not demands[-1][0].screen and demands[-1][1]["read_unrequested"] is False
+        assert not demands[-1][0].screen and demands[-1][0].archived_guidance
         assert not second["guidance_answer"]["reply_plan"]["question"]
         assert values["player_context"] == before and not sent
     asyncio.run(run())

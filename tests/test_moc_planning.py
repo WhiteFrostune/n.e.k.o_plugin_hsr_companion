@@ -4,6 +4,7 @@ from copy import deepcopy
 from datetime import datetime
 
 import pytest
+
 from plugin.plugins.hsr_companion.runtime.challenge import assign_teams, build_challenge_plan
 from plugin.plugins.hsr_companion.runtime.guidance import GuidanceCatalog, build_guidance
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
@@ -11,6 +12,18 @@ from plugin.plugins.hsr_companion.tests import test_guidance
 from plugin.plugins.hsr_companion.tests.test_guidance import plan
 
 NOW = datetime.fromisoformat("2026-10-19T12:00:00+08:00")
+
+
+@pytest.fixture
+def recorded_period(monkeypatch):
+    from plugin.plugins.hsr_companion.runtime import guidance
+
+    class RecordedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return NOW.astimezone(tz) if tz is not None else NOW.replace(tzinfo=None)
+
+    monkeypatch.setattr(guidance, "datetime", RecordedDatetime)
 
 
 @pytest.fixture
@@ -235,7 +248,8 @@ def test_optional_challenge_data_failure_is_isolated(book, catalog, builds, chan
 
 
 @pytest.mark.parametrize("off_path", [False, True])
-def test_formal_prepare_named_stage_uses_saved_builds_without_pixels(tmp_path, book, catalog, builds, off_path):
+def test_formal_prepare_named_stage_uses_saved_builds_without_pixels(tmp_path, book, catalog, builds, off_path,
+                                                                    recorded_period):
     from plugin.plugins.hsr_companion.tests.test_current_observation import plugin_fixture
     plugin, values, sent = plugin_fixture(tmp_path)
     plugin._guidance_book, plugin._catalog = book, catalog
@@ -253,6 +267,7 @@ def test_formal_prepare_named_stage_uses_saved_builds_without_pixels(tmp_path, b
     plugin._current_visual_evidence = plugin._read_game_state = plugin._wait_for_data_pack = forbidden
 
     async def run():
+        await plugin.set_experimental_features(extended_guidance_enabled=True)
         result = await plugin.hsr_companion_prepare(query="本期混沌普通12层怎么配队")
         challenge = result["guidance_answer"]["challenge_plan"]
         assert challenge["assignments"] and challenge["state"] == "ready"
@@ -262,6 +277,34 @@ def test_formal_prepare_named_stage_uses_saved_builds_without_pixels(tmp_path, b
         pearl = next(m for t in challenge["assignments"] for m in t["members"] if m["name"] == "真珠")
         assert pearl["panel"]["values"]["def"] == "3132" and pearl["light_cone"]["superimposition"] == 1
         assert values["player_context"] == before and not sent
+
+    asyncio.run(run())
+
+
+def test_regular_saved_team_does_not_need_specialty_switch_or_pixels(tmp_path, book, catalog, builds):
+    from plugin.plugins.hsr_companion.tests.test_current_observation import plugin_fixture
+    owner, values, sent = plugin_fixture(tmp_path)
+    owner._guidance_book, owner._catalog = book, catalog
+    owner._observer_status.update(enabled=False, state="stopped", proactive_enabled=False)
+    before = deepcopy(values)
+
+    async def forbidden(*args, **kwargs):
+        pytest.fail("Saved team advice must not request live evidence or wait for downloads")
+
+    async def roster():
+        return deepcopy(builds["imported_builds"])
+
+    owner._imported_roster = roster
+    owner._current_visual_evidence = owner._read_game_state = owner._wait_for_data_pack = forbidden
+
+    async def run():
+        result = await owner.hsr_companion_prepare(query="按我保存的角色，真珠怎么配队？", intent="team_guide")
+        assert not result["query_plan"]["screen"] and not result["followup"]["pending"]
+        assert result["query_timing"]["refresh"]["outcome"] == "not_requested"
+        options = result["guidance_answer"]["reply_plan"]["discussion_options"]
+        assert any("银狼LV.999" in str(option) and "真珠" in str(option) for option in options)
+        assert "challenge_plan" not in result["guidance_answer"]
+        assert values["player_context"] == before["player_context"] and not sent
 
     asyncio.run(run())
 

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 import time
+from collections import Counter
 from datetime import datetime, timezone
 
 from .observation import VISUAL_TTL_SECONDS, public_visual_evidence
@@ -85,17 +86,21 @@ def incomplete_same_page_read(owner, analysis):
             or (old.get("page") or {}).get("page_type") in {None, "unknown"}
             or (old.get("page") or {}).get("page_type") != (analysis.get("page") or {}).get("page_type")):
         return False
+    from .delivery_boundary import semantic_key
+
     def facts(value):
-        return {(f.get("scope"), f.get("kind"), f.get("label")): str(f.get("value") or "")
-                for f in (value.get("screen_facts") or {}).get("facts", [])
-                if f.get("kind") not in {"unreadable_stat", "equipment_binding_missing"}}
+        # Use the SAME fact identity as delivery revocation. A flat and a
+        # percentage substat may have the same label; a dict keyed by label
+        # silently discarded one and could hide real progress/replacement.
+        return Counter(semantic_key(f) for f in (value.get("screen_facts") or {}).get("facts", [])
+                       if f.get("kind") not in {"unreadable_stat", "equipment_binding_missing"})
     previous, incoming = facts(old), facts(analysis)
-    if any(k not in previous or previous[k] != v for k, v in incoming.items()):
+    if incoming - previous:
         return False
     from .delivery_scope import identity_key
     old_actors = {identity_key(a) for a in old.get("characters", [])}
     new_actors = {identity_key(a) for a in analysis.get("characters", [])}
-    return bool(new_actors <= old_actors and (set(incoming) < set(previous) or new_actors < old_actors))
+    return bool(new_actors <= old_actors and (incoming < previous or new_actors < old_actors))
 
 
 def record_verified_regions(owner, coordinates, checked_at, *, serial=None):

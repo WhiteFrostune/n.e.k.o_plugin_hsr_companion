@@ -1,8 +1,8 @@
 """Frozen label/placeholder regressions; no OCR truth injected into production."""
 from io import BytesIO
 
-from PIL import Image
 import pytest
+from PIL import Image
 
 from plugin.plugins.hsr_companion.adapters.relic_values import refine_relic_values
 from plugin.plugins.hsr_companion.adapters.text_verification import proof_key, verify_text_regions
@@ -135,6 +135,7 @@ def test_inline_stat_numbers_keep_literal_evidence():
 def test_typed_label_survives_producer_commit_scope_and_formal_tool(tmp_path):
     import asyncio
     from types import SimpleNamespace
+
     from plugin.plugins.hsr_companion.runtime.live_refresh import stable_screen_content
     from plugin.plugins.hsr_companion.tests.test_chain_audit_20261017 import audit_owner, commit_raw, raw_page
     from plugin.plugins.hsr_companion.tests.test_delivery_fix_20261012 import frame

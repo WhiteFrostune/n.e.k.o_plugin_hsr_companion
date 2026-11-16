@@ -234,6 +234,17 @@ llm_result_fields = ["proactive_companionship"]
 llm_result_schema = { "type" = "object", "properties" = { "proactive_companionship" = {  } }, "required" = ["proactive_companionship"] }
 
 [[plugin.entries]]
+id = "set_experimental_features"
+name = "设置星铁实验功能"
+description = "设置探索闲聊和专项攻略的独立开关。探索闲聊还需要开启主动搭话。"
+input_schema = { type = "object", properties = { idle_chatter_enabled = { type = "boolean" }, extended_guidance_enabled = { type = "boolean" } }, additionalProperties = false }
+kind = "action"
+auto_start = false
+model_validate = true
+llm_result_fields = ["experimental_features"]
+llm_result_schema = { type = "object", properties = { experimental_features = {} }, required = ["experimental_features"] }
+
+[[plugin.entries]]
 id = "stage_player_context"
 name = "暂存星铁玩家档案识别结果"
 description = "暂存从截图或自然语言中整理出的角色列表，等待玩家确认后再写入正式档案。"

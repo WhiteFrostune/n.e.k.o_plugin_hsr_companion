@@ -14,7 +14,7 @@ from .install_page_activity_candidate import digest, player_records, request, tr
 
 REVISION = 'demo-character-page-proof-20261020.1'
 ROOT = Path(__file__).resolve().parents[1]
-APP = Path('C:/Users/USER/AppData/Local/N.E.K.O')
+APP = Path('C:/Users/cai/AppData/Local/N.E.K.O')
 INSTALLED = APP / '.neko-plugin-installations/plugins/hsr_companion'
 
 

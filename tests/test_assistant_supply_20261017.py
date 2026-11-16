@@ -8,8 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from plugin.plugins.hsr_companion.assistant_runtime import server
-from plugin.plugins.hsr_companion.assistant_runtime import window_capture
+from plugin.plugins.hsr_companion.assistant_runtime import server, window_capture
 from plugin.plugins.hsr_companion.tests.test_window_capture import FakeCapture, session, window
 
 

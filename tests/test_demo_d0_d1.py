@@ -7,9 +7,13 @@ import pytest
 
 from plugin.plugins.hsr_companion.runtime import service_contract as contract
 from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
-from plugin.plugins.hsr_companion.tests.test_stage2_assessment import relic, assess
+from plugin.plugins.hsr_companion.tests import test_guidance as guidance_cases
+from plugin.plugins.hsr_companion.tests.test_guidance import answer, plan
 from plugin.plugins.hsr_companion.tests.test_stage1_repairs import fact, visual
-from plugin.plugins.hsr_companion.tests.test_guidance import book, catalog, answer, plan
+from plugin.plugins.hsr_companion.tests.test_stage2_assessment import assess, relic
+
+book = guidance_cases.book
+catalog = guidance_cases.catalog
 
 
 @pytest.mark.parametrize("channel", ["direct", "followup"])
@@ -74,6 +78,7 @@ def test_wrong_rendered_text_is_not_hidden_by_correct_structured_rows():
 
 def test_detailed_trace_is_never_in_default_diagnosis_or_export(tmp_path):
     import asyncio
+
     from plugin.plugins.hsr_companion.tests.test_current_observation import plugin_fixture
     from plugin.sdk.plugin import unwrap
     owner, _, sent = plugin_fixture(tmp_path)
@@ -104,6 +109,11 @@ def test_three_roles_have_sourced_actionable_panel_explanations(book, catalog):
                          fact("stat", "暴击率", "54.2%"), fact("stat", "暴击伤害", "181.4%"))
         for row in current["screen_facts"]["facts"]:
             row["scope"] = "attributes"
+        unbound = assess(f"{name}的面板怎么样", current, book, catalog)
+        assert not unbound["assessment"]["evaluation_available"]
+        assert unbound["completion"]["panel_subject_state"] == "unconfirmed"
+        identity = catalog.resolve_character(name)["id"]
+        current["characters"] = [{"entity_id": identity, "name": name, "identity_scope": "detail_subject"}]
         result = assess(f"{name}的面板怎么样", current, book, catalog)
         evaluation = result["assessment"]["evaluation"]
         assert evaluation["available"]

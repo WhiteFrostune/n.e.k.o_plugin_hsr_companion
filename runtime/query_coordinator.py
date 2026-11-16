@@ -155,15 +155,14 @@ class QueryObservation:
     generation: int
 
 
-async def resolve_query(owner, plan: QueryPlan, *, refresh, timeout: float, generation: int | None = None,
-                        read_unrequested: bool = True) -> QueryObservation:
+async def resolve_query(owner, plan: QueryPlan, *, refresh, timeout: float, generation: int | None = None) -> QueryObservation:
     """Bound coordination and copy its trace before another request can mutate it."""
     started = time.monotonic()
     generation = getattr(owner, "_answer_query_generation", 0) if generation is None else generation
     deadline = started + timeout
     diagnostics = {}
     selected = None
-    if not plan.screen and not read_unrequested:
+    if plan.archived_guidance:
         from .observation import public_visual_evidence
         selected = public_visual_evidence({"invalidated": True, "source": "assistant_local_ocr"}, owner._observer_status)
         return QueryObservation(ObservationSnapshot.select(owner, selected), {"outcome": "not_requested", "stages": []}, 0.0, generation)

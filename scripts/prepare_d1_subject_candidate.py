@@ -48,7 +48,7 @@ def main():
     build_plugin(stage, package)
     inspected = inspect_package(package)
     assert inspected.package_id == "hsr_companion" and inspected.payload_hash_verified is True
-    installed = Path("C:/Users/USER/AppData/Local/N.E.K.O/.neko-plugin-installations/plugins/hsr_companion")
+    installed = Path("C:/Users/cai/AppData/Local/N.E.K.O/.neko-plugin-installations/plugins/hsr_companion")
     installed_unchanged = installed.exists() and all(digest(installed / name) == value for name, value in old_hashes.items())
     report = {"goal": "D1 demand, subject and sourced assessment handoff", "build_revision": revision,
         "plugin_version": "0.9.6", "installed": False, "host_messages_sent": False, "live_capture_performed": False,

@@ -14,6 +14,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
 from plugin.plugins.hsr_companion.runtime import answer_message, followup, query_reuse
 from plugin.plugins.hsr_companion.runtime.guidance import build_guidance, plan_guidance
 from plugin.plugins.hsr_companion.runtime.query_coordinator import needs_followup

@@ -1,6 +1,7 @@
 """Separate schema defect; NOT a reconstruction of the 12:04 live call."""
 import pytest
 from jsonschema import Draft202012Validator
+
 from plugin.plugins.hsr_companion.runtime.consultation_contract import CONSULTATION_SCHEMA, validate_declaration
 
 

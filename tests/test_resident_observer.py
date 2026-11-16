@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image, ImageDraw
+
 from plugin.plugins.hsr_companion.runtime.live_refresh import frame_stamp, refresh_for_query
 from plugin.plugins.hsr_companion.runtime.observation_store import ObservationSnapshot
 from plugin.plugins.hsr_companion.runtime.query_reuse import region_stamp, try_reuse

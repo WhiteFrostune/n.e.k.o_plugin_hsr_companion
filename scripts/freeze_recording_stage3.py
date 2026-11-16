@@ -43,7 +43,7 @@ def freeze(report, test_report):
     changed = {name for name, digest in old.items() if not (ROOT / name).is_file() or sha(ROOT / name) != digest}
     if changed != CHANGED:
         raise RuntimeError("Unexpected source delta: " + repr(sorted(changed ^ CHANGED)))
-    installed = Path("C:/Users/USER/AppData/Local/N.E.K.O/.neko-plugin-installations/plugins/hsr_companion")
+    installed = Path("C:/Users/cai/AppData/Local/N.E.K.O/.neko-plugin-installations/plugins/hsr_companion")
     installed_diff = [name for name, digest in old.items()
                       if not (installed / name).is_file() or sha(installed / name) != digest]
     tests = xml_result(test_report)

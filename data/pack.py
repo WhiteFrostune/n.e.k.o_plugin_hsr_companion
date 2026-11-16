@@ -24,9 +24,9 @@ from typing import Any, Callable, Iterable
 from .catalog import normalize_lookup_text
 
 PACK_SCHEMA_VERSION = 1
-UPSTREAM_REVISION = "dbe8cdfcfb0bf657b9fe1cf92d5537f118ccb487"
-UPSTREAM_GAME_VERSION = "4.6.0"
-UPSTREAM_SNAPSHOT_DATE = "2026-09-29"
+UPSTREAM_REVISION = "03907e798b46f9eb109a1f882055cdf49ce3d374"
+UPSTREAM_GAME_VERSION = "4.7.0"
+UPSTREAM_SNAPSHOT_DATE = "2026-11-11"
 PACK_BUILDER_REVISION = 2
 UPSTREAM_NAME = "Mar-7th/StarRailRes"
 UPSTREAM_URL = "https://github.com/Mar-7th/StarRailRes"

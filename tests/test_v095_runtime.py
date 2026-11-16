@@ -13,6 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image, ImageDraw
+
 from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter
 from plugin.plugins.hsr_companion.runtime.chat_activity import latest_user_activity, user_timestamp
 from plugin.plugins.hsr_companion.runtime.live_refresh import frame_changed, frame_stamp, refresh_for_query

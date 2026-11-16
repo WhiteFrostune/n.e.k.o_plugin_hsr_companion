@@ -6,6 +6,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+
 from plugin.plugins.hsr_companion.runtime.diagnostic_export import export_diagnostic
 from plugin.plugins.hsr_companion.runtime.diagnostics import build_diagnostic_report
 from plugin.plugins.hsr_companion.tests.test_current_observation import analysis, plugin_fixture

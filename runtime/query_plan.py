@@ -38,6 +38,18 @@ _SEMANTIC_FIELDS = MappingProxyType({
     "assess_panel": frozenset({"attributes"}),
 })
 
+_RELIC_ROWS_QUESTION = re.compile(
+    r"(?:请|帮我|麻烦)?(?:只|完整|逐项)?(?:读(?:出)?|报(?:出)?|列(?:出)?|告诉我)?\s*"
+    r"(?:当前|这件|这个)?(?:遗器)?(?:的)?\s*"
+    r"(?:主副词条|主词条(?:和|及|、|与)\s*(?:四项|四条|4项|4条)?副词条|主词条|副词条)"
+    r"\s*(?:分别)?\s*(?:是什么|有哪些|是多少|多少|是什么数值)?[？?。！!\s]*"
+)
+
+
+def asks_relic_rows_only(query: str) -> bool:
+    """Recognize an isolated row read when the tool picked item assessment."""
+    return _RELIC_ROWS_QUESTION.fullmatch(query.strip()) is not None
+
 
 def _page_purpose(query):
     """Legacy fallback only. The semantic entry never reparses its purpose."""
@@ -121,6 +133,7 @@ class QueryPlan:
     equipment_kinds: frozenset[str] = frozenset()
     planning_source: str = "legacy_keywords"
     response_detail: str = ""
+    archived_guidance: bool = False
 
     def with_fields(self, fields, *, equipment_kinds=None):
         """Derive execution switches from ONE accepted field set.
@@ -147,6 +160,8 @@ class QueryPlan:
             return self.equipment_kinds
         if self.intent == "assess_cone":
             return frozenset()
+        if self.response_detail == "full":
+            return frozenset({"main_stat", "sub_stat"})
         if "主副词条" in self.query or "主词条" in self.query and "副词条" in self.query:
             return frozenset({"main_stat", "sub_stat"})
         if "主词条" in self.query:
@@ -174,6 +189,8 @@ class QueryPlan:
         # No query text, guessed names, paths, or observed facts.
         result = {"screen": self.screen, "fields": sorted(self.fields), "topics": sorted(self.topics),
                   "planning_source": self.planning_source,
+                  "evidence_source": "current_screen" if self.screen else
+                                     "saved_or_reference" if self.archived_guidance else "optional_context",
                   "read_path": "navigation" if self.navigation else "scene" if self.scene_only else "full" if self.screen else "knowledge"}
         if self.required_equipment_kinds:
             result["equipment_kinds"] = sorted(self.required_equipment_kinds)

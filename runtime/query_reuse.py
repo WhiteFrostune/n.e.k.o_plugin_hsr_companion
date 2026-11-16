@@ -112,6 +112,24 @@ def regions_changed(before: tuple, after: tuple) -> bool:
     return False
 
 
+def _remember_candidate(snapshots, key, candidate):
+    """One current and at most one richer packet, each with its OWN proofs.
+
+    Retention compares coverage, not validity. Selection must still compare
+    post-review content; a formerly rich packet cannot hide a valid partial.
+    """
+    previous = snapshots.get(key)
+    retained_key = key + "_previous"
+    retained = snapshots.get(retained_key)
+    coverage = content_coverage(candidate["evidence"])
+    if previous and content_coverage(previous["evidence"]) - coverage:
+        if not retained or len(content_coverage(previous["evidence"])) > len(content_coverage(retained["evidence"])):
+            snapshots[retained_key] = previous
+    elif retained and content_coverage(retained["evidence"]) <= coverage:
+        snapshots.pop(retained_key, None)
+    snapshots[key] = candidate
+
+
 def remember_reusable(owner, analysis: dict) -> None:
     """Keep scoped answers, not an old roster or persisted restart cache."""
     stamp = getattr(owner, "_next_frame_stamp", None)
@@ -133,20 +151,13 @@ def remember_reusable(owner, analysis: dict) -> None:
         full = copy.deepcopy(evidence)
         if not getattr(owner, "_next_frame_identity_guarded", False):
             full.update(characters=[], team=[], controlled_character=None, can_answer_character_identity=False)
-        previous = snapshots.get("full")
-        retained = snapshots.get("full_previous")
-        if previous and content_coverage(previous["evidence"]) - content_coverage(full):
-            if not retained or len(content_coverage(previous["evidence"])) > len(content_coverage(retained["evidence"])):
-                snapshots["full_previous"] = previous
-        elif retained and content_coverage(retained["evidence"]) <= content_coverage(full):
-            snapshots.pop("full_previous", None)
-        snapshots["full"] = {"evidence": full, "stamp": stamp, "guard": full_guard,
+        _remember_candidate(snapshots, "full", {"evidence": full, "stamp": stamp, "guard": full_guard,
                              "control_trace": copy.deepcopy((analysis.get("recognition") or {}).get("control_trace") or {}),
                              "identity_proofs": copy.deepcopy(analysis.get("characters") or [])
                                  if getattr(owner, "_next_frame_identity_guarded", False) else [],
                              "page_controls": copy.deepcopy(getattr(owner, "_next_frame_page_regions", ())),
                              "epoch": getattr(owner, "_observation_epoch", 0),
-                             "game_pid": getattr(owner, "_analysis_game_pid", 0)}
+                             "game_pid": getattr(owner, "_analysis_game_pid", 0)})
     # A scene/navigation snapshot cannot answer who, equipment or skill questions.
     evidence.update(characters=[], team=[], controlled_character=None,
                     can_answer_character_identity=False, identity_list_complete=False)
@@ -165,15 +176,17 @@ def remember_reusable(owner, analysis: dict) -> None:
               "epoch": getattr(owner, "_observation_epoch", 0),
               "game_pid": getattr(owner, "_analysis_game_pid", 0)}
     answer = navigation_answer(evidence, requested=True)
-    if answer["current_location"]["known"] or evidence["page_type"] != "exploration_hud":
-        projected = scoped_snapshot(owner, evidence, guard, {"current_location"})
-        if projected:
-            snapshots["scene"] = {**common, **projected}
-    if answer["current_location"]["known"] and answer["objective"]["known"]:
+    # A proved page does not depend on readable corner text, and a proved
+    # quest does not require a proved location. These are guarded candidates,
+    # not a statement that the whole navigation request has been completed.
+    projected = scoped_snapshot(owner, evidence, guard, {"current_location"})
+    if projected:
+        _remember_candidate(snapshots, "scene", {**common, **projected})
+    if any(answer[field]["known"] for field in ("current_location", "objective", "quest_title", "destination")):
         projected = scoped_snapshot(owner, evidence, guard,
             {"current_location", "tracked_quest", "quest_objective", "quest_destination"})
         if projected:
-            snapshots["navigation"] = {**common, **projected}
+            _remember_candidate(snapshots, "navigation", {**common, **projected})
     owner._reusable_observations = snapshots
 
 
@@ -231,6 +244,7 @@ async def _try_reuse(owner, *, navigation: bool, full: bool, require_characters:
     # One bounded retry may use the newly committed snapshot. An obsolete
     # checker must never revoke it or force another complete recognition.
     generation = getattr(owner, "_answer_query_generation", 0)
+    key = "full" if full else "navigation" if navigation else "scene"
     for _ in range(2):
         if plan is not None:
             # The resident producer may have committed while an older cache
@@ -245,11 +259,11 @@ async def _try_reuse(owner, *, navigation: bool, full: bool, require_characters:
                                        pixel_only=pixel_only)
         if selected is not _SUPERSEDED:
             from .query_coordinator import answer_coverage, satisfied_fields
-            current = getattr(owner, "_reusable_observations", {}).get("full")
+            current = getattr(owner, "_reusable_observations", {}).get(key)
             original = ((selected or {}).get("reuse") or {}).get("original_serial")
             current_serial = ((current or {}).get("evidence", {}).get("screen_facts") or {}).get("observation_serial")
-            if (full and plan is not None and current
-                    and getattr(owner, "_reusable_observations", {}).get("full_previous")
+            if (plan is not None and current
+                    and getattr(owner, "_reusable_observations", {}).get(key + "_previous")
                     and (selected is None or not plan.fields <= satisfied_fields(plan, selected))
                     and (selected is None or original != current_serial)
                     and answer_coverage(plan, current["evidence"]) > answer_coverage(plan, selected)):
@@ -278,16 +292,17 @@ async def _try_reuse_once(owner, *, navigation: bool, full: bool, require_charac
     from .query_coordinator import has_answerable_content
 
     snapshots = getattr(owner, "_reusable_observations", {})
-    snapshot = snapshots.get("full" if full else "navigation" if navigation else "scene")
+    key = "full" if full else "navigation" if navigation else "scene"
+    snapshot = snapshots.get(key)
     if snapshot is None and plan is not None and plan.fields == {"page"}:
         # A full candidate may contain good controls but no location. Do not
         # make independent page proof depend on a navigation cache existing.
         snapshot = snapshots.get("full")
-    if full and plan is not None:
+    if plan is not None:
         from .query_coordinator import satisfied_fields
         # Keep at most one detached richer read. It MUST still pass its own
         # age, epoch, process, page and literal guards below; never merge rows.
-        candidates = [snapshot] if prefer_current else [snapshot, snapshots.get("full_previous")]
+        candidates = [snapshot] if prefer_current else [snapshot, snapshots.get(key + "_previous")]
         complete = next((s for s in candidates if s and plan.fields <= satisfied_fields(plan, s["evidence"])), None)
         if complete is not None:
             snapshot = complete
@@ -318,7 +333,13 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
     import asyncio
 
     from .fact_lifecycle import observation_tick
-    from .live_refresh import fetch_recent_frame, frame_changed, frame_stamp, invalidate_frame_change, trace_refresh
+    from .live_refresh import (
+        compare_live_frames,
+        fetch_recent_frame,
+        frame_stamp,
+        invalidate_frame_change,
+        trace_refresh,
+    )
 
     if not snapshot or getattr(owner, "_observation_invalidated", False):
         trace_refresh(owner, "reuse_miss", reason="candidate_missing" if not snapshot else "observation_invalidated")
@@ -391,7 +412,7 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
     # regions still determine whether this particular snapshot can be reused.
     # A complete native guard already includes independent page controls.
     # Coarse animated pixels are not a second, overriding page detector.
-    global_changed = frame_changed(snapshot["stamp"], current_stamp, (), ui_only=bool(regions))
+    global_changed = compare_live_frames(owner, snapshot["stamp"], current_stamp, ui_only=bool(regions))
     text_changed = regions_changed(patches, current_patches)
     native_reviewed = False
     if pixel_only and (global_changed or text_changed):
@@ -504,14 +525,14 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
                 # redundant tab is not a changed page when the remaining
                 # independently proved controls still classify that page.
                 # This subset belongs only to this delivery, never the store.
-                from PIL import Image
-
                 from ..detectors.layout import select_proved_equipment_controls
-                with Image.open(BytesIO(latest.image_bytes)) as current_image:
-                    admitted_controls = select_proved_equipment_controls(
-                        {"page_type": evidence.get("page_type")}, controls,
-                        lambda p: region_key(p) not in coordinates,
-                        width=current_image.width, height=current_image.height)
+                # frame_stamp already decoded THIS latest capture off-thread.
+                # Reuse its native dimensions, rather than reopen the same
+                # image synchronously on the query/follow-up event loop.
+                width, height = current_stamp[0]
+                admitted_controls = select_proved_equipment_controls(
+                    {"page_type": evidence.get("page_type")}, controls,
+                    lambda p: region_key(p) not in coordinates, width=width, height=height)
                 if not admitted_controls:
                     return None
                 snapshot = {**snapshot, "page_controls": admitted_controls}
@@ -559,8 +580,12 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
         owner._observer_status.update(state="observing", message="正在核对当前界面信息")
     result = copy.deepcopy(evidence)
     result["read_scope"] = "full" if full else "navigation" if navigation else "scene"
-    result.update(status="confirmed", failure_reason="", text_coverage_complete=False,
-                  message="已用新采集画面核对本结果依赖的文字和控件区域；未重复整轮识别，未确认的字段仍未知。")
+    pending_character = bool(result.get("equipment_complete") and not result.get("characters")
+                             and not result.get("page_characters"))
+    result.update(status="confirmed", failure_reason="character_pending" if pending_character else "",
+                  text_coverage_complete=False,
+                  message=("已用新采集画面核对遗器词条；当前帧未确认角色归属。" if pending_character else
+                           "已用新采集画面核对本结果依赖的文字和控件区域；未重复整轮识别，未确认的字段仍未知。"))
     result["screen_facts"]["unclassified_text"] = []
     original_serial = result["screen_facts"].get("observation_serial", 0)
     # This is a delivery revision, not a new OCR/capture timestamp. Pixels for

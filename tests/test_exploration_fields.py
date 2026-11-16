@@ -4,6 +4,7 @@ from __future__ import annotations
 from io import BytesIO
 
 import pytest
+
 from plugin.plugins.hsr_companion.data.catalog import StructuredCatalog
 from plugin.plugins.hsr_companion.detectors.layout import analyze_layout, classify_supported_page
 from plugin.plugins.hsr_companion.detectors.scene_preview import scene_preview
@@ -136,6 +137,7 @@ def test_known_character_label_not_also_grounded_to_same_named_item_or_foreign_t
 
 def test_scene_path_reads_native_location_without_character_pipeline():
     from PIL import Image
+
     from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter
     class Backend:
         calls = 0

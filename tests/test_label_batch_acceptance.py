@@ -1,5 +1,6 @@
 """Posthoc score must fail partials, stale items and changed test binaries."""
 import copy
+
 import pytest
 
 from plugin.plugins.hsr_companion.scripts.label_contract_acceptance import TRUTH, score_batch

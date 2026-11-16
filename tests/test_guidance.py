@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
+
 from plugin.plugins.hsr_companion.data import ExternalKnowledgeCatalog
 from plugin.plugins.hsr_companion.runtime.guidance import GuidanceCatalog, build_guidance, plan_guidance
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
@@ -249,7 +250,11 @@ def test_prepare_guidance_paused_never_reads_observation_or_rewrites_profile(tmp
     async def run():
         result = await plugin.hsr_companion_prepare(query="绯英遗器光锥怎么配")
         assert not result.get("is_error")
-        assert result["guidance_answer"]["guides"][0]["name"] == "绯英"
+        selected = result["guidance_answer"]
+        assert selected["assessment"]["subject_ids"] == ["character.evanescia"]
+        assert selected["reply_plan"]["discussion_options"][0]["character"] == "绯英"
+        assert selected["reply_plan"]["discussion_options"][0]["main_stats"]
+        assert selected["sources"] and "guides" not in selected
         assert result["query_answer"]["state"] == "not_requested"
         assert result["query_timing"]["refresh_wait_seconds"] == 0
         assert not result["followup"]["pending"]

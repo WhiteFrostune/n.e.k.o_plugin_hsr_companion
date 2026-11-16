@@ -6,6 +6,7 @@ import copy
 import time
 
 import pytest
+
 from plugin.plugins.hsr_companion.runtime.guidance import build_guidance, plan_guidance
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.runtime.service_contract import (
@@ -91,7 +92,12 @@ def test_screen_question_does_not_erase_or_refresh_discussion(tmp_path):
         await owner.hsr_companion_prepare(query="现在是什么界面")
         assert owner._guidance_context == before
         result = await owner.hsr_companion_prepare(query="没有爻光怎么配队")
-        assert result["guidance_answer"]["guides"][0]["name"] == "绯英"
+        guide = result["guidance_answer"]
+        assert guide["assessment"]["subject_ids"] == ["character.evanescia"]
+        assert guide["reply_plan"]["goal"] == "team_guide"
+        assert guide["reply_plan"]["discussion_options"] and guide["sources"]
+        assert "爻光" in guide["player_conditions"]["excluded_names"]
+        assert "guides" not in guide  # Full articles do not compete with the selected answer.
         assert not result["query_plan"]["screen"]
 
     asyncio.run(run())
@@ -104,7 +110,9 @@ def test_explicit_discussion_hint_is_not_visual_confirmation(tmp_path):
     async def run():
         result = await owner.hsr_companion_prepare(query="没有爻光怎么配队", discussion_character="绯英")
         guide = result["guidance_answer"]
-        assert guide["guides"][0]["name"] == "绯英"
+        assert guide["assessment"]["subject_ids"] == ["character.evanescia"]
+        assert not guide["assessment"]["visual_subject_confirmed"]
+        assert guide["reply_plan"]["discussion_options"] and guide["sources"]
         assert guide["target_origin"] == "conversation_hint"
         assert result["current_visual_evidence"]["characters"] == []
         assert not result["query_plan"]["screen"]
@@ -168,7 +176,10 @@ def test_bad_strategy_resource_does_not_break_plain_queries(tmp_path, monkeypatc
         guide = await owner.hsr_companion_prepare(query="绯英怎么配装")
         assert not guide.get("is_error")
         assert guide["guidance_answer"]["state"] == "unavailable"
-        assert not guide["guidance_answer"]["guides"]
+        selected = guide["guidance_answer"]
+        assert not selected["reply_plan"]["discussion_options"]
+        assert not selected["sources"]
+        assert "guides" not in selected
 
     asyncio.run(run())
 

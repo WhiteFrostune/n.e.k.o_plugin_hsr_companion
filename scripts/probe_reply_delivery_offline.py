@@ -39,7 +39,7 @@ def main():
 
     book = GuidanceCatalog(json.loads((plugin / "resources/guidance.cn-4.6.json").read_text(encoding="utf-8")))
     catalog = ExternalKnowledgeCatalog(registry=json.loads((plugin / "resources/character_registry.json").read_text(encoding="utf-8")),
-        root=Path("C:/Users/USER/AppData/Local/N.E.K.O/data-packs/hsr_companion"))
+        root=Path("C:/Users/cai/AppData/Local/N.E.K.O/data-packs/hsr_companion"))
     assert catalog.get("light_cone.23055"), "Requires existing catalog; do not download."
 
     def select(q, v=None, intent="equipment_guide"):

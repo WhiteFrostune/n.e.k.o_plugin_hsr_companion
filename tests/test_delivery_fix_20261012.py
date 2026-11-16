@@ -4,8 +4,8 @@ NOT real-game OCR accuracy, live IPC reliability or cat playback acceptance.
 The frozen test plan/run is unchanged; this candidate has its own contracts.
 """
 import asyncio
-import time
 import threading
+import time
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -15,7 +15,13 @@ from PIL import Image, ImageDraw
 
 from plugin.plugins.hsr_companion.runtime import followup
 from plugin.plugins.hsr_companion.runtime.chat_activity import latest_user_activity
-from plugin.plugins.hsr_companion.runtime.live_refresh import guarded_analysis, query_pending, refresh_for_query, validate_before_delivery, validated_delivery
+from plugin.plugins.hsr_companion.runtime.live_refresh import (
+    guarded_analysis,
+    query_pending,
+    refresh_for_query,
+    validate_before_delivery,
+    validated_delivery,
+)
 from plugin.plugins.hsr_companion.tests.test_current_observation import analysis, plugin_fixture
 from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner, png, request
 
@@ -188,9 +194,9 @@ def test_transient_activity_failure_retries_and_delivers_exactly_once(monkeypatc
     assert len(reads) == 3
 
 
-def test_new_user_message_seen_during_activity_retry_cancels(monkeypatch):
+def test_unclassified_user_message_during_retry_holds_until_original_deadline(monkeypatch):
     owner, sent = followup_owner(monkeypatch)
-    req = request()
+    req = replace(request(), expires_at=time.monotonic() + .4)
     reads = []
     async def activity(*args, **kwargs):
         reads.append(1)
@@ -198,7 +204,8 @@ def test_new_user_message_seen_during_activity_retry_cancels(monkeypatch):
     monkeypatch.setattr(followup, "latest_user_activity", activity)
     owner._pending_answer = req
     asyncio.run(followup.deliver_followup(owner, req))
-    assert not sent and owner._followup_status["reason"] == "new_user_message"
+    assert not sent and owner._followup_status["reason"] == "message_relation_unresolved"
+    assert len(reads) >= 2 and owner._pending_answer is None
 
 
 def test_cancelled_activity_retry_does_not_cancel_replacement(monkeypatch):

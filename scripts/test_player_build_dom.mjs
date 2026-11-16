@@ -27,7 +27,8 @@ test('actual hosted surface switches parallel inputs, prefills, saves only chang
   window.addEventListener('error', event => errors.push(String(event.error || event.message)))
   const payload = { plugin: { id: 'hsr_companion', name: '隔离源码测试' }, locale: 'zh-CN',
     i18n: { locale: 'zh-CN', default_locale: 'zh-CN', messages: { 'zh-CN': messages } },
-    actions: [{ id: 'save_manual_build' }, { id: 'preview_uid_import' }],
+    actions: [{ id: 'save_manual_build' }, { id: 'preview_uid_import' },
+      { id: 'set_proactive_companionship' }, { id: 'set_experimental_features' }],
     state: { uid_import: { uid: '100000001', status: 'error', error_code: 'provider_unavailable', roster: { characters: [] } },
       player_builds: { characters: [{ form_id: 'character_form.1503', name: '真珠', level: 80, eidolon: 0,
         fetched_at: '2026-10-19T02:09:04Z', source: 'enka.network',
@@ -39,6 +40,10 @@ test('actual hosted surface switches parallel inputs, prefills, saves only chang
   window.__NEKO_PAYLOAD = payload
   window.__fixtureCall = async (id, args) => {
     calls.push(JSON.parse(JSON.stringify({ id, args })))
+    if (id === 'set_experimental_features') {
+      payload.state.experimental_features = { ...payload.state.experimental_features, ...args }
+      return { result: { experimental_features: payload.state.experimental_features } }
+    }
     const build = { ...payload.state.player_builds.characters[0], edit_revision: 'r2',
       panel: { values: args.changes.panel, state: 'partial' }, manual_fields: ['panel'], manual_updated_at: '2026-10-19T03:00:00Z' }
     payload.state.player_builds.characters[0] = build
@@ -60,6 +65,15 @@ test('actual hosted surface switches parallel inputs, prefills, saves only chang
         api:{call:window.__fixtureCall,refresh:async()=>null}};
       window.__fixtureRender=()=>render(h(__Panel,props),document.getElementById('root'));
       window.__fixtureRender();})();`)
+    const button = text => [...window.document.querySelectorAll('button')].find(node => node.textContent === text)
+    assert.ok(button(messages['panel.enableProactive']), 'missing stored preference renders quiet')
+    assert.ok(button(messages['panel.enableIdleChatter']))
+    button(messages['panel.enableExtendedGuidance']).click()
+    await tick()
+    assert.deepEqual(calls.pop(), { id: 'set_experimental_features', args: { extended_guidance_enabled: true } })
+    window.__fixtureRender()
+    assert.ok(button(messages['panel.disableExtendedGuidance']))
+    assert.ok(button(messages['panel.enableIdleChatter']), 'guidance and idle chatter are independent')
     const radio = window.document.querySelector('input[type=radio][value=manual]')
     assert.ok(radio, 'manual input is a peer of UID, not a hidden error fallback')
     radio.dispatchEvent(new window.Event('change', { bubbles: true }))

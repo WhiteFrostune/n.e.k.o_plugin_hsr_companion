@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from typing import Any
 
 from .arbiter import EventArbiter
@@ -86,7 +87,8 @@ class CompanionRuntime:
         self._deferred_events.clear()
 
     def ingest(
-        self, analysis: dict[str, Any], *, now: float | None = None
+        self, analysis: dict[str, Any], *, now: float | None = None,
+        proactive_enabled: bool = False, idle_chatter_enabled: bool = False,
     ) -> tuple[CompanionEvent | None, list[dict[str, str]]]:
         observed_at = time.monotonic() if now is None else float(now)
         self.last_analysis = dict(analysis)
@@ -109,7 +111,7 @@ class CompanionRuntime:
                     self.stable_scene_since = observed_at
                     self.pending_scene = ""
                     self.pending_count = 0
-                    proactive = scene in self._PROACTIVE_SCENES
+                    proactive = proactive_enabled and scene in self._PROACTIVE_SCENES
                     candidates.append(
                         CompanionEvent(
                             event_id=f"scene:{scene}",
@@ -119,7 +121,7 @@ class CompanionRuntime:
                             payload={"previous": previous, "current": scene},
                             cooldown_seconds=self._SCENE_COOLDOWN.get(scene, 12.0),
                             proactive=proactive,
-                            preempt=scene == "combat",
+                            preempt=proactive and scene == "combat",
                         )
                     )
                     self.last_meaningful_event_at = observed_at
@@ -199,7 +201,7 @@ class CompanionRuntime:
                         max_age_seconds=30.0,
                         cooldown_seconds=90.0,
                         cooldown_key="characters_identified",
-                        proactive=True,
+                        proactive=proactive_enabled,
                     )
                 )
                 self.last_meaningful_event_at = observed_at
@@ -215,7 +217,8 @@ class CompanionRuntime:
                 self.missing_character_count = 0
 
         if (
-            not candidates
+            proactive_enabled and idle_chatter_enabled
+            and not candidates
             and verified
             and scene == self.stable_scene
             and self.stable_scene == "exploration"
@@ -238,7 +241,7 @@ class CompanionRuntime:
             )
 
         deferred = [
-            candidate
+            candidate if proactive_enabled else replace(candidate, proactive=False, preempt=False)
             for candidate in self._deferred_events
             if observed_at - candidate.ts <= candidate.max_age_seconds
             and (

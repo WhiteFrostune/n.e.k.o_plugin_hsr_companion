@@ -50,6 +50,7 @@ def test_probe_bounds_log_and_does_not_keep_mutable_caller_values():
 
 def test_probe_preserves_numeric_backend_result_and_call_count(tmp_path):
     from PIL import Image
+
     from plugin.plugins.hsr_companion.adapters import relic_values
     from plugin.plugins.hsr_companion.tests.test_relic_fields import relic_boxes
     owner, _, _ = audit_owner(tmp_path)

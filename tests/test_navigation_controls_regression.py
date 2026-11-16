@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image
+
 from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter
 from plugin.plugins.hsr_companion.detectors.exploration import generic_navigation
 from plugin.plugins.hsr_companion.runtime.navigation import navigation_answer

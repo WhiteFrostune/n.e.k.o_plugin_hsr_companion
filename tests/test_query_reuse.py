@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image, ImageDraw
+
 from plugin.plugins.hsr_companion.runtime.live_refresh import frame_changed, frame_stamp, refresh_for_query
 from plugin.plugins.hsr_companion.runtime.query_reuse import region_stamp, regions_changed, remember_reusable, try_reuse
 from plugin.plugins.hsr_companion.tests.test_current_observation import analysis, plugin_fixture
@@ -200,7 +201,13 @@ def test_missing_task_keeps_scene_but_cannot_finish_navigation_query(tmp_path):
         partial = copy.deepcopy(values["last_local_vision"])
         partial["screen_facts"]["facts"] = partial["screen_facts"]["facts"][:1]
         remember_reusable(owner, partial)
-        assert "scene" in owner._reusable_observations and "navigation" not in owner._reusable_observations
+        assert "scene" in owner._reusable_observations and "navigation" in owner._reusable_observations
+        from plugin.plugins.hsr_companion.runtime.query_coordinator import satisfied_fields
+        from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
+        demand = build_query_plan("现在在哪，接下来任务做什么")
+        cached = owner._reusable_observations["navigation"]["evidence"]
+        # Keeping a location-only candidate is not completion of a quest.
+        assert satisfied_fields(demand, cached) == {"location"}
 
     asyncio.run(run())
 

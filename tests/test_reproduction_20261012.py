@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
+
 from plugin.core.bus.memory import MemoryClient
 from plugin.plugins.hsr_companion.runtime import followup
 from plugin.plugins.hsr_companion.runtime.chat_activity import latest_user_activity
@@ -123,17 +124,33 @@ def test_reproduce_committed_text_result_rejected_only_by_capture_timestamp(tmp_
     asyncio.run(run())
 
 
-def test_persistent_real_sdk_transport_failure_safely_cancels_after_bounded_retries(monkeypatch):
+@pytest.mark.parametrize("duration", [.1, 1])
+def test_persistent_real_sdk_transport_failure_safely_cancels_after_bounded_retries(monkeypatch, duration):
     bus, transport = real_sdk_bus(0)
-    transport.request = lambda *args, **kwargs: None  # Controlled IPC failure, not a live failure claim.
+    reads, captures = [], []
+
+    def failed_transport(*args, **kwargs):
+        reads.append(1)
+        return None  # Controlled IPC failure, not a live failure claim.
+
+    async def current():
+        captures.append(1)
+        return {"fresh": False, "page_type": "unknown", "screen_facts": {"facts": []}}
+
+    transport.request = failed_transport
     sent = []
     owner = SimpleNamespace(bus=bus, _observer_status={"enabled": True, "state": "observing"},
-                            _target_character=lambda: "reproduction-only", push_message=lambda **kw: sent.append(kw))
+                            _target_character=lambda: "reproduction-only", push_message=lambda **kw: sent.append(kw),
+                            _current_visual_evidence=current)
     now = time.monotonic()
-    req = followup.AnswerRequest("repro-failure", "页面文字写了什么", "reproduction-only", time.time(), now,
-                                 now + 1, "unknown", False, False, True, False)
+    from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
+    plan = build_query_plan("页面文字写了什么", "read_screen", screen_fields=["visible_text"])
+    assert plan.fields == {"visible_text"}
+    req = followup.AnswerRequest("repro-failure", plan.query, "reproduction-only", time.time(), now,
+                                 now + duration, "unknown", False, False, True, False, plan=plan)
     owner._pending_answer = req
     monkeypatch.setattr(followup, "FOLLOWUP_GRACE_SECONDS", 0)
     asyncio.run(followup.deliver_followup(owner, req))
     print({"controlled_transport_failure": True, "state": owner._followup_status, "messages_sent": len(sent)})
     assert owner._followup_status["reason"] == "activity_unavailable_after_retries" and not sent
+    assert captures and 1 <= len(reads) <= followup.ACTIVITY_ATTEMPTS

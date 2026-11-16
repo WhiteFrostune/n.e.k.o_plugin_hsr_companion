@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "baseline_build": "demo-request-chain-r1-20261021.1",
+  "scope": "R2_page_probe_scheduling_and_delivery_admission_only",
+  "record": "dist/roundtrip-d-live-20261021-2.json",
+  "record_sha256": "42b85cb008812fac790ecfb3aa862b8ebd695c64b55bd674df187a38adcef153",
+  "checkpoint_cost_seconds": [1.672, 1.422, 1.36, 1.281, 1.391, 1.438],
+  "evidence_limit": "Original D costs/requests plus synthetic control images; no retained original screenshots or new live acceptance.",
+  "baseline_sources": [
+    {"path": "runtime/page_handoff.py", "sha256": "7d8a5ef23427961111f7e71e3e44e10cca0d0aeddc588ad350be307e99f250f3"},
+    {"path": "runtime/live_refresh.py", "sha256": "1da774c4a70436b011ddf8d3cf296fd65662f751aa9f1f9214701b23fd386725"},
+    {"path": "runtime/diagnostics.py", "sha256": "4b0d96092648965ffd51e7d01be3e8e796fc3b61e1741a1bc11933bbb2fff425"},
+    {"path": "tests/test_bounded_page_handoff_20261021.py", "sha256": "a3e89e3046c4ba0a2a8a2fed27bf20927ed5de50d35eb367351aa8f09ec7a78a"}
+  ],
+  "required_cases": [
+    "Same checked controls across new acquisitions avoid repeated native page-probe invocations.",
+    "Unknown or unstable page probes cannot advance the stable scheduling baseline.",
+    "Later real control changes remain eligible for bounded handoff.",
+    "Cheap unchanged-pixel checks do not consume native probe opportunity cap.",
+    "No claimant does not reserve a timed speculative producer slot; actual delivery is still prioritized.",
+    "Original D probe costs exercise the single native worker and public tool inside the original request budget.",
+    "R1 lifecycle, complete relic rows, object replacement and D2 constraints remain protected."
+  ],
+  "unchanged_limits": {"direct_seconds": 8, "followup_seconds": 35, "page_check_interval_seconds": 0.75, "max_page_probe_invocations": 6},
+  "not_in_scope": ["OCR accuracy/reader redesign", "visual assistant or host", "R3 MoC body summarization", "installation", "new live player route"]
+}

@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image, ImageDraw
+
 from plugin.plugins.hsr_companion.adapters.text_reader import read_native_text
 from plugin.plugins.hsr_companion.detectors import analyze_layout
 from plugin.plugins.hsr_companion.runtime.live_refresh import (

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image
+
 from plugin.plugins.hsr_companion.adapters.text_reader import native_tiles, read_native_text
 from plugin.plugins.hsr_companion.detectors import analyze_layout
 from plugin.plugins.hsr_companion.detectors.names import read_name_label

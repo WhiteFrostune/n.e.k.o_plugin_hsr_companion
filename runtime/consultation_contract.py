@@ -5,17 +5,23 @@ It does not classify the player's words, guess aliases or certify pixels.
 """
 
 from dataclasses import replace
+import time
+
+CURRENT_SCOPES = {"current_relic", "current_cone", "current_panel"}
+CORRECTION_REASONS = {"read_screen_current_scope_dropped", "current_screen_subject_inferred"}
 
 CONSULTATION_SCHEMA = {
     "type": "object", "additionalProperties": False,
     "description": "评价当前装备/面板时填写本轮语义声明，和intent一致。通用配装用reference_build；"
                    "不要把眼前装备适配声明成通用攻略。saved_cone查玩家保存的光锥，不读眼前装备；"
-                   "current_cone才读当前画面。角色省略、指定新角色、未解析是不同状态。",
+                   "current_cone才读当前画面。角色省略、指定新角色、未解析、当前画面是不同状态。"
+                   "纯读屏不要填consultation；当前画面评价且玩家没点名角色时用current。",
     "properties": {
         "scope": {"type": "string", "enum": ["current_relic", "current_cone", "current_panel", "reference_build", "saved_cone"]},
-        "subject_state": {"type": "string", "enum": ["inherit", "specified", "unresolved"],
-                          "description": "inherit仅玩家省略角色、沿用有效讨论；specified为本轮指定且已理解的角色；"
-                                         "明确新对象但没解析成功用unresolved，不能改用旧角色。"},
+        "subject_state": {"type": "string", "enum": ["inherit", "specified", "unresolved", "current"],
+                          "description": "inherit仅玩家省略角色、沿用有效讨论；specified为本轮指定且已理解的角色，必须给character；"
+                                         "明确新对象但没解析成功用unresolved，不能改用旧角色；"
+                                         "current仅用于current_*且当前画面就是对象，不填character。"},
         "character": {"type": "string", "maxLength": 80,
                       "description": "仅specified填写规范角色名；模型确认的错字/别名须在此落到规范名，"
                                      "有歧义则unresolved并澄清。不是视觉身份或账号拥有证明。"},
@@ -44,10 +50,11 @@ def validate_declaration(value, *, intent, previous=None):
         raise ValueError("invalid_consultation_declaration")
     scope, state, character = value.get("scope"), value.get("subject_state"), value.get("character", "")
     if (not isinstance(scope, str) or scope not in SCOPE_INTENTS
-            or state not in ("inherit", "specified", "unresolved")
+            or state not in ("inherit", "specified", "unresolved", "current")
             or not isinstance(character, str) or len(character) > 80
             or state == "specified" and not character.strip()
-            or state != "specified" and character):
+            or state != "specified" and character
+            or state == "current" and scope not in CURRENT_SCOPES):
         raise ValueError("invalid_consultation_subject")
     # A declared saved source with a newly specified subject can be resolved
     # from the archive even after discussion expiry. This restores NO old team
@@ -72,6 +79,54 @@ def validate_declaration(value, *, intent, previous=None):
                 raise ValueError("invalid_consultation_" + key)
             result[key] = list(items)
     return result
+
+
+def _valid_previous(previous):
+    if not isinstance(previous, dict) or not previous.get("character_ids"):
+        return False
+    try:
+        age = time.monotonic() - float(previous.get("at"))
+    except (TypeError, ValueError):
+        return False
+    return 0 <= age <= 600.0
+
+
+def normalize_model_consultation(value, *, intent, screen_fields=(), previous=None):
+    """Correct current-screen model overfills before the strict D1 contract.
+
+    Only current_* scopes with no named character are rewritten. A pure
+    read_screen drops the evaluation declaration; a current evaluation with
+    no character is marked current. Explicit characters and non-current
+    scopes keep their existing strict behavior.
+    """
+    if not isinstance(value, dict):
+        return value, []
+    scope = value.get("scope")
+    state = value.get("subject_state")
+    character = str(value.get("character") or "").strip()
+    if scope not in CURRENT_SCOPES or character:
+        return value, []
+    if intent == "read_screen":
+        return None, [{
+            "reason": "read_screen_current_scope_dropped",
+            "original_scope": scope,
+            "original_subject_state": state,
+            "intent": intent,
+        }]
+    expected = {"current_relic": "assess_relic", "current_cone": "assess_cone",
+                "current_panel": "assess_panel"}[scope]
+    if intent != expected:
+        return value, []
+    if state in {"specified", "unresolved"} or (state == "inherit" and not _valid_previous(previous)):
+        return {**value, "subject_state": "current"}, [{
+            "reason": "current_screen_subject_inferred",
+            "original_scope": scope,
+            "original_subject_state": state,
+            "corrected_scope": scope,
+            "corrected_subject_state": "current",
+            "intent": intent,
+        }]
+    return value, []
 
 
 def answer_requirements(plan, query, *, declaration=None, previous=None, inherit_parts=False):

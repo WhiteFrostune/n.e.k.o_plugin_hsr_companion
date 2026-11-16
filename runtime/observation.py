@@ -95,6 +95,21 @@ def public_visual_evidence(
             if isinstance(item, dict) and item.get("entity_id") in stable_ids
         ]
     )
+    page_characters = []
+    if not unavailable:
+        seen_names = set()
+        for item in value.get("characters") or []:
+            if (not isinstance(item, dict) or item.get("entity_id") in seen_names
+                    or item.get("identity_scope") not in {"screen_label", "detail_subject"}
+                    or item.get("confidence") not in {"high", "mixed"}):
+                continue
+            seen_names.add(item.get("entity_id"))
+            page_characters.append({
+                **{key: item.get(key) for key in ("entity_id", "name", "identity_scope", "evidence", "region")
+                   if key in item},
+                "source": "current_page_name",
+                "confirmed_on_current_frame": True,
+            })
     recognition = dict(value.get("recognition") or {})
     team = []
     if (
@@ -138,6 +153,8 @@ def public_visual_evidence(
         and (recognition.get("portrait_templates") or {}).get("reason") == "unsupported_portrait_page"
     ):
         status, message = "unsupported_page", "当前页面未取得受支持的角色身份依据，无法确认角色。"
+    elif (recognition.get("text_reader") or {}).get("relic_priority"):
+        status, message = "not_recognized", "已读到当前遗器词条；角色归属尚未在本帧确认。"
     else:
         status, message = "not_recognized", "当前画面没有可靠的角色名字或头像识别结果，无法确认角色。"
     failure_reason = unavailable
@@ -150,10 +167,28 @@ def public_visual_evidence(
             failure_reason = "confirmation_pending"
         elif (value.get("ocr") or {}).get("error"):
             failure_reason = "ocr_failed"
+        elif (recognition.get("text_reader") or {}).get("relic_priority"):
+            failure_reason = "character_pending"
         elif (recognition.get("text_reader") or {}).get("full_frame_covered") is False:
             failure_reason = "ocr_incomplete"
         else:
             failure_reason = "no_validated_name"
+    reader = recognition.get("text_reader") or {}
+    context = value.get("character_context") or {}
+    priority_note = ""
+    if reader.get("relic_priority") and not characters:
+        if page_characters:
+            priority_note = (
+                "本次遗器词条已完整读到；page_characters 只是当前页面显示的角色名，"
+                "未在本帧确认为当前操控角色。可据此做带条件的遗器评价，必须说明来源。")
+        elif context.get("name"):
+            priority_note = (
+                f"本次遗器词条已完整读到；角色沿用上一轮完整识别的 {context['name']}，"
+                "但未在本帧确认。可据此做带条件的评价，必须说明来源。")
+        else:
+            priority_note = (
+                "本次遗器词条已完整读到，但角色未在本帧确认：先报词条，不评价适配；"
+                "可以问玩家这件是给谁穿的，或说明角色尚未确认。")
     return {
         "status": status,
         "message": message,
@@ -172,6 +207,8 @@ def public_visual_evidence(
             "reason": unavailable or ("confirmed" if scene_confirmed else "scene_not_confirmed"),
         },
         "characters": characters,
+        "page_characters": page_characters,
+        "character_context": context or None,
         "screen_facts": public_screen_facts(
             value.get("screen_facts"), fresh=not bool(unavailable), observed_at=timestamp,
             serial=int(value.get("observation_serial") or 0),
@@ -184,6 +221,7 @@ def public_visual_evidence(
         "unrecognized_does_not_mean_empty_slot": True,
         "failure_reason": failure_reason,
         "text_coverage_complete": (recognition.get("text_reader") or {}).get("full_frame_covered"),
+        "equipment_complete": bool(reader.get("relic_priority")),
         "instruction": (
             "当前画面身份只允许引用本结果 characters 中的姓名，并保留 identity_scope 的范围；"
             "characters 为空时必须明确说‘目前无法确认角色’，不能从数据库搜索命中、玩家档案、"
@@ -202,6 +240,7 @@ def public_visual_evidence(
             "visible_text 仅是当前画面可见文字，可按原文转述；heading_candidate 不是已确认标题，不能据此猜页面类型或地点。"
             "没有本次工具返回的 followup.pending=true，禁止承诺稍后补答；未知页面不等于游戏正在加载。"
             "这些事实只描述 observed_at 时刻的画面，不保证玩家此刻仍停留在该页；不要说‘一直盯着’或承诺即时识别。"
+            + priority_note
         ),
     }
 

@@ -7,14 +7,14 @@ NOT the formal live admission/host speech path.
 """
 import argparse
 import copy
-from datetime import datetime, timezone
 import hashlib
 import json
-from pathlib import Path
 import time
+from datetime import datetime, timezone
+from pathlib import Path
 
 from plugin.plugins.hsr_companion.experiments.regional_reader import RegionalReader
-from plugin.plugins.hsr_companion.scripts.benchmark_regional_poc import focused, fields, Meter
+from plugin.plugins.hsr_companion.scripts.benchmark_regional_poc import Meter, fields, focused
 
 
 def complete_stats(value):
@@ -37,6 +37,7 @@ def binding_summary(trace):
 
 def main():
     from PIL import Image
+
     from plugin.plugins.hsr_companion.adapters import local_vision
     from plugin.plugins.hsr_companion.assistant import VisionAssistantClient
     from plugin.plugins.hsr_companion.data import ExternalKnowledgeCatalog

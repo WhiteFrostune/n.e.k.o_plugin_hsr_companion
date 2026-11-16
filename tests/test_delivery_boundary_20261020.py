@@ -10,6 +10,7 @@ import time
 from dataclasses import replace
 
 import pytest
+
 from plugin.plugins.hsr_companion.runtime.observation_store import ObservationSnapshot, ObservationStore
 from plugin.plugins.hsr_companion.tests.test_chain_audit_20261017 import (
     audit_owner,

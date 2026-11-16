@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+
 from plugin.plugins.hsr_companion.data.catalog import StructuredCatalog
 from plugin.plugins.hsr_companion.runtime.grounding import build_grounding
 from plugin.plugins.hsr_companion.runtime.mechanics import skill_view

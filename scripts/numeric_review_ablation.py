@@ -1,12 +1,13 @@
 """Same in-memory frame/proof, line recognizer vs detector+recognizer. Diagnostic only."""
-from io import BytesIO
 import hashlib
 import math
 import time
+from io import BytesIO
 
 
 def compare(adapter, payload, proof):
     from PIL import Image
+
     from plugin.plugins.hsr_companion.adapters.text_reader import _box_value
     from plugin.plugins.hsr_companion.adapters.text_verification import text_key
     with Image.open(BytesIO(payload)) as opened:

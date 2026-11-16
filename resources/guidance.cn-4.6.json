@@ -11,7 +11,7 @@
     "fribbels_pearl": {"name": "Fribbels Pearl 配装与参考队伍配置", "url": "https://github.com/fribbels/hsr-optimizer/blob/d68d14cf63bc5c2be448b40822588fe95b86066e/src/lib/conditionals/character/1500/Pearl.ts", "revision": "d68d14cf63bc5c2be448b40822588fe95b86066e", "license": "MIT", "usage": "少量配装候选元数据派生，不运行优化器；参考模拟条件不是关卡最优排名"},
     "fribbels_evanescia": {"name": "Fribbels Evanescia 配装与参考队伍配置", "url": "https://github.com/fribbels/hsr-optimizer/blob/d68d14cf63bc5c2be448b40822588fe95b86066e/src/lib/conditionals/character/1500/Evanescia.ts", "revision": "d68d14cf63bc5c2be448b40822588fe95b86066e", "license": "MIT", "usage": "少量配装候选元数据派生，不运行优化器；参考模拟条件不是关卡最优排名"},
     "fribbels_acheron": {"name": "Fribbels Acheron 配装候选与模拟条件", "url": "https://github.com/fribbels/hsr-optimizer/blob/d68d14cf63bc5c2be448b40822588fe95b86066e/src/lib/conditionals/character/1300/Acheron.ts", "revision": "d68d14cf63bc5c2be448b40822588fe95b86066e", "license": "MIT", "usage": "少量主词条、套装与优先属性派生；选择常规输出分支，不把模拟配置或评分权重冒充毕业阈值"},
-    "starrailres": {"name": "Mar-7th/StarRailRes 外置中文资料", "url": "https://github.com/Mar-7th/StarRailRes/tree/dbe8cdfcfb0bf657b9fe1cf92d5537f118ccb487/index_min/cn", "revision": "dbe8cdfcfb0bf657b9fe1cf92d5537f118ccb487", "license": "AGPL-3.0-only", "usage": "按已有外置组件查询实体名、命途与效果；此文件不复制完整资料"},
+    "starrailres": {"name": "Mar-7th/StarRailRes 外置中文资料", "url": "https://github.com/Mar-7th/StarRailRes/tree/03907e798b46f9eb109a1f882055cdf49ce3d374/index_min/cn", "revision": "03907e798b46f9eb109a1f882055cdf49ce3d374", "license": "AGPL-3.0-only", "usage": "按已有外置组件查询实体名、命途与效果；此文件不复制完整资料"},
     "fribbels_scoring": {"name": "Fribbels 主词条、套装与基准模拟条件", "url": "https://github.com/fribbels/hsr-optimizer/blob/d68d14cf63bc5c2be448b40822588fe95b86066e/src/lib/relics/scoring/scoringMetadata.ts", "revision": "d68d14cf63bc5c2be448b40822588fe95b86066e", "license": "MIT", "usage": "少量评分候选与模拟配置元数据派生，不能当作攻略排序"},
     "community_pf": {"name": "冻梨游研社：立界开篇攻略", "url": "https://www.taptap.cn/moment/848634700330176018", "license": "reference-only-not-open-license", "usage": "少量节点事实、参考队伍及原创简短摘要；不转载文章、图片或完整攻略"},
     "community_aa": {"name": "冻梨游研社：4.6落叶归根攻略", "url": "https://www.taptap.cn/moment/853782721422426516", "license": "reference-only-not-open-license", "usage": "少量节点事实、参考队伍及原创简短摘要；不转载文章、图片或完整攻略"},
@@ -26,7 +26,7 @@
       "main_stats": {"躯干": ["防御力百分比", "治疗量加成"], "脚部": ["速度", "防御力百分比"], "位面球": ["防御力百分比"], "连结绳": ["能量恢复效率", "防御力百分比"]},
       "substats": ["速度", "防御力百分比", "防御力", "效果抵抗"],
       "stat_rules": {
-        "防御力": {"rule": "pearl_defense_to_elation_v1", "trace_id": "character_trace.1503101", "source_ref": "starrailres", "revision": "dbe8cdfcfb0bf657b9fe1cf92d5537f118ccb487", "reviewed_params": [2400, 0.32, 100, 0.03, 3600, 0.2]}
+        "防御力": {"rule": "pearl_defense_to_elation_v1", "trace_id": "character_trace.1503101", "source_ref": "starrailres", "revision": "03907e798b46f9eb109a1f882055cdf49ce3d374", "reviewed_params": [2400, 0.32, 100, 0.03, 3600, 0.2]}
       },
       "stat_notes": {
         "防御力": {"meaning": "能提高真珠技能中按防御力计算的治疗；行迹还会把防御转为自身欢愉度。", "check": "先看位面球主词条是否为防御力百分比；已经是防御球，就再检查充能绳能否让大招接得上，别为追上限直接拆掉速度和回能。"},

@@ -8,6 +8,7 @@ import copy
 import json
 
 import pytest
+
 from plugin.plugins.hsr_companion.runtime.guidance import build_guidance
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.tests import test_guidance as cases
@@ -323,6 +324,7 @@ def test_busy_control_followup_recovers_same_commit_after_verifier_frees(tmp_pat
     from types import SimpleNamespace
 
     from PIL import Image, ImageDraw
+
     from plugin.plugins.hsr_companion.adapters.text_verification import proof_key
     from plugin.plugins.hsr_companion.runtime import followup
     from plugin.plugins.hsr_companion.runtime.observation_store import ObservationStore

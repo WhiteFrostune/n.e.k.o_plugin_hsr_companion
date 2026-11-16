@@ -3,6 +3,7 @@ from io import BytesIO
 
 import pytest
 from PIL import Image
+
 from plugin.plugins.hsr_companion.adapters.relic_values import refine_relic_values
 from plugin.plugins.hsr_companion.adapters.text_verification import proof_key
 from plugin.plugins.hsr_companion.detectors.layout import classify_supported_page

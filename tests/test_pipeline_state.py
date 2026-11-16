@@ -9,6 +9,7 @@ import time
 from types import SimpleNamespace
 
 import pytest
+
 from plugin.plugins.hsr_companion.runtime import followup
 from plugin.plugins.hsr_companion.runtime.grounding import build_grounding
 from plugin.plugins.hsr_companion.runtime.live_refresh import guarded_analysis, refresh_for_query

@@ -11,6 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image, ImageDraw
+
 from plugin.plugins.hsr_companion.adapters.text_reader import ObservationSuperseded
 from plugin.plugins.hsr_companion.adapters.text_verification import proof_key
 from plugin.plugins.hsr_companion.runtime import live_refresh

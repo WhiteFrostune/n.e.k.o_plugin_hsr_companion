@@ -6,6 +6,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+
 from plugin.plugins.hsr_companion.runtime import prepare_trace as trace
 from plugin.plugins.hsr_companion.runtime.diagnostics import build_diagnostic_report
 from plugin.plugins.hsr_companion.runtime.observation_store import ObservationSnapshot

@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "baseline": "demo-request-handoff-r2-20261021.1",
+  "request": {
+    "intent": "explain_page",
+    "screen_fields": ["page", "visible_text"],
+    "ordinary_query": "这个页面是干嘛的？页面上写了什么？",
+    "explicit_full_queries": ["完整报出页面全部文字，不要漏。", "逐字念一下页面文字。"],
+    "response_detail_full_must_not_summarize": true
+  },
+  "retained_input": {
+    "path": "dist/roundtrip-d-live-20261021-2.json",
+    "sha256": "42b85cb008812fac790ecfb3aa862b8ebd695c64b55bd674df187a38adcef153",
+    "capture_payload_sha256": "063645997772b36c0df85e24b25782216da9da8e156e6285b5f97e6641d1ca3c",
+    "reader_id": 21,
+    "retained_ocr_rows": 22,
+    "same_producer_accepted_whole_literals": 1,
+    "reconstructed_rows": 23,
+    "full_original_payload_saved": false,
+    "cross_frame_merge": false,
+    "note": "A same-capture reconstruction, not exact replay of the original complete notification payload or its ordering. Raw retained boxes do not independently prove every original admission."
+  },
+  "original_failure": {
+    "mode": "transport_limited_notice",
+    "required_rows": 24,
+    "message_rows": 0,
+    "complete": false
+  },
+  "ordinary_summary_minimum_for_this_sample": {
+    "page": "忘却之庭",
+    "stage_title": "来生泅渡其十二",
+    "objectives": ["取得胜利时,剩余10轮以上", "取得胜利时,剩余20轮以上", "没有角色无法战斗"],
+    "optional_mechanics": "Only whole already-admitted same-packet literals that survive the actual formatter unchanged."
+  },
+  "full_contract": {
+    "all_selected_rows_if_they_fit": true,
+    "overflow_is_incomplete_not_summarized_success": true,
+    "tool_and_selected_packet_keep_all_rows": true,
+    "audit_covers_packet_digest_not_full_page_text_storage": true,
+    "complete_relic_main_and_four_sub_stats_unchanged": true
+  },
+  "validation_boundary": {
+    "actual_host_formatter": true,
+    "actual_host_receiving_bridge_without_network": true,
+    "observation_and_activity_inputs_are_test_fixtures": true,
+    "new_live_game_or_autonomous_cat_validation": false
+  }
+}

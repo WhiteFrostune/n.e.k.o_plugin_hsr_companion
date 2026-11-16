@@ -5,12 +5,12 @@ Fixed image-pair proof retention is NOT a live delivery or host chat receipt.
 import argparse
 import copy
 import hashlib
-from io import BytesIO
 import json
-from pathlib import Path
 import statistics
 import time
 from datetime import datetime, timezone
+from io import BytesIO
+from pathlib import Path
 
 from plugin.plugins.hsr_companion.experiments.regional_reader import RegionalReader
 
@@ -73,8 +73,9 @@ def fields(value):
 
 def main():
     from PIL import Image
-    from plugin.plugins.hsr_companion.assistant import VisionAssistantClient
+
     from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter
+    from plugin.plugins.hsr_companion.assistant import VisionAssistantClient
     from plugin.plugins.hsr_companion.data import ExternalKnowledgeCatalog
     from plugin.plugins.hsr_companion.data.avatar_pack import AvatarTemplatePack
     from plugin.plugins.hsr_companion.data.vision_runtime import VisionMatchRuntime

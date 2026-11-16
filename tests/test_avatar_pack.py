@@ -4,6 +4,7 @@ from io import BytesIO
 
 import pytest
 from PIL import Image
+
 from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter, merge_character_evidence
 from plugin.plugins.hsr_companion.data.avatar_pack import AvatarTemplatePack, git_blob_hash
 from plugin.plugins.hsr_companion.tests.test_experience_fixes import catalog

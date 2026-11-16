@@ -8,6 +8,7 @@ from concurrent.futures import Future
 from types import SimpleNamespace
 
 import pytest
+
 from plugin.plugins.hsr_companion.adapters.text_verification import proof_key
 from plugin.plugins.hsr_companion.runtime.live_refresh import _revalidate_guard_text, cancel_guard_review
 from plugin.plugins.hsr_companion.tests.test_delivery_fix_20261012 import frame, picture

@@ -27,7 +27,7 @@ from .consultation import (
     stated_equipment,
 )
 from .data_freshness import guidance_freshness
-from .query_plan import SEMANTIC_INTENTS, QueryPlan, build_query_plan
+from .query_plan import SEMANTIC_INTENTS, QueryPlan, asks_relic_rows_only, build_query_plan
 
 CONTEXT_TTL = 600.0
 MODES = {
@@ -189,9 +189,19 @@ class GuidancePlan:
     def requested(self):
         return self.kind != "not_requested"
 
+    @property
+    def experimental(self):
+        return self.kind == "challenge" or self.target_origin == "banner_calendar"
+
     def observation_plan(self, base: QueryPlan) -> QueryPlan:
+        plan = self._observation_plan(base)
+        # Only full changes what the observation must collect; "brief" is the
+        # answer wording, not a new demand on the capture plan.
+        return replace(plan, response_detail="full") if self.reply_detail == "full" else plan
+
+    def _observation_plan(self, base: QueryPlan) -> QueryPlan:
         if not self.requested:
-            return base
+            return replace(base, response_detail="full") if self.reply_detail == "full" else base
         if self.execution_fields is not None:
             return replace(base, intent=self.execution_intent, planning_source="semantic_intent").with_fields(
                 self.execution_fields, equipment_kinds=self.equipment_kinds)
@@ -255,11 +265,34 @@ def signature_statement(query):
     return value, mentioned
 
 
+def plan_request(base: QueryPlan, *, catalog, book, previous=None, explicit_fields=False,
+                 discussion_character="", consultation=None) -> tuple[QueryPlan, GuidancePlan]:
+    """Resolve the executable evidence once, before reading any evidence."""
+    if base.intent == "assess_relic" and base.fields == {"equipment"} and asks_relic_rows_only(base.query):
+        from .consultation_contract import validate_declaration
+        declared = validate_declaration(consultation, intent=base.intent, previous=previous)
+        if not (set((declared or {}).get("answer_parts", ())) - {"rows"}):
+            read_plan = build_query_plan(base.query, "read_screen", screen_fields=("equipment",), response_detail="full")
+            return read_plan, GuidancePlan()
+
+    guidance = plan_guidance(base.query, base, catalog=catalog, book=book, previous=previous,
+                             explicit_fields=explicit_fields, discussion_character=discussion_character,
+                             consultation=consultation)
+    observation = guidance.observation_plan(base)
+    if guidance.requested and not observation.screen:
+        observation = replace(observation, archived_guidance=True)
+    return observation, guidance
+
+
 def plan_guidance(query, base, *, catalog, book, previous=None, now_monotonic=None, now=None,
                   explicit_fields=False, discussion_character="", consultation=None):
     query = str(query or "")
     from .consultation_contract import answer_requirements, validate_declaration
     declared = validate_declaration(consultation, intent=base.intent, previous=previous)
+    if base.intent == "read_screen" and previous:
+        prior_detail = previous.get("reply_detail")
+        if prior_detail in {"brief", "full"}:
+            base = replace(base, response_detail=prior_detail)
     if base.intent in SEMANTIC_INTENTS:
         from .semantic_guidance import plan_semantic_guidance
         selected = plan_semantic_guidance(query, base, catalog=catalog, book=book, previous=previous,
@@ -288,7 +321,8 @@ def plan_guidance(query, base, *, catalog, book, previous=None, now_monotonic=No
     short = re.sub(r"[\s～~。！!？?啊呀呢哦嘛（）()，,]", "", query)
     screen_followup = bool(prior_focus in {"equipment", "attributes"} and (
         short in {"看看", "你看看", "这个", "这件", "这套", "这把", "换成这件", "换成这个", "换成这把",
-                  "对", "是的", "详细说说", "详细讲讲", "完整说说", "简单说说"}
+                  "对", "是的", "详细说说", "详细讲讲", "完整说说", "简单说说",
+                  "那这件", "那这个", "那件", "那套", "那把", "那套呢", "那件呢"}
         or "词条" in query and follow_action not in KNOWLEDGE_ACTIONS
         and not any(w in query for w in ("什么意思", "是什么", "有哪些", "推荐", "怎么配", "如何配"))))
     constraint = any(w in query for w in ("没专", "换谁", "替代")) or bool(all_named and any(
@@ -387,6 +421,7 @@ def plan_guidance(query, base, *, catalog, book, previous=None, now_monotonic=No
         difficulty = difficulty or prior.get("challenge_difficulty", "")
     no_signature = signature_owned is False
     same_subject = (inherits_prior or clarification or
+                    bool(screen_followup and prior_focus in {"equipment", "attributes"} and not character_ids) or
                     tuple(prior.get("character_ids", ())) == character_ids and bool(character_ids))
     if valid_prior and prior.get("kind") == kind and same_subject:
         has_signature = signature_owned is True
@@ -577,6 +612,8 @@ def build_guidance(plan, query, *, book, catalog, profile, visual=None, now=None
             "instruction": "按reply_plan选择本轮重点，普通评价不重讲整篇配装；明确完整请求不压缩已确认词条。"
                            "实际字段与建议分开；没有比较对象不说必须换，未列优先不等于完全无用。"}
         missing.append("未接入全账号最优解、强化档次评分或带队伍条件的毕业阈值；逐项适配不等于整体优秀或必须替换")
+        if plan.request_focus == "attributes" and not role:
+            assessment["panel_subject_state"] = "unconfirmed"
     equipment_request = bool(plan.requires_pixels and any(w in query for w in ("这个光锥", "这件", "这套", "这把")))
     if equipment_request and len(current_equipment) != 1:
         missing.append("当前装备尚未唯一确认；配装候选不证明画面正在展示该装备")
@@ -666,9 +703,13 @@ def build_guidance(plan, query, *, book, catalog, profile, visual=None, now=None
     stat_advice = reviewed_stat_advice(role, plan.stat_property, catalog=catalog, stated_value=plan.player_stat_value)
     reply_plan = build_reply_plan(plan, assessment, role, query=query, guides=guides, teams=teams, stat_advice=stat_advice)
     if assessment.get("panel_subject_state") in {"unconfirmed", "mismatch"}:
+        panel_values = "、".join(
+            f"{f.get('label')} {f.get('value')}" for f in assessment.get("facts") or []
+            if f.get("value") and f.get("scope") == "attributes")
         reply_plan.update(conclusion=("当前面板属于另一角色，不能用于指定角色评价。"
                                       if assessment.get("panel_subject_state") == "mismatch" else
-                                      "还没确认这个面板的角色归属。"),
+                                      ("这位角色的面板：" + panel_values + "；" if panel_values else "")
+                                      + "还没确认角色归属，告诉我角色名我再评价适配。"),
                           next_step="", evaluation_available=False, response_state="unconfirmed")
     elif completion.get("state") == "rules_unavailable":
         reply_plan.update(conclusion="暂缺这个角色的评价依据。", next_step="", response_state="rules_unavailable")
