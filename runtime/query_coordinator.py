@@ -7,7 +7,7 @@ import copy
 import time
 from dataclasses import dataclass
 
-from .equipment import equipment_readiness
+from .equipment_view import equipment_readiness
 from .navigation import navigation_answer
 from .observation_store import ObservationSnapshot
 from .query_plan import ENTITY_TOPICS, QueryPlan

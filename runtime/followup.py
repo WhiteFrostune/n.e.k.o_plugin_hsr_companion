@@ -100,7 +100,7 @@ def reply_data(visual: dict, request: AnswerRequest, *, catalog=None) -> dict:
         result["screen_facts"] = {"facts": plan.relevant_facts(screen.get("facts") or []),
                                   "visible_text": screen.get("visible_text", []) if "visible_text" in plan.fields else []}
         if "equipment" in plan.fields:
-            from .equipment import equipment_card
+            from .equipment_view import equipment_card
             result["equipment_answer"] = equipment_card(visual)
             if catalog is not None:
                 from .grounding import build_grounding

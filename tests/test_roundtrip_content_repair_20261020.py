@@ -180,7 +180,7 @@ def test_panel_owner_dependency_through_projection(records, book, catalog, subje
 
 
 def test_full_relic_rows_and_missing_main_protection(records):
-    from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
+    from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
     from plugin.plugins.hsr_companion.runtime.query_coordinator import satisfied_fields
     visual = historical_visual(phase_events(records, 'relic', 'store_commit')[-1]['observation'])
     plan = build_query_plan('完整报出主词条和四项副词条。', 'read_screen', screen_fields=['equipment'])

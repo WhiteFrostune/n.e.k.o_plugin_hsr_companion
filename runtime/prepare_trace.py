@@ -133,7 +133,7 @@ def prepare_stage(stage, *, completed=False, snapshot=None, visual=None):
         if stage == "initialization":
             record["generation"] = getattr(active[0], "_answer_query_generation", None)
     if snapshot is not None and visual is not None:
-        from .equipment import equipment_card, equipment_digest
+        from .equipment_view import equipment_card, equipment_digest
         record["selection"] = {"epoch": snapshot.epoch, "serial": snapshot.serial}
         try:
             record["selection"].update(page_sha256=_digest(visual.get("page_type")), evidence_sha256=_digest(visual),

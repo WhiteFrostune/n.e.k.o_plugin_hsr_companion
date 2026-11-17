@@ -50,7 +50,7 @@ def test_role_clarification_preserves_equipment_demand(book, catalog):
 
 
 def test_exact_item_card_is_same_for_panel_grounding_and_followup(catalog):
-    from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
+    from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
     from plugin.plugins.hsr_companion.runtime.followup import AnswerRequest, reply_data
     from plugin.plugins.hsr_companion.runtime.grounding import build_grounding
     from plugin.plugins.hsr_companion.runtime.screen_facts import public_screen_facts
@@ -71,7 +71,7 @@ def test_exact_item_card_is_same_for_panel_grounding_and_followup(catalog):
 
 
 def test_cards_are_frame_local_and_revision_bound():
-    from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
+    from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
     first = equipment_card(relic())
     second = equipment_card(relic(main="防御力", value="54.0%", serial=97, subs=[("速度", "2")]))
     assert second["snapshot_id"] != first["snapshot_id"]
@@ -137,7 +137,7 @@ def test_unreviewed_role_and_missing_pixels_do_not_get_generic_evaluation(book, 
 
 
 def test_audit_digest_contains_no_item_names_values_or_chat():
-    from plugin.plugins.hsr_companion.runtime.equipment import equipment_card, handoff_receipt
+    from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card, handoff_receipt
     card = equipment_card(relic())
     value = handoff_receipt(card, channel="direct")
     text = json.dumps(value, ensure_ascii=False)
@@ -167,7 +167,7 @@ def test_slot_rules_are_not_special_cased_to_live_item(book, catalog, part, main
 
 def test_pending_row_quarantine_rebuilds_card_and_never_leaks_old_main():
     from plugin.plugins.hsr_companion.runtime.delivery_scope import withhold_regions
-    from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
+    from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
     current = relic()
     box = {"left": .1, "top": .2, "right": .3, "bottom": .4}
     current["screen_facts"]["facts"][3]["evidence"] = [{"region": box}]
@@ -253,7 +253,7 @@ def test_direct_entry_returns_same_card_as_evaluation_and_no_profile_write(tmp_p
 
 def test_diagnostic_separates_direct_timeout_and_submitted_equipment_followup():
     from plugin.plugins.hsr_companion.runtime.diagnostics import build_diagnostic_report
-    from plugin.plugins.hsr_companion.runtime.equipment import equipment_card, handoff_receipt
+    from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card, handoff_receipt
     from plugin.plugins.hsr_companion.tests.test_diagnostics import inputs
     params = inputs()
     params["last_tool"] = {"refresh_diagnostics": {"outcome": "timeout"}}

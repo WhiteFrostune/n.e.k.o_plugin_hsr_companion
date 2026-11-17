@@ -6,7 +6,7 @@ import json
 
 import pytest
 from plugin.plugins.hsr_companion.runtime.delivery_scope import scoped_guard
-from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
+from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
 from plugin.plugins.hsr_companion.runtime.query_coordinator import (
     answer_status,
     has_answerable_content,

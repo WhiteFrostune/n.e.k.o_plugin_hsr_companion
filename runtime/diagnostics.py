@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .build_info import BUILD_REVISION, PLUGIN_VERSION
-from .equipment import equipment_card, handoff_receipt
+from .equipment_view import equipment_card, handoff_receipt
 from .navigation import navigation_answer
 from .query_plan import SCREEN_FIELDS
 from .service_contract import public_service_request

@@ -314,7 +314,7 @@ def test_actual_resident_loop_begins_before_equipment_question_and_commits_once(
             selected = await query
             assert selected is not None, owner._last_refresh_diagnostics
             assert satisfied_fields(equipment_plan(), selected) == {"equipment"}
-            from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
+            from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
             assert equipment_card(selected)["complete"]
             assert calls == [0]
             assert owner._observation_serial == 1

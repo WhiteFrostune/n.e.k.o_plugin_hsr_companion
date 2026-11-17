@@ -246,7 +246,7 @@ def public_visual_evidence(
 
 
 def visual_context_text(evidence: dict[str, Any]) -> str:
-    from .equipment import equipment_card
+    from .equipment_view import equipment_card
     from .service_contract import SERVICE_ROUTING_RULE
     facts = (evidence.get("screen_facts") or {}).get("facts") or []
     # Passive context is a short fact digest. Evidence geometry and full fields

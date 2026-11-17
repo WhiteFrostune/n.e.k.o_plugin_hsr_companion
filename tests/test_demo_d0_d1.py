@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 from plugin.plugins.hsr_companion.runtime import service_contract as contract
-from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
+from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
 from plugin.plugins.hsr_companion.tests import test_guidance as guidance_cases
 from plugin.plugins.hsr_companion.tests.test_guidance import answer, plan
 from plugin.plugins.hsr_companion.tests.test_stage1_repairs import fact, visual

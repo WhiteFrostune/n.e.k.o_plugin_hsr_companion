@@ -577,11 +577,12 @@ def build_guidance(plan, query, *, book, catalog, profile, visual=None, now=None
         assessment["scope"] = "sourced_field_fit_not_damage_score_or_graduation_threshold"
         if assessment["state"] != "evidence_available":
             missing.append("当前装备/面板所需字段未读全；先回答已知角色与已明确条件下的资料，不能断言这件装备合适、需更换或面板达标")
-        from .equipment import assess_cone, assess_panel, assess_relic, equipment_card
+        from .equipment import assess_cone, assess_panel, assess_relic
+        from .equipment_view import equipment_card
         card = equipment_card(visual)
         if plan.request_focus == "equipment":
             assessment["equipment_answer"] = card
-            from .equipment import equipment_object
+            from .equipment_view import equipment_object
             assessment["current_object"] = equipment_object(visual, card)
             if plan.equipment_kinds:
                 # A loose database label is useful reference material, but

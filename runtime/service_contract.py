@@ -146,7 +146,7 @@ def record_answer_delivery(owner, *, generation, channel, payload, visual, answe
     a constructed plugin return, followup means an SDK submission attempt.
     Neither is a receipt for host generation, playback or transcription.
     """
-    from .equipment import equipment_card, equipment_digest, equipment_exact_text, handoff_receipt
+    from .equipment_view import equipment_card, equipment_digest, equipment_exact_text, handoff_receipt
     selected = equipment_card(visual)
     requested = isinstance(payload.get("equipment_answer"), dict) and payload["equipment_answer"].get("state") != "not_requested"
     sent = copy.deepcopy(payload["equipment_answer"]) if requested else equipment_card({"fresh": False})

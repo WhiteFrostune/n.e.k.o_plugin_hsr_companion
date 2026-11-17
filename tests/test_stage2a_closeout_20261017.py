@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from plugin.plugins.hsr_companion.runtime import live_refresh
-from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
+from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
 from plugin.plugins.hsr_companion.runtime.observation_store import ObservationSnapshot, ObservationStore
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.tests.test_chain_audit_20261017 import audit_owner, commit_raw, raw_page

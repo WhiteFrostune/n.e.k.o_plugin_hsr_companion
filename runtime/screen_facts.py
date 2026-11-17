@@ -388,7 +388,7 @@ def extract_screen_facts(boxes, *, width: int, height: int, page: dict, catalog:
 
 
 def public_screen_facts(value: object, *, fresh: bool, observed_at: str, serial: int = 0) -> dict:
-    from .equipment import equipment_card
+    from .equipment_view import equipment_card
     data = value if isinstance(value, dict) else {}
     return {
         "schema_version": SCHEMA_VERSION, "observed_at": observed_at, "observation_serial": serial,

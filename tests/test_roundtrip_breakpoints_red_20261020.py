@@ -17,7 +17,7 @@ from plugin.plugins.hsr_companion.detectors.exploration import distinct_rows, ta
 from plugin.plugins.hsr_companion.detectors.layout import classify_supported_page
 from plugin.plugins.hsr_companion.runtime.answer_message import render_followup
 from plugin.plugins.hsr_companion.runtime.consultation_contract import validate_declaration
-from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
+from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
 from plugin.plugins.hsr_companion.runtime.followup import AnswerRequest, answer_ready, reply_data
 from plugin.plugins.hsr_companion.runtime.guidance import build_guidance, load_guidance_catalog
 from plugin.plugins.hsr_companion.runtime.query_coordinator import satisfied_fields

@@ -50,7 +50,8 @@ from .runtime.consultation_contract import CONSULTATION_SCHEMA, bound_followup_p
 from .runtime.data_freshness import data_freshness
 from .runtime.diagnostic_export import export_diagnostic
 from .runtime.diagnostics import build_diagnostic_report
-from .runtime.equipment import equipment_card, record_handoff
+from .runtime.equipment import record_handoff
+from .runtime.equipment_view import equipment_card
 from .runtime.followup import DIRECT_WAIT_SECONDS, arm_followup, cancel_followup
 from .runtime.grounding import build_grounding
 from .runtime.guidance import build_guidance, load_guidance_catalog, plan_request

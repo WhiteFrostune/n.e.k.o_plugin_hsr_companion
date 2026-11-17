@@ -591,7 +591,7 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
     # This is a delivery revision, not a new OCR/capture timestamp. Pixels for
     # these scoped values passed validation against this stable store revision.
     result["screen_facts"]["observation_serial"] = serial
-    from .equipment import equipment_card
+    from .equipment_view import equipment_card
     result["screen_facts"]["equipment_card"] = equipment_card(result)
     result["reuse"] = {"validated_at": datetime.fromtimestamp(latest.timestamp).astimezone().isoformat(),
                        "original_age_seconds": round(age, 3), "ocr_repeated": False, "epoch": epoch,

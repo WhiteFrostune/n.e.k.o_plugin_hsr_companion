@@ -91,6 +91,7 @@ L5 = [
 contracts = [
   "runtime/contracts.py",
   "runtime/build_info.py",
+  "runtime/equipment_view.py",
 ]
 knowledge = [
   "data/**/*.py",
