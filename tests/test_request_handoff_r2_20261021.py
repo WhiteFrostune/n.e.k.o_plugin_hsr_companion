@@ -215,7 +215,7 @@ def test_public_tool_receives_new_page_with_original_recorded_probe_costs(
 
         class Vision(LocalVisionAdapter):
             @serial_ocr(cooperative=True)
-            def analyze(self, payload, *, cancelled=None, on_scene=None, wants_relic=None):
+            def analyze(self, payload, *, cancelled=None, on_scene=None, wants_relic=None, yield_requested=None):
                 threads.append(threading.get_ident())
                 if payload == picture():
                     on_scene(previous)

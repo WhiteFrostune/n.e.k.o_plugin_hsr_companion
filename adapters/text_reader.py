@@ -12,6 +12,10 @@ class ObservationSuperseded(Exception):
     """Cooperative exit between OCR calls; never a recognition failure."""
 
 
+class QueryPreempted(ObservationSuperseded):
+    """A waiting query gets the next native-call boundary."""
+
+
 def check_current(cancelled=None):
     if cancelled is not None and cancelled():
         raise ObservationSuperseded()
@@ -99,7 +103,7 @@ def split_label_geometry(image, box):
 
 def read_native_text(
     backend: Any, image: Any, *, catalog: Any = None, cancelled=None, on_progress=None,
-    verify_names: bool = False, accept_native_relic=None, relic_tiles=None,
+    verify_names: bool = False, accept_native_relic=None, relic_tiles=None, yield_requested=None,
 ) -> tuple[str, list[dict[str, Any]], dict[str, Any]]:
     """Uniform native tiles, then one bounded reread of wide merged OCR rows."""
     started = time.monotonic()
@@ -165,6 +169,8 @@ def read_native_text(
     for index in order:
         left, top, right, bottom = tiles[index]
         check_current(cancelled)
+        if yield_requested is not None and yield_requested():
+            raise QueryPreempted()
         if time.monotonic() - started > 22:
             failures.append("ocr_time_budget")
             break
@@ -203,6 +209,8 @@ def read_native_text(
     try_priority()
     if not relic_priority and time.monotonic() - started < 18:
         check_current(cancelled)
+        if yield_requested is not None and yield_requested():
+            raise QueryPreempted()
         from PIL import Image, ImageOps
 
         parts = []
@@ -296,6 +304,8 @@ def read_native_text(
                     y += crop.height + padding
                 try:
                     check_current(cancelled)
+                    if yield_requested is not None and yield_requested():
+                        raise QueryPreempted()
                     _, values = read(atlas, "unresolved_lines")
                     check_current(cancelled)
                     rereads = len(parts)
@@ -320,6 +330,8 @@ def read_native_text(
                 except Exception as exc:
                     failures.append("reread_" + type(exc).__name__)
     check_current(cancelled)
+    if yield_requested is not None and yield_requested():
+        raise QueryPreempted()
     try_priority()
     boxes = _deduplicate(boxes)
     verification = {"attempted": 0, "confirmed": 0}

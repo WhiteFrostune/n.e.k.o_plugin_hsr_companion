@@ -32,6 +32,32 @@ def _admission_blocked(owner):
             or (getattr(owner, "_vision_drain_timed_out", False) and retained_work_running(owner)))
 
 
+def query_yield_requested(owner, request_generation, scope):
+    """A query may preempt only a pass that does not already cover it.
+
+    A full pass already serves every question; aborting it would only restart
+    the same work. A scene pass covers scene questions; a navigation pass
+    covers scene and navigation questions. Anything broader (characters,
+    content, equipment) yields at the next native-call boundary.
+    """
+    if getattr(owner, "_visual_query_waiters", 0) <= 0:
+        return False
+    if getattr(owner, "_query_refresh_generation", 0) <= request_generation:
+        return False
+    if getattr(owner, "_query_refresh_deadline", 0) <= time.monotonic():
+        return False
+    if scope == "full":
+        return False
+    if scope == "scene":
+        covered = getattr(owner, "_scene_query_waiters", 0)
+    elif scope == "navigation":
+        covered = (getattr(owner, "_scene_query_waiters", 0)
+                   + getattr(owner, "_navigation_query_waiters", 0))
+    else:
+        return False
+    return getattr(owner, "_visual_query_waiters", 0) > covered
+
+
 async def drain_analysis_worker(owner):
     """Wait briefly without cancelling or forgetting a running native job."""
     workers = {name: task for name in _RETAINED_WORKERS if (task := getattr(owner, name, None)) is not None}

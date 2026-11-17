@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import threading
 import time
 from contextlib import asynccontextmanager
@@ -13,7 +14,7 @@ from time import perf_counter
 from typing import Any
 
 from ..adapters.local_vision import LocalVisionAdapter
-from ..adapters.text_reader import ObservationSuperseded
+from ..adapters.text_reader import ObservationSuperseded, QueryPreempted
 from ..adapters.text_verification import identity_literal, proof_key
 from ..detectors.exploration import generic_navigation
 from . import vision_scheduler
@@ -23,6 +24,13 @@ from .vision_scheduler import drain_analysis_worker as drain_analysis_worker
 from .vision_trace import measure, record, record_relic_stage
 
 LIVE_POLL_SECONDS = 0.25
+
+
+def _supports_kwarg(func, name):
+    try:
+        return name in inspect.signature(func).parameters
+    except (TypeError, ValueError):
+        return False
 
 
 @dataclass(frozen=True)
@@ -378,6 +386,11 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
     def on_scene(value):
         if not stop.is_set():
             pass_preview.update(value)
+            owner._page_probe_cache = {
+                "preview": value,
+                "frame_seq": getattr(owner, "_analysis_input_frame_seq", None),
+                "at": time.monotonic(),
+            }
             loop.call_soon_threadsafe(previews.put_nowait, value)
 
     live = getattr(owner._vision, "analyze_live", None)
@@ -428,11 +441,16 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
         return True
 
     trace_refresh(owner, "analysis_started", scope=scope)
+    pass_generation = request_generation
     priority = {"wants_relic": wants_relic} if isinstance(owner._vision, LocalVisionAdapter) else {}
+    if callable(live) and _supports_kwarg(live, "yield_requested"):
+        priority["yield_requested"] = lambda: vision_scheduler.query_yield_requested(
+            owner, pass_generation, scope)
     task = asyncio.create_task(asyncio.to_thread(navigation_reader if navigation_only else scene_reader, payload, cancelled=stop.is_set) if scene_only else asyncio.to_thread(
         live, payload, cancelled=stop.is_set, on_scene=on_scene, **priority
     ) if callable(live) else asyncio.to_thread(owner._vision.analyze, payload))
     changed = False
+    page_check_skipped = False
     try:
         while not task.done():
             done, _ = await asyncio.wait({task}, timeout=LIVE_POLL_SECONDS)
@@ -501,11 +519,24 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
                     # Early scenes work on both helper and compatibility paths.
                     epoch = getattr(owner, "_observation_epoch", 0)
                     owner._preview_frame_stamp = stamp
-            if helper and not scene_only and page_check is None and pass_preview and not task.done():
-                from .page_handoff import queue_page_check
-                page_check = queue_page_check(owner, payload, pass_preview, stop, frame_seq=sequence)
-                if page_check is not None:
-                    trace_refresh(owner, "page_check_queued", scope=scope)
+            if helper and not scene_only and page_check is None and pass_preview and not task.done() and not page_check_skipped:
+                preview_page = pass_preview.get("page") or {}
+                preview_controls = (pass_preview.get("recognition") or {}).get("scene_regions") or []
+                if (getattr(owner, "_visual_query_waiters", 0) > 0
+                        and preview_page.get("confidence") == "high"
+                        and (pass_preview.get("scene") or {}).get("verified") and preview_controls):
+                    # A waiting query does not need a second page probe when
+                    # this same frame already has a verified, control-backed
+                    # page preview. The final live-frame check still guards
+                    # the commit; this only removes the duplicate probe.
+                    page_check_skipped = True
+                    trace_refresh(owner, "page_check_result", reason="same_frame_preview", scope=scope,
+                                  page=preview_page.get("page_type"), controls=len(preview_controls))
+                else:
+                    from .page_handoff import queue_page_check
+                    page_check = queue_page_check(owner, payload, pass_preview, stop, frame_seq=sequence)
+                    if page_check is not None:
+                        trace_refresh(owner, "page_check_queued", scope=scope)
             if page_check is not None and page_check.done():
                 try:
                     transition = page_check.result()
@@ -548,6 +579,9 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
                 return None
         try:
             analysis = await asyncio.shield(task)
+        except QueryPreempted:
+            trace_refresh(owner, "producer_yielded", scope=scope)
+            return None
         except ObservationSuperseded:
             trace_refresh(owner, "old_worker_drained", scope=scope)
             if relic_requested:

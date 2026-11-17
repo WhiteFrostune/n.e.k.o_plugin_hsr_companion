@@ -160,9 +160,10 @@ class LocalVisionAdapter:
                 "portrait_backend": portrait_backend,
             }
 
-    def analyze_live(self, image_bytes: bytes, *, cancelled, on_scene, wants_relic=None) -> dict[str, Any]:
+    def analyze_live(self, image_bytes: bytes, *, cancelled, on_scene, wants_relic=None, yield_requested=None) -> dict[str, Any]:
         return self.analyze(image_bytes, cancelled=cancelled, on_scene=on_scene,
-                            **({"wants_relic": wants_relic} if wants_relic is not None else {}))
+                            **({"wants_relic": wants_relic} if wants_relic is not None else {}),
+                            **({"yield_requested": yield_requested} if yield_requested is not None else {}))
 
     @serial_ocr
     def verify_text_regions(self, image_bytes: bytes, proofs: list, *, cancelled=None, trace=None) -> set:
@@ -342,7 +343,8 @@ class LocalVisionAdapter:
         return result
 
     @serial_ocr(cooperative=True)
-    def analyze(self, image_bytes: bytes, *, cancelled=None, on_scene=None, wants_relic=None) -> dict[str, Any]:
+    def analyze(self, image_bytes: bytes, *, cancelled=None, on_scene=None, wants_relic=None,
+                yield_requested=None) -> dict[str, Any]:
         try:
             from PIL import Image, ImageOps
 
@@ -439,6 +441,7 @@ class LocalVisionAdapter:
                     self._get_backend(), image, catalog=self.catalog, cancelled=cancelled,
                     on_progress=progress if on_scene is not None else None,
                     verify_names=True,
+                    yield_requested=yield_requested,
                     **({"accept_native_relic": accept_native_relic, "relic_tiles": relic_tiles}
                        if wants_relic is not None else {}),
                 )
