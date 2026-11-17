@@ -87,7 +87,8 @@ async def run(args):
             item["finished"] = time.monotonic()
 
     owner._vision = SimpleNamespace(analyze_live=full, analyze_scene=adapter.analyze_scene,
-        analyze_navigation=adapter.analyze_navigation, verify_text_regions=adapter.verify_text_regions)
+        analyze_navigation=adapter.analyze_navigation, verify_text_regions=adapter.verify_text_regions,
+        read_region=adapter.read_region)
     verification_attempts = []
     if args.verification_details:
         def verify(payload, proofs, **kwargs):

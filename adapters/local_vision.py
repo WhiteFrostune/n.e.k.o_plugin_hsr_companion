@@ -18,6 +18,7 @@ from ..runtime.screen_facts import extract_screen_facts, safe_text
 from ..runtime.vision_trace import measure, record
 from ..session import visual_fingerprint
 from .text_reader import ObservationSuperseded, check_current, read_native_text
+from .text_reader import read_region as read_text_region
 
 
 def serial_ocr(method=None, *, cooperative=False):
@@ -164,6 +165,20 @@ class LocalVisionAdapter:
         return self.analyze(image_bytes, cancelled=cancelled, on_scene=on_scene,
                             **({"wants_relic": wants_relic} if wants_relic is not None else {}),
                             **({"yield_requested": yield_requested} if yield_requested is not None else {}))
+
+    @serial_ocr
+    def read_region(self, image_bytes: bytes, regions: list, *, cancelled=None, yield_requested=None) -> list:
+        """Read already-derived normalized regions; never classify a new page."""
+        from PIL import Image, ImageOps
+
+        with Image.open(BytesIO(image_bytes)) as opened:
+            image = ImageOps.exif_transpose(opened).convert("RGB")
+        boxes = []
+        for region in list(regions)[:3]:
+            check_current(cancelled)
+            boxes.extend(read_text_region(self._get_backend(), image, region, cancelled=cancelled,
+                                          yield_requested=yield_requested))
+        return boxes
 
     @serial_ocr
     def verify_text_regions(self, image_bytes: bytes, proofs: list, *, cancelled=None, trace=None) -> set:

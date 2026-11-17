@@ -29,6 +29,7 @@ L2a = [
   "adapters/relic_values.py",
   "adapters/text_verification.py",
   "runtime/screen_facts.py",
+  "runtime/regions.py",
   "game_state.py",
 ]
 L2b = [
@@ -43,6 +44,7 @@ L2b = [
   "runtime/manual_refresh.py",
   "runtime/vision_scheduler.py",
   "runtime/live_refresh.py",
+  "runtime/region_query.py",
 ]
 L3 = [
   "runtime/query_plan.py",

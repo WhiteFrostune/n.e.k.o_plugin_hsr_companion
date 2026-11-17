@@ -28,9 +28,10 @@ LIVE_POLL_SECONDS = 0.25
 
 def _supports_kwarg(func, name):
     try:
-        return name in inspect.signature(func).parameters
+        params = inspect.signature(func).parameters
     except (TypeError, ValueError):
         return False
+    return name in params or any(param.kind == inspect.Parameter.VAR_KEYWORD for param in params.values())
 
 
 @dataclass(frozen=True)
@@ -442,10 +443,13 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
 
     trace_refresh(owner, "analysis_started", scope=scope)
     pass_generation = request_generation
+
+    def yield_requested():
+        return vision_scheduler.query_yield_requested(owner, pass_generation, scope)
+
     priority = {"wants_relic": wants_relic} if isinstance(owner._vision, LocalVisionAdapter) else {}
     if callable(live) and _supports_kwarg(live, "yield_requested"):
-        priority["yield_requested"] = lambda: vision_scheduler.query_yield_requested(
-            owner, pass_generation, scope)
+        priority["yield_requested"] = yield_requested
     task = asyncio.create_task(asyncio.to_thread(navigation_reader if navigation_only else scene_reader, payload, cancelled=stop.is_set) if scene_only else asyncio.to_thread(
         live, payload, cancelled=stop.is_set, on_scene=on_scene, **priority
     ) if callable(live) else asyncio.to_thread(owner._vision.analyze, payload))
@@ -605,6 +609,12 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
             if job:
                 record(owner, "relic_job_ended", **job, outcome="rejected", reason="analysis_superseded")
             trace_refresh(owner, "analysis_discarded", scope=scope, epoch_changed=epoch != getattr(owner, "_observation_epoch", 0))
+            return None
+        if yield_requested():
+            # OCR already finished. A waiting region query can use the native
+            # turn now; skip this pass's broad validation/verification instead
+            # of making the query wait for work it does not need.
+            trace_refresh(owner, "producer_yielded", scope=scope, checkpoint="post_ocr")
             return None
         live_validation = None
         delivery_guard = None
@@ -1263,12 +1273,28 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
     owner._query_refresh_generation = getattr(owner, "_query_refresh_generation", 0) + 1
     owner._query_refresh_deadline = deadline  # Checkpoint work shares, never renews, this budget.
     owner._query_refresh_serial = getattr(owner, "_observation_serial", 0)
+    region_waiter = bool(query_plan is not None and query_plan.fields)
     wake = getattr(owner, "_observer_wake_event", None)
     if wake is not None:
         wake.set()
     if not hasattr(owner, "_visual_update_event"):
         owner._visual_update_event = asyncio.Event()
     try:
+        if region_waiter:
+            owner._region_query_waiters = getattr(owner, "_region_query_waiters", 0) + 1
+            try:
+                from .region_query import read_query_regions
+                region_visual = await asyncio.wait_for(
+                    read_query_regions(owner, query_plan, deadline),
+                    timeout=max(.001, deadline - time.monotonic()))
+            except (TimeoutError, Exception):
+                region_visual = None
+            finally:
+                owner._region_query_waiters -= 1
+            if ready(region_visual):
+                trace_refresh(owner, "region_query_selected", fields=sorted(query_plan.fields))
+                completed = True
+                return region_visual
         owner._push_current_visual_context(await asyncio.wait_for(
             owner._current_visual_evidence(), timeout=max(.001, deadline - time.monotonic())))
         while time.monotonic() < deadline:
