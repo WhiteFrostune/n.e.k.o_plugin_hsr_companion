@@ -21,14 +21,28 @@ class CompanionEvent:
 TEAM_MEMBER_SLOTS = 4
 
 
-def team_roster_state(page_type: Any, characters: Any) -> dict[str, Any]:
-    """Team setup has four member positions; fewer names is an incomplete list.
+def team_roster_state(page_type: Any, characters: Any, slots: Any = None) -> dict[str, Any]:
+    """Team setup has four positions; empty cards are not missing members.
 
-    Empty positions and unread names are not distinguishable from the strip
-    alone, so a short list may never be delivered as the complete team.
+    With slot states, completeness is "every filled card has a name"; a
+    three-member team is complete, while a filled card without a name is
+    incomplete. Without slots, keep the conservative four-position rule.
     """
     if page_type != "team_setup":
         return {}
+    if slots:
+        filled = [slot for slot in slots if slot.get("state") in {"filled_named", "filled_unread"}]
+        read = sum(1 for slot in slots if slot.get("state") == "filled_named")
+        unread = [slot for slot in slots if slot.get("state") == "filled_unread"]
+        unknown = [slot for slot in slots if slot.get("state") == "unknown"]
+        return {
+            "team_members_expected": len(filled),
+            "team_members_read": read,
+            "characters_complete": not unread,
+            "team_roster_known": not unknown,
+            "team_slots": [{key: slot.get(key) for key in ("slot", "state", "name") if slot.get(key) is not None}
+                           for slot in slots],
+        }
     seen = {
         item.get("entity_id") or item.get("name")
         for item in characters or []

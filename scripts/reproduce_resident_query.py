@@ -134,6 +134,7 @@ async def run(args):
                   "page": (answer or {}).get("page_type"), "fresh": bool((answer or {}).get("fresh")),
                   "characters": [c.get("name") for c in (answer or {}).get("characters") or []],
                   "characters_complete": (answer or {}).get("characters_complete"),
+                  "team_roster_known": (answer or {}).get("team_roster_known"),
                   "team_members_read": (answer or {}).get("team_members_read"),
                   "team_members_expected": (answer or {}).get("team_members_expected"),
                   "fields": [{"kind": f.get("kind"), "value": f.get("value")}

@@ -192,12 +192,21 @@ def public_visual_evidence(
     # Only the name-region reader knows the member positions; a full-frame
     # read keeps its existing partial semantics and must not be relabeled here.
     roster = {key: value[key] for key in
-              ("team_members_expected", "team_members_read", "characters_complete") if key in value}
-    roster_note = (
-        f"编队页只读到 {roster['team_members_read']}/{roster['team_members_expected']} 位队员；"
-        "名单不完整，不得当作完整队伍回答，必须说明可能还有未识别队员，空位与漏识别不可区分。"
-    ) if (roster.get("characters_complete") is False
-          and "team_members_read" in roster and "team_members_expected" in roster) else ""
+              ("team_members_expected", "team_members_read", "characters_complete",
+               "team_roster_known", "team_slots") if key in value}
+    if roster.get("team_roster_known") is False:
+        roster_note = (
+            f"编队页名单未完全确认：只读到 {roster['team_members_read']}/"
+            f"{roster['team_members_expected']} 位，另有位置是空位还是漏读未确认；"
+            "不当作完整队伍，也不断言空位。"
+        )
+    elif roster.get("characters_complete") is False:
+        roster_note = (
+            f"编队页只读到 {roster['team_members_read']}/{roster['team_members_expected']} 位队员；"
+            "名单不完整，不得当作完整队伍回答，必须说明可能还有未识别队员，空位与漏识别不可区分。"
+        )
+    else:
+        roster_note = ""
     return {
         "status": status,
         "message": message,
@@ -275,7 +284,11 @@ def visual_context_text(evidence: dict[str, Any]) -> str:
         or "无"
     )
     roster_line = ""
-    if evidence.get("characters_complete") is False:
+    if evidence.get("team_roster_known") is False:
+        roster_line = (f"编队页名单未完全确认：只读到 {evidence.get('team_members_read')}/"
+                       f"{evidence.get('team_members_expected')} 位，另有位置是空位还是漏读未确认，"
+                       "不得当作完整队伍转述。")
+    elif evidence.get("characters_complete") is False:
         roster_line = (f"编队页名单不完整：只读到 {evidence.get('team_members_read')}/"
                        f"{evidence.get('team_members_expected')} 位，不得当作完整队伍转述。")
     return "\n".join(
