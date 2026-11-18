@@ -143,6 +143,17 @@ async def run(args):
                   "resident_pages": [c.get("page") for c in calls],
                   "query_plan": plan.public(),
                   "refresh": owner._last_refresh_diagnostics})
+            if answer is None:
+                # What the host delivery path sees after the direct budget:
+                # a guarded current/old observation, or no usable reading.
+                current = await owner._current_visual_evidence()
+                emit({"kind": "resident_source_timeout_fallback_NOT_chat", "sample": sample,
+                      "page": current.get("page_type"),
+                      "names": [c.get("name") for c in current.get("characters") or []],
+                      "freshness": current.get("freshness"),
+                      "age_seconds": current.get("age_seconds"),
+                      "status": current.get("status"),
+                      "message": str(current.get("message") or "")[:160]})
             if args.settle_seconds and answer is None:
                 # Continue the SAME resident producer after the direct budget.
                 # Test delayed eligibility, not an actual host response/push.

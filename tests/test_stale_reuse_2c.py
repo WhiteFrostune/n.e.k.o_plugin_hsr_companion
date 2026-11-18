@@ -2,6 +2,9 @@
 from datetime import datetime, timedelta, timezone
 
 from plugin.plugins.hsr_companion.runtime.answer_message import render_followup
+from types import SimpleNamespace
+
+from plugin.plugins.hsr_companion.runtime.fact_lifecycle import candidate_evidence, current_evidence
 from plugin.plugins.hsr_companion.runtime.observation import public_visual_evidence
 from plugin.plugins.hsr_companion.runtime.query_coordinator import answer_status
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
@@ -44,6 +47,40 @@ def test_public_evidence_does_not_prefix_the_age_twice():
     }
     public = public_visual_evidence(value, {"state": "observing", "enabled": True}, now=now)
     assert public["message"].count(public["age_label"]) == 1
+
+
+def test_candidate_evidence_uses_real_age():
+    now = datetime.now(timezone.utc)
+    base = {
+        "ok": True, "source": "assistant_local_ocr",
+        "page": {"page_type": "team_setup", "label": "队伍编成"},
+        "scene": {"primary_state": "menu", "verified": True, "confidence": "high"},
+        "runtime": {"stable_scene": "menu", "stable_character_ids": ["character.a"]},
+        "characters": [{"entity_id": "character.a", "name": "甲", "identity_scope": "team_selection"}],
+        "screen_facts": {"facts": []},
+    }
+    stale = candidate_evidence({**base, "observed_at": (now - timedelta(seconds=20)).isoformat()})
+    assert stale["freshness"] == "stale" and len(stale["characters"]) == 1
+    assert stale["age_seconds"] >= 20
+
+
+def test_current_evidence_never_delivers_past_the_hard_cap():
+    now = datetime.now(timezone.utc)
+    stamp = (now - timedelta(seconds=61)).isoformat()
+    raw = {
+        "ok": True, "source": "assistant_local_ocr", "observed_at": stamp,
+        "page": {"page_type": "team_setup"}, "scene": {"primary_state": "menu", "verified": True, "confidence": "high"},
+        "runtime": {"stable_scene": "menu", "stable_character_ids": ["character.a"]},
+        "characters": [{"entity_id": "character.a", "name": "甲", "identity_scope": "team_selection"}],
+        "screen_facts": {"facts": []},
+    }
+    owner = SimpleNamespace(
+        _observation_epoch=0, _observation_serial=0,
+        _live_field_verification={"identity": (0, 0, stamp), "regions": {}},
+        _observer_status={"enabled": True, "state": "observing"})
+    value = current_evidence(owner, raw, {"enabled": True, "state": "observing"})
+    assert value["freshness"] == "unavailable"
+    assert value["characters"] == []
 
 
 def test_public_evidence_labels_a_twenty_second_old_snapshot():

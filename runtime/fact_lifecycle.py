@@ -10,7 +10,7 @@ import time
 from collections import Counter
 from datetime import datetime, timezone
 
-from .contracts import FRESH_LIVE_AGE_SECONDS
+from .contracts import FRESH_LIVE_AGE_SECONDS, STALE_MAX_AGE_SECONDS
 from .observation import VISUAL_TTL_SECONDS, public_visual_evidence
 
 
@@ -136,6 +136,11 @@ def current_evidence(owner, raw, observer):
     """
     lease = getattr(owner, "_live_field_verification", None)
     identity = (getattr(owner, "_observation_epoch", 0), getattr(owner, "_observation_serial", 0), raw.get("observed_at"))
+    captured = timestamp(raw.get("observed_at"))
+    if captured is None or observation_tick(time.time()) - captured > STALE_MAX_AGE_SECONDS:
+        # Delivery, not review: past the hard cap the current view is
+        # unavailable, never a stale one-name or zero-name roster.
+        return public_visual_evidence(raw, observer)
     if (not lease or lease["identity"] != identity
             or not observer.get("enabled") or observer.get("state") not in {"observing", "updating"}
             or getattr(owner, "_observation_invalidated", False)
