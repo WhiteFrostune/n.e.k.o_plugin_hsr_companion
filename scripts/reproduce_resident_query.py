@@ -132,6 +132,10 @@ async def run(args):
                   "commits_before_query": sum(c["at"] < began for c in commits),
                   "elapsed": round(time.monotonic() - began, 3),
                   "page": (answer or {}).get("page_type"), "fresh": bool((answer or {}).get("fresh")),
+                  "characters": [c.get("name") for c in (answer or {}).get("characters") or []],
+                  "characters_complete": (answer or {}).get("characters_complete"),
+                  "team_members_read": (answer or {}).get("team_members_read"),
+                  "team_members_expected": (answer or {}).get("team_members_expected"),
                   "fields": [{"kind": f.get("kind"), "value": f.get("value")}
                              for f in ((answer or {}).get("screen_facts") or {}).get("facts") or []],
                   "observer_state": owner._observer_status.get("state"),

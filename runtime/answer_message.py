@@ -134,6 +134,12 @@ def render_followup(data, *, plan, ready):
         if names:
             essential.append("角色：" + "、".join(names))
             count += len(names)
+            if data.get("characters_complete") is False:
+                read = data.get("team_members_read") or len(names)
+                expected = data.get("team_members_expected") or 4
+                essential.append(
+                    f"名单不完整：只读到 {read}/{expected} 位队员，"
+                    "可能还有未识别队员；空位与漏识别不可区分，不当作完整队伍。")
     if "page" in plan.fields and (data.get("scene") or {}).get("verified") and data.get("page_type") not in {None, "unknown"}:
         essential.append("页面：" + _safe((data.get("scene") or {}).get("label") or data.get("page_type")))
         count += 1

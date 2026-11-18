@@ -2683,7 +2683,10 @@ class HsrCompanionPlugin(NekoPluginBase):
                     "allowed": bool(answer_characters),
                     "scope": "controlled_character" if controlled_request else "visible_identity",
                     "names": [item["name"] for item in answer_characters],
-                    "instruction": current_visual["instruction"],
+                    "instruction": current_visual.get("instruction") or (
+                        "只引用本次 characters 中已确认的姓名；名单可能不完整，"
+                        "不得补出未识别队员或断言空位。"),
+                    "characters_complete": current_visual.get("characters_complete"),
                     "unavailable_reply": ("目前尚未确认你正在操控哪一位角色。" if controlled_request else "目前无法确认画面中的角色。") if not answer_characters and not scene_only_request else "",
                 },
                 "answer_policy": {

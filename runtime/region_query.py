@@ -10,6 +10,7 @@ from PIL import Image
 
 from ..adapters.text_reader import ObservationSuperseded
 from ..detectors.character import detect_characters
+from .contracts import TEAM_MEMBER_SLOTS, team_roster_state
 from .live_refresh import fetch_recent_frame, trace_refresh
 from .regions import cached_region_plan, region_plan, remember_region_plan
 from .screen_facts import extract_screen_facts
@@ -48,8 +49,12 @@ async def read_query_regions(owner, plan, deadline):
         trace_refresh(owner, "region_skip", reason="empty_regions", page=plan_regions["page_type"])
         return None
     boxes, latest = [], None
+    best_boxes, best_frame = [], None
+    texts = []
     started = time.monotonic()
-    for attempt in range(2):
+    attempts = 0
+    while attempts < 2:
+        attempts += 1
         if time.monotonic() >= deadline:
             trace_refresh(owner, "region_skip", reason="deadline")
             return None
@@ -63,16 +68,32 @@ async def read_query_regions(owner, plan, deadline):
                     vision.read_region, latest.image_bytes, regions,
                     cancelled=lambda: time.monotonic() >= deadline)
         except ObservationSuperseded:
-            if attempt == 0:
+            if attempts == 1:
                 await asyncio.sleep(.1)
                 continue
             trace_refresh(owner, "region_skip", reason="busy")
             return None
-        if boxes:
+        if not boxes:
+            trace_refresh(owner, "region_relook", attempt=attempts, reason="empty")
+            if best_boxes:
+                break  # An optional completeness retry never discards a good read.
+            if attempts == 1:
+                await asyncio.sleep(.05)
+                continue
             break
-        trace_refresh(owner, "region_relook", attempt=attempt + 1, reason="empty")
-        if attempt == 0:
-            await asyncio.sleep(.05)
+        best_boxes, best_frame = boxes, latest
+        texts.append("\n".join(str(box.get("text") or "") for box in boxes))
+        if plan_regions["page_type"] != "team_setup":
+            break
+        read = len({item["entity_id"] for item in detect_characters("\n".join(texts), owner._catalog)})
+        if read >= TEAM_MEMBER_SLOTS:
+            break
+        trace_refresh(owner, "team_roster_short", attempt=attempts, characters=read,
+                      expected=TEAM_MEMBER_SLOTS)
+        if time.monotonic() + 1.0 >= deadline:
+            break
+        await asyncio.sleep(.05)
+    boxes, latest = best_boxes, best_frame
     if not boxes or latest is None:
         trace_refresh(owner, "region_skip", reason="no_boxes")
         return None
@@ -84,8 +105,8 @@ async def read_query_regions(owner, plan, deadline):
                                  catalog=getattr(owner, "_catalog", None))
     characters = []
     if "characters" in plan.fields:
-        text = "\n".join(str(box.get("text") or "") for box in boxes)
-        characters = detect_characters(text, owner._catalog)
+        characters = detect_characters("\n".join(texts), owner._catalog)
+    roster = team_roster_state(page["page_type"], characters)
     result = {
         "fresh": True,
         "page": page,
@@ -96,8 +117,14 @@ async def read_query_regions(owner, plan, deadline):
         "observed_at": datetime.now(timezone.utc).isoformat(),
         "read_scope": "full",
         "status": "observing",
+        **roster,
     }
     remember_region_plan(owner, plan_regions)
+    if roster and not roster["characters_complete"]:
+        trace_refresh(owner, "team_roster_incomplete", read=roster["team_members_read"],
+                      expected=roster["team_members_expected"])
     trace_refresh(owner, "region_query_ready", page=page["page_type"], regions=len(regions),
-                  boxes=len(boxes), characters=len(characters), read_seconds=round(time.monotonic() - started, 3))
+                  boxes=len(boxes), characters=len(characters),
+                  characters_complete=roster.get("characters_complete"),
+                  read_seconds=round(time.monotonic() - started, 3))
     return result

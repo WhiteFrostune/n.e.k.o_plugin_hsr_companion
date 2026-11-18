@@ -35,12 +35,20 @@ def _page_type(visual):
     return page.get("page_type") or visual.get("page_type")
 
 
-def _regions_for_field(facts, field):
+def _regions_for_field(facts, field, *, page=None, visual=None):
     kinds = FIELD_FACT_KINDS.get(field)
     if not kinds:
         return None
     boxes = [proof["region"] for fact in facts if fact.get("kind") in kinds
              for proof in fact.get("evidence") or [] if proof.get("region")]
+    if page == "team_setup" and field == "characters":
+        # Path labels sit BELOW the member names. Their union alone cuts the
+        # name row short (the topmost name can be ~30px above the first path
+        # label), so include the same-frame name boxes too. The result spans
+        # every displayed member position, not only the names OCR recognized.
+        boxes += [item["region"] for item in (visual or {}).get("characters") or []
+                  if isinstance(item, dict) and item.get("region")
+                  and item.get("identity_scope") in {None, "team_selection", "hud_label"}]
     return _union(boxes) if boxes else None
 
 
@@ -52,7 +60,7 @@ def region_plan(visual, plan):
     facts = (visual.get("screen_facts") or {}).get("facts") or []
     regions = []
     for field in sorted(fields):
-        region = _regions_for_field(facts, field)
+        region = _regions_for_field(facts, field, page=page, visual=visual)
         if region is not None:
             regions.append({"fields": [field], "region": region, "source": "facts"})
     return {"page_type": page, "regions": regions} if regions else None

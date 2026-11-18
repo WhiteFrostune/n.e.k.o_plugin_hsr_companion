@@ -189,6 +189,15 @@ def public_visual_evidence(
             priority_note = (
                 "本次遗器词条已完整读到，但角色未在本帧确认：先报词条，不评价适配；"
                 "可以问玩家这件是给谁穿的，或说明角色尚未确认。")
+    # Only the name-region reader knows the member positions; a full-frame
+    # read keeps its existing partial semantics and must not be relabeled here.
+    roster = {key: value[key] for key in
+              ("team_members_expected", "team_members_read", "characters_complete") if key in value}
+    roster_note = (
+        f"编队页只读到 {roster['team_members_read']}/{roster['team_members_expected']} 位队员；"
+        "名单不完整，不得当作完整队伍回答，必须说明可能还有未识别队员，空位与漏识别不可区分。"
+    ) if (roster.get("characters_complete") is False
+          and "team_members_read" in roster and "team_members_expected" in roster) else ""
     return {
         "status": status,
         "message": message,
@@ -222,6 +231,7 @@ def public_visual_evidence(
         "failure_reason": failure_reason,
         "text_coverage_complete": (recognition.get("text_reader") or {}).get("full_frame_covered"),
         "equipment_complete": bool(reader.get("relic_priority")),
+        **roster,
         "instruction": (
             "当前画面身份只允许引用本结果 characters 中的姓名，并保留 identity_scope 的范围；"
             "characters 为空时必须明确说‘目前无法确认角色’，不能从数据库搜索命中、玩家档案、"
@@ -240,6 +250,7 @@ def public_visual_evidence(
             "visible_text 仅是当前画面可见文字，可按原文转述；heading_candidate 不是已确认标题，不能据此猜页面类型或地点。"
             "没有本次工具返回的 followup.pending=true，禁止承诺稍后补答；未知页面不等于游戏正在加载。"
             "这些事实只描述 observed_at 时刻的画面，不保证玩家此刻仍停留在该页；不要说‘一直盯着’或承诺即时识别。"
+            + roster_note
             + priority_note
         ),
     }
@@ -263,6 +274,10 @@ def visual_context_text(evidence: dict[str, Any]) -> str:
         )
         or "无"
     )
+    roster_line = ""
+    if evidence.get("characters_complete") is False:
+        roster_line = (f"编队页名单不完整：只读到 {evidence.get('team_members_read')}/"
+                       f"{evidence.get('team_members_expected')} 位，不得当作完整队伍转述。")
     return "\n".join(
         [
             "[星铁当前观察｜替换此前的当前画面事实，不触发回复]",
@@ -271,6 +286,7 @@ def visual_context_text(evidence: dict[str, Any]) -> str:
             "识别时间不代表最近核验时间；更新中不证明切页，暂停或无法核验时不得把历史当当前答案。",
             f"当前场景：{(evidence.get('scene') or {}).get('label') or '暂时无法判断'}",
             f"当前已确认界面角色：{names}",
+            *([roster_line] if roster_line else []),
             "当前队伍位置："
             + (
                 "；".join(

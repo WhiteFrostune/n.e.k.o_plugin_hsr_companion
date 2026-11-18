@@ -26,6 +26,22 @@ def test_team_name_strip_comes_from_entity_label_evidence():
         {"left": .057, "top": .691, "right": .849, "bottom": .778})
 
 
+def test_team_region_covers_names_above_the_path_labels():
+    # Live team page: the first member's name sits above the first path label
+    # (虚无). A path-label-only union cut that name off the strip.
+    visual = {"page": {"page_type": "team_setup"},
+              "characters": [
+                  {"entity_id": "character.dahlia", "identity_scope": "team_selection",
+                   "region": {"left": .0496, "top": .6625, "right": .1008, "bottom": .695}},
+                  {"entity_id": "character.fugue", "identity_scope": "team_selection",
+                   "region": {"left": .5965, "top": .6831, "right": .6473, "bottom": .7163}}],
+              "screen_facts": {"facts": [fact("entity_label", .052, .695, .091, .719),
+                                         fact("entity_label", .596, .713, .639, .741)]}}
+    region = region_plan(visual, plan("characters"))["regions"][0]["region"]
+    assert region["top"] < .6625
+    assert region["right"] > .6473
+
+
 def test_exploration_quest_and_location_map_to_their_evidence():
     visual = {"page": {"page_type": "exploration_hud"},
               "screen_facts": {"facts": [fact("quest_objective", .04, .26, .18, .32),

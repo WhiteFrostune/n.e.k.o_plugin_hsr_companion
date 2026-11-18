@@ -42,7 +42,12 @@ def evaluate_readiness(plan: QueryPlan, visual: dict) -> FieldReadiness:
     if nav["objective"]["known"] or not plan.requires_quest_objective and nav["quest_title"]["known"]:
         ready.add("quest")
     if visual.get("characters"):
-        ready.add("characters")
+        # Only a reader that knows the member positions may declare the list
+        # incomplete; a full-frame read keeps its existing partial semantics.
+        if visual.get("characters_complete") is False and "characters" in plan.fields:
+            available.add("characters")
+        else:
+            ready.add("characters")
     if visual.get("controlled_character"):
         ready.add("controlled_character")
     screen = visual.get("screen_facts") or {}
