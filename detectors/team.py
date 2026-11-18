@@ -22,12 +22,10 @@ def slot_card_states(image, slots=None) -> list[dict[str, Any]]:
     """Classify each team card as filled / empty / unknown from its own pixels.
 
     Filled cards carry a portrait, a name plate and level text; an empty slot
-    in the live 3-person layout is flat background (std ~17, edge fraction
-    ~.012) against filled cards (std ~57-71, edge ~.077-.117). Keep a wide
-    middle band as unknown rather than guessing.
+    in the live 3-person layout is flat background (deviation ~14, edge
+    fraction ~0) against filled cards (deviation ~60-75, edge ~.07-.12).
+    Keep a wide middle band as unknown rather than guessing.
     """
-    from PIL import ImageFilter, ImageStat
-
     result = []
     for slot in slots or TEAM_SLOT_CARDS:
         region = slot["region"]
@@ -38,19 +36,28 @@ def slot_card_states(image, slots=None) -> list[dict[str, Any]]:
             max(0, min(image.height, round(float(region["bottom"]) * image.height))),
         )
         crop = image.crop(bounds).convert("L")
-        edges = crop.filter(ImageFilter.FIND_EDGES)
-        values = list(edges.getdata())
-        # FIND_EDGES sees the crop boundary as an artificial edge on an
-        # otherwise flat card. Judge only the inner core; the border is not
-        # content and would label every empty slot as filled.
-        width, height = edges.size
+        width, height = crop.size
+        values = list(crop.getdata())
         margin_x = max(2, round(width * .04))
         margin_y = max(2, round(height * .04))
-        core = [values[y * width + x]
-                for y in range(margin_y, max(margin_y, height - margin_y))
-                for x in range(margin_x, max(margin_x, width - margin_x))]
-        edge_fraction = sum(value > 40 for value in core) / max(1, len(core))
-        deviation = float(ImageStat.Stat(crop).stddev[0])
+        total = squares = edges = count = 0
+        # Pure pixel arithmetic, not ImageStat/ImageChops: the desktop's
+        # bundled Pillow omits those modules. The crop boundary is skipped
+        # because it is not card content.
+        for y in range(margin_y, max(margin_y, height - margin_y), 2):
+            row = y * width
+            for x in range(margin_x, max(margin_x, width - margin_x), 2):
+                value = values[row + x]
+                total += value
+                squares += value * value
+                count += 1
+                right = values[row + x + 1] if x + 1 < width else value
+                below = values[row + width + x] if y + 1 < height else value
+                if abs(value - right) > 24 or abs(value - below) > 24:
+                    edges += 1
+        mean = total / max(1, count)
+        deviation = max(0.0, squares / max(1, count) - mean * mean) ** .5
+        edge_fraction = edges / max(1, count)
         if edge_fraction < .03 and deviation < 32:
             state = "empty"
         elif edge_fraction >= .04 or deviation >= 40:

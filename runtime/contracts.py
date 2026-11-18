@@ -19,6 +19,9 @@ class CompanionEvent:
 
 
 TEAM_MEMBER_SLOTS = 4
+FRESH_LIVE_AGE_SECONDS = 15.0
+STALE_MAX_AGE_SECONDS = 60.0
+LIVE_PAGE_TYPES = frozenset({"exploration_hud", "map_or_quest", "combat", "story_dialogue"})
 
 
 def team_roster_state(page_type: Any, characters: Any, slots: Any = None) -> dict[str, Any]:
@@ -58,4 +61,5 @@ def team_roster_state(page_type: Any, characters: Any, slots: Any = None) -> dic
     }
 
 
-__all__ = ["CompanionEvent", "TEAM_MEMBER_SLOTS", "team_roster_state"]
+__all__ = ["CompanionEvent", "TEAM_MEMBER_SLOTS", "FRESH_LIVE_AGE_SECONDS",
+           "STALE_MAX_AGE_SECONDS", "LIVE_PAGE_TYPES", "team_roster_state"]

@@ -133,6 +133,9 @@ def answer_status(plan: QueryPlan, visual: dict, observer: dict, followup: dict 
     else:
         state = "unconfirmed"
     return {"state": state, "confirmed_fields": sorted(ready), "missing_fields": sorted(missing),
+            "freshness": visual.get("freshness") or "fresh",
+            "age_seconds": visual.get("age_seconds"),
+            "age_label": visual.get("age_label") or "",
             "resource_fields": {"confirmed": sorted(plan.required_resource_labels & resource_labels),
                                 "missing": sorted(plan.required_resource_labels - resource_labels)},
             "equipment_fields": evaluated.equipment,

@@ -506,13 +506,16 @@ class LocalVisionAdapter:
             portrait_status: dict[str, Any] = {"available": False, "reason": "portrait_pack_not_configured"}
             portrait_started = time.monotonic()
             check_current(cancelled)
-            if self.avatar_pack is not None and not text_details.get("relic_priority"):
+            yielding = callable(yield_requested) and yield_requested()
+            if self.avatar_pack is not None and not text_details.get("relic_priority") and not yielding:
                 portraits, portrait_status = self.avatar_pack.match(image, page_type=page_type, rows=rows)
                 check_current(cancelled)
                 layout["characters"], conflicts = merge_character_evidence(
                     layout["characters"], portraits, self.catalog
                 )
                 portrait_status["conflicting_slots"] = conflicts
+            elif yielding:
+                portrait_status = {"available": False, "reason": "yielded_for_query"}
             portrait_seconds = time.monotonic() - portrait_started
             if page_type in {"unknown", "exploration_hud", "map_or_quest"}:
                 rows = rows or infer_complete_team_rows(layout["characters"], height=image.height)

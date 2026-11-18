@@ -1239,10 +1239,14 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
             trace_refresh(owner, "answer_incomplete", missing_fields=sorted(query_plan.fields - satisfied_fields(query_plan, value)))
         return enough or has_answerable_content(query_plan, value)
     try:
+        # A cold start must not spend the whole budget waiting for a cache
+        # review that is queued behind the producer. A miss falls through to
+        # the region path and, at the deadline, to the guarded stale reading.
         reused = await asyncio.wait_for(reuse_selected(),
-            timeout=max(.001, deadline - time.monotonic()))
+            timeout=min(1.5, max(.001, deadline - time.monotonic())))
     except TimeoutError:
         reused = None
+        trace_refresh(owner, "reuse_deferred", reason="initial_budget")
     except asyncio.CancelledError:
         if getattr(owner, "_active_refresh_trace", None) is trace:
             owner._active_refresh_trace = None
@@ -1279,6 +1283,17 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
         wake.set()
     if not hasattr(owner, "_visual_update_event"):
         owner._visual_update_event = asyncio.Event()
+
+    async def stale_on_timeout():
+        try:
+            from .query_reuse import try_reuse
+            return await asyncio.wait_for(
+                try_reuse(owner, **{**reuse_args, "allow_stale": True}), timeout=.8)
+        except asyncio.CancelledError:
+            raise
+        except (TimeoutError, Exception):
+            return None
+
     try:
         if region_waiter:
             owner._region_query_waiters = getattr(owner, "_region_query_waiters", 0) + 1
@@ -1379,7 +1394,24 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
                 await asyncio.wait_for(owner._visual_update_event.wait(), timeout=min(1.0, deadline - time.monotonic()))
             except TimeoutError:
                 pass
+        if not completed:
+            # The fresh read used the whole budget. A guarded older reading is
+            # still better than a zero-field answer, but it must say its age.
+            stale = await stale_on_timeout()
+            if ready(stale):
+                completion_state = "stale"
+                trace_refresh(owner, "stale_reuse_on_timeout",
+                              age_seconds=(stale or {}).get("age_seconds"))
+                completed = True
+                return stale
     except TimeoutError:
+        stale = await stale_on_timeout()
+        if ready(stale):
+            completion_state = "stale"
+            trace_refresh(owner, "stale_reuse_on_timeout",
+                          age_seconds=(stale or {}).get("age_seconds"))
+            completed = True
+            return stale
         return None
     except asyncio.CancelledError:
         trace["cancelled"] = True

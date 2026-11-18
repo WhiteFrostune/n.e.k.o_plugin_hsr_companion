@@ -10,6 +10,7 @@ import time
 from collections import Counter
 from datetime import datetime, timezone
 
+from .contracts import FRESH_LIVE_AGE_SECONDS
 from .observation import VISUAL_TTL_SECONDS, public_visual_evidence
 
 
@@ -46,8 +47,16 @@ def candidate_evidence(raw):
     current_tick = observation_tick(time.time())
     if captured is None or captured > current_tick:
         return public_visual_evidence({}, {"enabled": True, "state": "observing"})
-    return public_visual_evidence(raw, {"enabled": True, "state": "observing"},
-                                  now=datetime.fromtimestamp(captured, timezone.utc))
+    value = public_visual_evidence(raw, {"enabled": True, "state": "observing"},
+                                   now=datetime.fromtimestamp(captured, timezone.utc))
+    # The shape is intentionally unexpired for review; its AGE must still be
+    # honest to a caller that reads it as current evidence.
+    age = max(0.0, current_tick - captured)
+    value["age_seconds"] = round(age, 1)
+    value["freshness"] = "stale" if age > FRESH_LIVE_AGE_SECONDS else "fresh"
+    if value["freshness"] == "stale":
+        value["age_label"] = f"这是 {max(1, int(round(age)))} 秒前的画面，现在可能变了"
+    return value
 
 
 def late_read_proved(owner, analysis):
