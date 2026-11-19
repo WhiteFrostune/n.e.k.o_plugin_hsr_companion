@@ -123,6 +123,32 @@ def test_reproduce_committed_text_result_rejected_only_by_capture_timestamp(tmp_
     asyncio.run(run())
 
 
+def test_activity_attempt_budget_is_shared_across_both_guards():
+    bus, transport = real_sdk_bus(0)
+    reads = []
+
+    def failed_transport(*args, **kwargs):
+        reads.append(1)
+        return None
+
+    transport.request = failed_transport
+    owner = SimpleNamespace(bus=bus, _observer_status={"enabled": True, "state": "observing"},
+                            _target_character=lambda: "reproduction-only",
+                            push_message=lambda **kw: None)
+    now = time.monotonic()
+    req = followup.AnswerRequest("budget", "q", "reproduction-only", time.time(), now, now + 2,
+                                 "unknown", False, False, True, False, plan=None)
+    owner._pending_answer = req
+
+    async def run():
+        first = await followup.checked_activity(owner, req, bus)
+        second = await followup.checked_activity(owner, req, bus)
+        assert first == ("unavailable", None) and second == ("unavailable", None)
+        assert 1 <= len(reads) <= followup.ACTIVITY_ATTEMPTS
+
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize("duration", [.1, 1])
 def test_persistent_real_sdk_transport_failure_safely_cancels_after_bounded_retries(monkeypatch, duration):
     bus, transport = real_sdk_bus(0)
