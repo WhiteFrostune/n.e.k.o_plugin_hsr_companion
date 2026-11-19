@@ -55,7 +55,7 @@ def review(snapshot, owner, *, generation=None):
     Current raw data is used ONLY to detect replacement/conflict. It cannot
     contribute a new row or extend a capture/verification timestamp.
     """
-    from .equipment import equipment_card
+    from .equipment_view import equipment_card
     from .observation import public_visual_evidence
 
     selected = snapshot.evidence()

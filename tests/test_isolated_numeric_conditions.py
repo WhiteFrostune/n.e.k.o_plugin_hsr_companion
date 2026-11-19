@@ -14,7 +14,7 @@ from plugin.plugins.hsr_companion.adapters.relic_values import (
     refine_relic_values,
 )
 from plugin.plugins.hsr_companion.adapters.text_verification import proof_key, verify_text_regions
-from plugin.plugins.hsr_companion.runtime.equipment import equipment_card, equipment_readiness
+from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card, equipment_readiness
 from plugin.plugins.hsr_companion.runtime.screen_facts import extract_screen_facts
 from plugin.plugins.hsr_companion.tests.test_relic_fields import relic_boxes
 from plugin.plugins.hsr_companion.tests.test_screen_facts import catalog

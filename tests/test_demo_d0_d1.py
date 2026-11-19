@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 from plugin.plugins.hsr_companion.runtime import service_contract as contract
-from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
+from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
 from plugin.plugins.hsr_companion.tests import test_guidance as guidance_cases
 from plugin.plugins.hsr_companion.tests.test_guidance import answer, plan
 from plugin.plugins.hsr_companion.tests.test_stage1_repairs import fact, visual
@@ -30,6 +30,7 @@ def test_receipt_audits_sent_rows_not_recomputed_visual(channel):
     assert not hasattr(owner, "_delivery_value_trace")
 
 
+@pytest.mark.host_clock_guard
 def test_trace_opt_in_expiry_copies_exact_packet_and_never_retains_question(monkeypatch):
     clock = [100.0]
     monkeypatch.setattr(contract.time, "monotonic", lambda: clock[0])

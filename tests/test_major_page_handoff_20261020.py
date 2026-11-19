@@ -112,7 +112,7 @@ def test_new_question_checks_live_page_before_finishing_old_full_pass(tmp_path, 
 
         class Vision(LocalVisionAdapter):
             @serial_ocr(cooperative=True)
-            def analyze(self, payload, *, cancelled=None, on_scene=None, wants_relic=None):
+            def analyze(self, payload, *, cancelled=None, on_scene=None, wants_relic=None, yield_requested=None):
                 on_scene(original)
                 calls.append('old_full_started')
                 entered.set()

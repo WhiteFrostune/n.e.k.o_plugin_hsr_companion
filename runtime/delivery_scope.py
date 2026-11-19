@@ -5,7 +5,7 @@ import copy
 from dataclasses import replace
 
 from ..adapters.text_verification import identity_literal
-from .equipment import equipment_card
+from .equipment_view import equipment_card
 
 
 def coordinates(item):

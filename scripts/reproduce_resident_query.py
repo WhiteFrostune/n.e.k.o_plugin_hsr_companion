@@ -87,7 +87,8 @@ async def run(args):
             item["finished"] = time.monotonic()
 
     owner._vision = SimpleNamespace(analyze_live=full, analyze_scene=adapter.analyze_scene,
-        analyze_navigation=adapter.analyze_navigation, verify_text_regions=adapter.verify_text_regions)
+        analyze_navigation=adapter.analyze_navigation, verify_text_regions=adapter.verify_text_regions,
+        read_region=adapter.read_region)
     verification_attempts = []
     if args.verification_details:
         def verify(payload, proofs, **kwargs):
@@ -123,7 +124,7 @@ async def run(args):
                     break
             began = time.monotonic()
             plan = build_query_plan(args.query)
-            answer = await refresh_for_query(owner, timeout=8, query_plan=plan, **plan.refresh_args())
+            answer = await refresh_for_query(owner, timeout=args.query_timeout, query_plan=plan, **plan.refresh_args())
             emit({"kind": "resident_source_real_capture_NOT_installed_or_chat", "sample": sample,
                   "question_after_worker_seconds": round(began - item["started"], 3),
                   "background_full_index": item["index"], "waiters_at_worker_start": item["waiters_at_start"],
@@ -131,12 +132,36 @@ async def run(args):
                   "commits_before_query": sum(c["at"] < began for c in commits),
                   "elapsed": round(time.monotonic() - began, 3),
                   "page": (answer or {}).get("page_type"), "fresh": bool((answer or {}).get("fresh")),
+                  "characters": [c.get("name") for c in (answer or {}).get("characters") or []],
+                  "characters_complete": (answer or {}).get("characters_complete"),
+                  "team_roster_known": (answer or {}).get("team_roster_known"),
+                  "team_members_read": (answer or {}).get("team_members_read"),
+                  "team_members_expected": (answer or {}).get("team_members_expected"),
                   "fields": [{"kind": f.get("kind"), "value": f.get("value")}
                              for f in ((answer or {}).get("screen_facts") or {}).get("facts") or []],
                   "observer_state": owner._observer_status.get("state"),
                   "resident_pages": [c.get("page") for c in calls],
                   "query_plan": plan.public(),
                   "refresh": owner._last_refresh_diagnostics})
+            if answer is None:
+                # What the host delivery path sees after the direct budget:
+                # a guarded current/old observation, or no usable reading.
+                current = await owner._current_visual_evidence()
+                previous = getattr(owner, "_last_successful_observation", None) or {}
+                emit({"kind": "resident_source_timeout_fallback_NOT_chat", "sample": sample,
+                      "page": current.get("page_type"),
+                      "names": [c.get("name") for c in current.get("characters") or []],
+                      "freshness": current.get("freshness"),
+                      "age_seconds": current.get("age_seconds"),
+                      "age_label": current.get("age_label"),
+                      "characters_complete": current.get("characters_complete"),
+                      "team_roster_known": current.get("team_roster_known"),
+                      "team_members_read": current.get("team_members_read"),
+                      "team_members_expected": current.get("team_members_expected"),
+                      "status": current.get("status"),
+                      "last_successful_page": (previous.get("page") or {}).get("page_type"),
+                      "last_successful_names": [c.get("name") for c in previous.get("characters") or []],
+                      "message": str(current.get("message") or "")[:160]})
             if args.settle_seconds and answer is None:
                 # Continue the SAME resident producer after the direct budget.
                 # Test delayed eligibility, not an actual host response/push.
@@ -195,12 +220,16 @@ def main():
     parser.add_argument("--warm-commits", type=int, choices=range(0, 4), default=2)
     parser.add_argument("--delay", type=float, default=.5)
     parser.add_argument("--query", default="现在在哪，接下来这个任务要做什么？")
+    parser.add_argument("--query-timeout", type=float, default=8,
+                        help="Diagnostic-only direct budget; default 8s")
     parser.add_argument("--settle-seconds", type=float, default=0)
     parser.add_argument("--pause-between", action="store_true", help="Keep observer running; stdin Enter starts next query sample")
     parser.add_argument("--verification-details", action="store_true", help="Print bounded local game text verification only; never save frames or send chat")
     args = parser.parse_args()
     if not 0 <= args.delay <= 3:
         parser.error("delay must be in [0, 3]")
+    if not .5 <= args.query_timeout <= 8:
+        parser.error("query-timeout must be in [0.5, 8]")
     if not 0 <= args.settle_seconds <= 35:
         parser.error("settle-seconds must be in [0, 35]")
     asyncio.run(asyncio.wait_for(run(args), timeout=120))

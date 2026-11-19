@@ -16,7 +16,7 @@ import pytest
 from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter, serial_ocr
 from plugin.plugins.hsr_companion.adapters.text_verification import proof_key
 from plugin.plugins.hsr_companion.runtime import followup, live_refresh, manual_refresh
-from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
+from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
 from plugin.plugins.hsr_companion.runtime.observation_store import ObservationSnapshot, ObservationStore
 from plugin.plugins.hsr_companion.runtime.query_coordinator import needs_followup, satisfied_fields
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan

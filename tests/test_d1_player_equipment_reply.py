@@ -10,7 +10,7 @@ import importlib
 import time
 
 import pytest
-from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
+from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
 from plugin.plugins.hsr_companion.runtime.fact_lifecycle import candidate_evidence
 from plugin.plugins.hsr_companion.runtime.observation_store import ObservationSnapshot
 from plugin.plugins.hsr_companion.runtime.query_coordinator import QueryObservation

@@ -11,7 +11,8 @@ import time
 from dataclasses import replace
 
 from .consultation import STAT_PROPERTIES
-from .equipment import assess_relic, equipment_card, equipment_digest, equipment_object, property_name
+from .equipment import assess_relic
+from .equipment_view import equipment_card, equipment_digest, equipment_object, property_name
 from .observation import public_visual_evidence
 from .query_coordinator import answer_status
 from .query_plan import build_query_plan

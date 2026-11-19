@@ -10,6 +10,7 @@ import time
 from collections import Counter
 from datetime import datetime, timezone
 
+from .contracts import FRESH_LIVE_AGE_SECONDS, STALE_MAX_AGE_SECONDS
 from .observation import VISUAL_TTL_SECONDS, public_visual_evidence
 
 
@@ -46,8 +47,18 @@ def candidate_evidence(raw):
     current_tick = observation_tick(time.time())
     if captured is None or captured > current_tick:
         return public_visual_evidence({}, {"enabled": True, "state": "observing"})
-    return public_visual_evidence(raw, {"enabled": True, "state": "observing"},
-                                  now=datetime.fromtimestamp(captured, timezone.utc))
+    value = public_visual_evidence(raw, {"enabled": True, "state": "observing"},
+                                   now=datetime.fromtimestamp(captured, timezone.utc))
+    # The shape is intentionally unexpired for review; its AGE must still be
+    # honest to a caller that reads it as current evidence.
+    age = max(0.0, current_tick - captured)
+    value["age_seconds"] = round(age, 1)
+    value["freshness"] = "stale" if age > FRESH_LIVE_AGE_SECONDS else "fresh"
+    if value["freshness"] == "stale":
+        value["age_label"] = f"这是 {max(1, int(round(age)))} 秒前的画面，现在可能变了"
+        if not str(value.get("message") or "").startswith(value["age_label"]):
+            value["message"] = value["age_label"] + "：" + str(value.get("message") or "")
+    return value
 
 
 def late_read_proved(owner, analysis):
@@ -127,6 +138,11 @@ def current_evidence(owner, raw, observer):
     """
     lease = getattr(owner, "_live_field_verification", None)
     identity = (getattr(owner, "_observation_epoch", 0), getattr(owner, "_observation_serial", 0), raw.get("observed_at"))
+    captured = timestamp(raw.get("observed_at"))
+    if captured is None or observation_tick(time.time()) - captured > STALE_MAX_AGE_SECONDS:
+        # Delivery, not review: past the hard cap the current view is
+        # unavailable, never a stale one-name or zero-name roster.
+        return public_visual_evidence(raw, observer)
     if (not lease or lease["identity"] != identity
             or not observer.get("enabled") or observer.get("state") not in {"observing", "updating"}
             or getattr(owner, "_observation_invalidated", False)

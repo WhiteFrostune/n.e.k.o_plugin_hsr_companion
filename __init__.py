@@ -50,7 +50,8 @@ from .runtime.consultation_contract import CONSULTATION_SCHEMA, bound_followup_p
 from .runtime.data_freshness import data_freshness
 from .runtime.diagnostic_export import export_diagnostic
 from .runtime.diagnostics import build_diagnostic_report
-from .runtime.equipment import equipment_card, record_handoff
+from .runtime.equipment import record_handoff
+from .runtime.equipment_view import equipment_card
 from .runtime.followup import DIRECT_WAIT_SECONDS, arm_followup, cancel_followup
 from .runtime.grounding import build_grounding
 from .runtime.guidance import build_guidance, load_guidance_catalog, plan_request
@@ -2673,7 +2674,10 @@ class HsrCompanionPlugin(NekoPluginBase):
                     "visible_text": current_visual["screen_facts"].get("visible_text", []) if not current_visual["scene"].get("verified") else [],
                     "instruction": "优先回答 locations 中明确的 current_location；任务目的地或地图选中地区不能当作所在地。"
                                    "其次回答已确认的页面，未知部分分开说明；无需等待角色名单。页面未知时可转述 visible_text，不能猜页面。"
+                                   "页面未知且没有可用旧读数时，用 page_unknown_reply 问玩家想看哪一块；不要猜页面类型。"
                                    "是否补答只看 followup.pending；没有登记就不得承诺。",
+                    "page_unknown_reply": ("这个界面我还看不太懂，你想问哪一块？"
+                                           if current_visual.get("page_type") == "unknown" else ""),
                 },
                 "query_timing": {"refresh_wait_seconds": query_observation.wait_seconds,
                                  "refresh": query_observation.refresh},
@@ -2682,7 +2686,13 @@ class HsrCompanionPlugin(NekoPluginBase):
                     "allowed": bool(answer_characters),
                     "scope": "controlled_character" if controlled_request else "visible_identity",
                     "names": [item["name"] for item in answer_characters],
-                    "instruction": current_visual["instruction"],
+                    "instruction": current_visual.get("instruction") or (
+                        "只引用本次 characters 中已确认的姓名；名单可能不完整，"
+                        "不得补出未识别队员或断言空位。"),
+                    "page_unknown_reply": ("这个界面我还看不太懂，你想问哪一块？"
+                                           if current_visual.get("page_type") == "unknown" else ""),
+                    "characters_complete": current_visual.get("characters_complete"),
+                    "team_roster_known": current_visual.get("team_roster_known"),
                     "unavailable_reply": ("目前尚未确认你正在操控哪一位角色。" if controlled_request else "目前无法确认画面中的角色。") if not answer_characters and not scene_only_request else "",
                 },
                 "answer_policy": {

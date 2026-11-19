@@ -192,7 +192,7 @@ def build_reply_plan(plan, assessment, role, *, query="", guides=(), teams=(), s
             rows.extend({**next((r for r in evaluated if (r["label"], r["value"]) == (row["label"], row["value"])), row),
                          "kind": "sub_stat"} for row in card.get("sub_stats") or [])
     elif plan.request_focus == "attributes":
-        from .equipment import _rows
+        from .equipment_view import _rows
         # Factual extraction does not require a reviewed build for this role.
         # Use the same numeric parser as the assessor, without inventing an
         # evaluation for unsupported roles or forwarding conflicting totals.

@@ -43,7 +43,8 @@ def offline(monkeypatch):
 
 
 @pytest.fixture(scope='module')
-def records():
+def records(require_live_artifact):
+    require_live_artifact('dist/page-roundtrip-live-20261020-2.json')
     return json.loads((ROOT / 'dist/page-roundtrip-live-20261020-2.json').read_text(encoding='utf-8'))
 
 
@@ -180,7 +181,7 @@ def test_panel_owner_dependency_through_projection(records, book, catalog, subje
 
 
 def test_full_relic_rows_and_missing_main_protection(records):
-    from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
+    from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
     from plugin.plugins.hsr_companion.runtime.query_coordinator import satisfied_fields
     visual = historical_visual(phase_events(records, 'relic', 'store_commit')[-1]['observation'])
     plan = build_query_plan('完整报出主词条和四项副词条。', 'read_screen', screen_fields=['equipment'])

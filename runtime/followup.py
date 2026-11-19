@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import time
 from copy import deepcopy
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from uuid import uuid4
 
 from .chat_activity import latest_user_activity
@@ -50,6 +50,7 @@ class AnswerRequest:
     delivered_fields: frozenset[str] = frozenset()
     delivered_key: str = ""
     delivered_reply: dict | None = None
+    activity_budget: dict[str, int] = field(default_factory=dict)
 
 
 def request_plan(request: AnswerRequest) -> QueryPlan:
@@ -100,7 +101,7 @@ def reply_data(visual: dict, request: AnswerRequest, *, catalog=None) -> dict:
         result["screen_facts"] = {"facts": plan.relevant_facts(screen.get("facts") or []),
                                   "visible_text": screen.get("visible_text", []) if "visible_text" in plan.fields else []}
         if "equipment" in plan.fields:
-            from .equipment import equipment_card
+            from .equipment_view import equipment_card
             result["equipment_answer"] = equipment_card(visual)
             if catalog is not None:
                 from .grounding import build_grounding
@@ -136,9 +137,26 @@ def _can_observe(owner) -> bool:
                 and owner._observer_status.get("state") not in {"stopped", "paused", "waiting_for_game"})
 
 
-async def checked_activity(owner, request: AnswerRequest, bus) -> tuple[str, float | None]:
-    """Retry transient read failures, never treat failed reads as silence."""
-    for attempt in range(ACTIVITY_ATTEMPTS):
+async def checked_activity(owner, request: AnswerRequest, bus, *, allow_recovery=False) -> tuple[str, float | None]:
+    """Retry transient read failures, never treat failed reads as silence.
+
+    The attempt budget belongs to the request, not to this call. Persistent
+    failures stop at ACTIVITY_ATTEMPTS. A ready request may spend one recovery
+    probe after the budget is exhausted; a successful probe resets the budget.
+    """
+    budget = request.activity_budget
+    used = int(budget.get("attempts", 0))
+    limit = ACTIVITY_ATTEMPTS
+    if used >= ACTIVITY_ATTEMPTS:
+        if allow_recovery and not budget.get("recovery_used"):
+            budget["recovery_used"] = True
+            limit = used + 1
+        else:
+            owner._followup_status = {**getattr(owner, "_followup_status", {}),
+                                      "request_id": request.request_id, "state": "pending",
+                                      "reason": "activity_retry", "activity_attempt": used}
+            return "unavailable", None
+    for attempt in range(used, limit):
         if (getattr(owner, "_pending_answer", None) is not request or not _can_observe(owner)
                 or owner._target_character() != request.target):
             return "cancelled", None
@@ -153,9 +171,12 @@ async def checked_activity(owner, request: AnswerRequest, bus) -> tuple[str, flo
             include_identity=True,
             transport_timeout=min(ACTIVITY_TRANSPORT_SECONDS, remaining),
             wait_timeout=min(ACTIVITY_TRANSPORT_SECONDS + .1, remaining))
+        request.activity_budget["attempts"] = attempt + 1
         if getattr(owner, "_pending_answer", None) is not request:
             return "cancelled", None
         if activity != "unavailable":
+            request.activity_budget["attempts"] = 0
+            request.activity_budget["recovery_used"] = False
             return activity, stamp
         owner._followup_status = {**getattr(owner, "_followup_status", {}), "request_id": request.request_id, "state": "pending",
                                   "reason": "activity_retry", "activity_attempt": attempt + 1}
@@ -412,7 +433,8 @@ async def deliver_followup(owner, request: AnswerRequest) -> None:
                 return
             status = state.public() if validated is not False else {
                 "facts_ready": False, "service_ready": False, "state": "awaiting_validation"}
-            owner._followup_status = {"request_id": request.request_id, "state": "pending", "result_ready": ready,
+            owner._followup_status = {**getattr(owner, "_followup_status", {}),
+                                      "request_id": request.request_id, "state": "pending", "result_ready": ready,
                                       "request_completion": status}
             if time.monotonic() >= request.expires_at:
                 expire()
@@ -423,7 +445,8 @@ async def deliver_followup(owner, request: AnswerRequest) -> None:
                 owner._pending_answer = None
                 owner._followup_status.update(state="ended_incomplete", reason=state.state, answer_complete=False)
                 return
-            activity, stamp = await checked_activity(owner, request, bus)
+            activity, stamp = await checked_activity(owner, request, bus,
+                                                     allow_recovery=bool(ready or progress))
             if activity == "awaiting_relation":
                 if await wait_message_relation(owner, request):
                     continue
@@ -479,7 +502,7 @@ async def deliver_followup(owner, request: AnswerRequest) -> None:
                     _cancel_current(owner, request, "empty_projection")
                     return
                 # Final async guard, then synchronous claim/submission.
-                activity, stamp = await checked_activity(owner, request, bus)
+                activity, stamp = await checked_activity(owner, request, bus, allow_recovery=True)
                 if activity == "awaiting_relation":
                     if await wait_message_relation(owner, request):
                         continue

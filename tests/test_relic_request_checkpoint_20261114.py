@@ -11,7 +11,7 @@ import pytest
 from PIL import Image, ImageDraw
 from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter
 from plugin.plugins.hsr_companion.runtime import live_refresh
-from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
+from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.runtime.vision_trace import public_trace
 from plugin.plugins.hsr_companion.tests.test_current_observation import plugin_fixture

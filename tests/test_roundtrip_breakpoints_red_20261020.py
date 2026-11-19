@@ -17,7 +17,7 @@ from plugin.plugins.hsr_companion.detectors.exploration import distinct_rows, ta
 from plugin.plugins.hsr_companion.detectors.layout import classify_supported_page
 from plugin.plugins.hsr_companion.runtime.answer_message import render_followup
 from plugin.plugins.hsr_companion.runtime.consultation_contract import validate_declaration
-from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
+from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
 from plugin.plugins.hsr_companion.runtime.followup import AnswerRequest, answer_ready, reply_data
 from plugin.plugins.hsr_companion.runtime.guidance import build_guidance, load_guidance_catalog
 from plugin.plugins.hsr_companion.runtime.query_coordinator import satisfied_fields
@@ -30,7 +30,8 @@ from plugin.plugins.hsr_companion.scripts.replay_roundtrip_breakpoints import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-pytestmark = pytest.mark.skipif(os.environ.get('HSR_ROUNDTRIP_DIAGNOSTIC_RED') != '1',
+pytestmark = pytest.mark.skipif(
+    os.environ.get('HSR_ROUNDTRIP_DIAGNOSTIC_RED') != '1',
     reason='Opt-in saved-input regression; original RED reports remain immutable')
 
 
@@ -55,12 +56,14 @@ def local_text_channel(monkeypatch):
 
 
 @pytest.fixture(scope='module')
-def records():
+def records(require_live_artifact):
+    require_live_artifact('dist/page-roundtrip-live-20261020-2.json')
     return json.loads((ROOT / 'dist/page-roundtrip-live-20261020-2.json').read_text(encoding='utf-8'))
 
 
 @pytest.fixture(scope='module')
-def diagnosis():
+def diagnosis(require_live_artifact):
+    require_live_artifact('dist/page-roundtrip-breakpoints-20261020-3.json')
     return json.loads((ROOT / 'dist/page-roundtrip-breakpoints-20261020-3.json').read_text(encoding='utf-8'))
 
 

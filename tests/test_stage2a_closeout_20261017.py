@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from plugin.plugins.hsr_companion.runtime import live_refresh
-from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
+from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
 from plugin.plugins.hsr_companion.runtime.observation_store import ObservationSnapshot, ObservationStore
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.tests.test_chain_audit_20261017 import audit_owner, commit_raw, raw_page
@@ -20,34 +20,51 @@ def age_candidates(owner, seconds):
     return stamp
 
 
-@pytest.mark.parametrize("path", ["navigation", "full", "direct"])
-@pytest.mark.parametrize("age", [39, 90, 600])
-def test_old_live_candidate_is_checked_before_deciding_it_is_unusable(tmp_path, path, age):
+@pytest.mark.parametrize("path", ["navigation", "full"])
+def test_old_live_candidate_is_checked_before_deciding_it_is_unusable(tmp_path, path):
     async def run():
+        from plugin.plugins.hsr_companion.runtime.query_reuse import try_reuse
         owner, _, _, calls = await resident_owner(tmp_path)
-        original = age_candidates(owner, age)
-        selected = await select(owner, path)
+        original = age_candidates(owner, 39)
+        assert await select(owner, path) is None  # Live pages do not proactively reuse.
+        selected = await try_reuse(owner, navigation=path == "navigation", full=path == "full",
+                                   plan=build_query_plan(QUERY), allow_stale=True)
         assert selected is not None
         assert len(selected["screen_facts"]["facts"]) == 3
         assert selected["observed_at"] == original  # No fake OCR/capture timestamp.
         assert selected["reuse"]["validated_at"] != original
+        assert selected["freshness"] == "stale" and selected["age_seconds"] >= 39
         assert not calls  # Same native patches, no full OCR and no text reread.
         current = await owner._current_visual_evidence()
         assert current["fresh"] and len(current["screen_facts"]["facts"]) == 3
         assert current["observed_at"] == original
+        assert current["freshness"] == "stale"
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("age", [90, 600])
+@pytest.mark.parametrize("path", ["navigation", "full"])
+def test_old_live_candidate_beyond_the_stale_cap_is_unusable(tmp_path, path, age):
+    async def run():
+        from plugin.plugins.hsr_companion.runtime.query_reuse import try_reuse
+        owner, _, _, _ = await resident_owner(tmp_path)
+        age_candidates(owner, age)
+        assert await select(owner, path) is None
+        assert await try_reuse(owner, navigation=path == "navigation", full=path == "full",
+                               plan=build_query_plan(QUERY), allow_stale=True) is None
     asyncio.run(run())
 
 
 def test_scoped_check_does_not_renew_unchecked_quest(tmp_path):
     async def run():
         owner, _, _, _ = await resident_owner(tmp_path)
-        age_candidates(owner, 90)
+        age_candidates(owner, 39)
         from plugin.plugins.hsr_companion.runtime.query_reuse import try_reuse
-        selected = await try_reuse(owner, navigation=True, plan=build_query_plan("现在在哪"))
+        selected = await try_reuse(owner, navigation=True, plan=build_query_plan("现在在哪"),
+                                   allow_stale=True)
         assert selected is not None
-        current = await owner._current_visual_evidence()
-        assert any(f["kind"] == "current_location" for f in current["screen_facts"]["facts"])
-        assert not any(f["kind"] == "quest_objective" for f in current["screen_facts"]["facts"])
+        assert any(f["kind"] == "current_location" for f in selected["screen_facts"]["facts"])
+        assert not any(f["kind"] == "quest_objective" for f in selected["screen_facts"]["facts"])
     asyncio.run(run())
 
 
@@ -102,7 +119,7 @@ def test_resident_watcher_renews_only_unchanged_regions_on_real_fresh_frame(tmp_
 
         from plugin.plugins.hsr_companion.tests.test_delivery_fix_20261012 import picture
         owner, _, _, _ = await resident_owner(tmp_path)
-        original = age_candidates(owner, 90)
+        original = age_candidates(owner, 55)
         owner._watch_frame_timestamp = time.time()
         assert not await live_refresh.watch_latest_frame(owner, picture(), helper=True)
         current = await owner._current_visual_evidence()

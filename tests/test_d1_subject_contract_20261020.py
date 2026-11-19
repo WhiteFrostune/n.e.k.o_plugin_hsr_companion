@@ -11,7 +11,7 @@ import time
 from types import SimpleNamespace
 
 import pytest
-from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
+from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
 from plugin.plugins.hsr_companion.runtime.guidance import build_guidance, plan_guidance
 from plugin.plugins.hsr_companion.runtime.observation_store import ObservationSnapshot
 from plugin.plugins.hsr_companion.runtime.query_coordinator import QueryObservation
