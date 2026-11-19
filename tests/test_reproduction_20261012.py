@@ -37,6 +37,17 @@ def real_sdk_bus(delay):
     transport = ControlledTransport(delay)
     raw_context = SimpleNamespace(plugin_id="hsr_companion", _plugin_comm_queue=object(),
                                   _zmq_ipc_client=transport)
+
+    async def send_request_and_wait_async(**kwargs):
+        response = transport.request({"type": kwargs["request_type"], **kwargs["request_data"]},
+                                     kwargs["timeout"])
+        if not isinstance(response, dict):
+            raise TimeoutError("controlled transport failure")
+        return response.get("result")
+
+    # Host main moved the request/wait plumbing onto the context; older
+    # checkouts call _zmq_ipc_client directly. Support both in this fake.
+    raw_context._send_request_and_wait_async = send_request_and_wait_async
     owner = object.__new__(NekoPluginBase)
     owner.ctx = SimpleNamespace(bus=SimpleNamespace(memory=MemoryClient(raw_context)))
     return owner.bus, transport

@@ -127,8 +127,10 @@ def test_registered_fit_completes_with_new_hands_not_old_label(book, catalog, mo
     assert reply["evaluation_available"] and not reply["next_step"]  # No unasked comparison homework.
 
 
+@pytest.mark.live_artifact("dist/hsr_companion-0.9.6-demo-d1-handoff-20261018.1.neko-plugin")
 def test_frozen_installed_policy_reproduces_exact_ready_empty_card_contradiction(book, catalog):
     archive = Path(__file__).resolve().parents[1] / "dist/hsr_companion-0.9.6-demo-d1-handoff-20261018.1.neko-plugin"
+
     assert hashlib.sha256(archive.read_bytes()).hexdigest() == "48d45823de53d094e7decb1efbf67d0d65da619a8fd132d5dccc840b26048a08"
     prefix = "payload/plugins/hsr_companion/runtime/"
     loaded = []
