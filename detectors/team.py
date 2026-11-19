@@ -8,6 +8,100 @@ from __future__ import annotations
 
 from typing import Any
 
+# Team-setup cards are a page layout, not a full-screen crop. Each slot owns a
+# card band; an empty slot is flat background (no portrait, name plate or art).
+TEAM_SLOT_CARDS = (
+    {"slot": 1, "region": {"left": .015, "top": .59, "right": .145, "bottom": .83}},
+    {"slot": 2, "region": {"left": .27, "top": .59, "right": .40, "bottom": .83}},
+    {"slot": 3, "region": {"left": .55, "top": .61, "right": .69, "bottom": .85}},
+    {"slot": 4, "region": {"left": .75, "top": .64, "right": .93, "bottom": .86}},
+)
+
+
+def slot_card_states(image, slots=None) -> list[dict[str, Any]]:
+    """Classify each team card as filled / empty / unknown from its own pixels.
+
+    Filled cards carry a portrait, a name plate and level text; an empty slot
+    in the live 3-person layout is flat background (deviation ~14, edge
+    fraction ~0) against filled cards (deviation ~60-75, edge ~.07-.12).
+    Keep a wide middle band as unknown rather than guessing.
+    """
+    result = []
+    for slot in slots or TEAM_SLOT_CARDS:
+        region = slot["region"]
+        bounds = (
+            max(0, min(image.width, round(float(region["left"]) * image.width))),
+            max(0, min(image.height, round(float(region["top"]) * image.height))),
+            max(0, min(image.width, round(float(region["right"]) * image.width))),
+            max(0, min(image.height, round(float(region["bottom"]) * image.height))),
+        )
+        crop = image.crop(bounds).convert("L")
+        width, height = crop.size
+        values = list(crop.getdata())
+        margin_x = max(2, round(width * .04))
+        margin_y = max(2, round(height * .04))
+        total = squares = edges = count = 0
+        # Pure pixel arithmetic, not ImageStat/ImageChops: the desktop's
+        # bundled Pillow omits those modules. The crop boundary is skipped
+        # because it is not card content.
+        for y in range(margin_y, max(margin_y, height - margin_y), 2):
+            row = y * width
+            for x in range(margin_x, max(margin_x, width - margin_x), 2):
+                value = values[row + x]
+                total += value
+                squares += value * value
+                count += 1
+                right = values[row + x + 1] if x + 1 < width else value
+                below = values[row + width + x] if y + 1 < height else value
+                if abs(value - right) > 24 or abs(value - below) > 24:
+                    edges += 1
+        mean = total / max(1, count)
+        deviation = max(0.0, squares / max(1, count) - mean * mean) ** .5
+        edge_fraction = edges / max(1, count)
+        if edge_fraction < .03 and deviation < 32:
+            state = "empty"
+        elif edge_fraction >= .04 or deviation >= 40:
+            state = "filled"
+        else:
+            state = "unknown"
+        result.append({"slot": int(slot["slot"]), "state": state, "region": dict(region),
+                       "edge_fraction": round(edge_fraction, 4), "deviation": round(deviation, 1)})
+    return result
+
+
+def assign_slot_names(slots, named_boxes, *, max_distance=.08) -> list[dict[str, Any]]:
+    """Bind an OCR name to a filled card by horizontal position, one per slot.
+
+    A filled card without a bound name is `filled_unread`; an empty slot is not
+    a missing member. Names outside every card band stay unassigned and must
+    not turn into a roster row.
+    """
+    result = []
+    used = set()
+    for slot in slots:
+        state = slot.get("state")
+        if state != "filled":
+            result.append({**slot, "state": "unknown" if state == "unknown" else state})
+            continue
+        center = (float(slot["region"]["left"]) + float(slot["region"]["right"])) / 2
+        candidates = []
+        for item in named_boxes or []:
+            entity_id = item.get("entity_id")
+            region = item.get("region") or {}
+            if not entity_id or entity_id in used or not region:
+                continue
+            name_center = (float(region.get("left") or 0) + float(region.get("right") or 0)) / 2
+            if abs(name_center - center) <= max_distance:
+                candidates.append((abs(name_center - center), item))
+        if candidates:
+            _, item = min(candidates, key=lambda pair: pair[0])
+            used.add(item["entity_id"])
+            result.append({**slot, "state": "filled_named",
+                           "entity_id": item["entity_id"], "name": item.get("name")})
+        else:
+            result.append({**slot, "state": "filled_unread"})
+    return result
+
 
 def locate_team_rows(boxes, *, width: int, height: int) -> list[float]:
     anchors: dict[int, float] = {}

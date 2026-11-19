@@ -43,7 +43,8 @@ def offline(monkeypatch):
 
 
 @pytest.fixture(scope='module')
-def records():
+def records(require_live_artifact):
+    require_live_artifact('dist/page-roundtrip-live-20261020-2.json')
     return json.loads((ROOT / 'dist/page-roundtrip-live-20261020-2.json').read_text(encoding='utf-8'))
 
 

@@ -42,7 +42,12 @@ def evaluate_readiness(plan: QueryPlan, visual: dict) -> FieldReadiness:
     if nav["objective"]["known"] or not plan.requires_quest_objective and nav["quest_title"]["known"]:
         ready.add("quest")
     if visual.get("characters"):
-        ready.add("characters")
+        # Only a reader that knows the member positions may declare the list
+        # incomplete; a full-frame read keeps its existing partial semantics.
+        if visual.get("characters_complete") is False and "characters" in plan.fields:
+            available.add("characters")
+        else:
+            ready.add("characters")
     if visual.get("controlled_character"):
         ready.add("controlled_character")
     screen = visual.get("screen_facts") or {}
@@ -128,6 +133,9 @@ def answer_status(plan: QueryPlan, visual: dict, observer: dict, followup: dict 
     else:
         state = "unconfirmed"
     return {"state": state, "confirmed_fields": sorted(ready), "missing_fields": sorted(missing),
+            "freshness": visual.get("freshness") or "fresh",
+            "age_seconds": visual.get("age_seconds"),
+            "age_label": visual.get("age_label") or "",
             "resource_fields": {"confirmed": sorted(plan.required_resource_labels & resource_labels),
                                 "missing": sorted(plan.required_resource_labels - resource_labels)},
             "equipment_fields": evaluated.equipment,

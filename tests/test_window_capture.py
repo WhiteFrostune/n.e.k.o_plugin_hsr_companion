@@ -18,6 +18,9 @@ from plugin.plugins.hsr_companion.assistant_runtime.window_capture import (
 )
 from plugin.plugins.hsr_companion.tests.test_current_observation import plugin_fixture
 
+pytestmark = pytest.mark.skipif(sys.platform != "win32",
+                                reason="Windows Graphics Capture API is only available on Windows")
+
 
 def fake_frame(color="red"):
     image = Image.new("RGB", (64, 48), color)

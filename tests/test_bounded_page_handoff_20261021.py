@@ -51,7 +51,7 @@ async def harness(tmp_path, *, pages, duration=1, frozen_frame=False, invalidate
 
     class Vision(LocalVisionAdapter):
         @serial_ocr(cooperative=True)
-        def analyze(self, payload, *, cancelled=None, on_scene=None, wants_relic=None):
+        def analyze(self, payload, *, cancelled=None, on_scene=None, wants_relic=None, yield_requested=None):
             on_scene(original)
             threads.append(threading.get_ident())
             entered.set()
@@ -332,7 +332,7 @@ def test_retired_producer_is_followed_by_new_facts_at_the_formal_entry(tmp_path,
 
         class Vision(LocalVisionAdapter):
             @serial_ocr(cooperative=True)
-            def analyze(self, payload, *, cancelled=None, on_scene=None, wants_relic=None):
+            def analyze(self, payload, *, cancelled=None, on_scene=None, wants_relic=None, yield_requested=None):
                 if payload == picture():
                     on_scene(original)
                     entered.set()

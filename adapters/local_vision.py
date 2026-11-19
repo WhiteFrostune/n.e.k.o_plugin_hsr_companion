@@ -13,11 +13,12 @@ from ..detectors import analyze_layout
 from ..detectors.exploration import exploration_controls, navigation_boxes
 from ..detectors.layout import PAGE_RULES, classify_supported_page, scene_control_regions
 from ..detectors.scene_preview import scene_preview
-from ..detectors.team import assign_team_slots, infer_complete_team_rows, locate_team_rows
+from ..detectors.team import assign_team_slots, infer_complete_team_rows, locate_team_rows, slot_card_states
 from ..runtime.screen_facts import extract_screen_facts, safe_text
 from ..runtime.vision_trace import measure, record
 from ..session import visual_fingerprint
 from .text_reader import ObservationSuperseded, check_current, read_native_text
+from .text_reader import read_region as read_text_region
 
 
 def serial_ocr(method=None, *, cooperative=False):
@@ -160,9 +161,24 @@ class LocalVisionAdapter:
                 "portrait_backend": portrait_backend,
             }
 
-    def analyze_live(self, image_bytes: bytes, *, cancelled, on_scene, wants_relic=None) -> dict[str, Any]:
+    def analyze_live(self, image_bytes: bytes, *, cancelled, on_scene, wants_relic=None, yield_requested=None) -> dict[str, Any]:
         return self.analyze(image_bytes, cancelled=cancelled, on_scene=on_scene,
-                            **({"wants_relic": wants_relic} if wants_relic is not None else {}))
+                            **({"wants_relic": wants_relic} if wants_relic is not None else {}),
+                            **({"yield_requested": yield_requested} if yield_requested is not None else {}))
+
+    @serial_ocr
+    def read_region(self, image_bytes: bytes, regions: list, *, cancelled=None, yield_requested=None) -> list:
+        """Read already-derived normalized regions; never classify a new page."""
+        from PIL import Image, ImageOps
+
+        with Image.open(BytesIO(image_bytes)) as opened:
+            image = ImageOps.exif_transpose(opened).convert("RGB")
+        boxes = []
+        for region in list(regions)[:3]:
+            check_current(cancelled)
+            boxes.extend(read_text_region(self._get_backend(), image, region, cancelled=cancelled,
+                                          yield_requested=yield_requested))
+        return boxes
 
     @serial_ocr
     def verify_text_regions(self, image_bytes: bytes, proofs: list, *, cancelled=None, trace=None) -> set:
@@ -342,7 +358,8 @@ class LocalVisionAdapter:
         return result
 
     @serial_ocr(cooperative=True)
-    def analyze(self, image_bytes: bytes, *, cancelled=None, on_scene=None, wants_relic=None) -> dict[str, Any]:
+    def analyze(self, image_bytes: bytes, *, cancelled=None, on_scene=None, wants_relic=None,
+                yield_requested=None) -> dict[str, Any]:
         try:
             from PIL import Image, ImageOps
 
@@ -439,6 +456,7 @@ class LocalVisionAdapter:
                     self._get_backend(), image, catalog=self.catalog, cancelled=cancelled,
                     on_progress=progress if on_scene is not None else None,
                     verify_names=True,
+                    yield_requested=yield_requested,
                     **({"accept_native_relic": accept_native_relic, "relic_tiles": relic_tiles}
                        if wants_relic is not None else {}),
                 )
@@ -485,16 +503,23 @@ class LocalVisionAdapter:
                 text_details["relic_value_recheck"] = numeric_details
                 text_details.setdefault("backend_calls", []).extend(numeric_details["backend_calls"])
             rows = locate_team_rows(boxes, width=image.width, height=image.height)
+            if page_type == "team_setup":
+                # Keep a pixel-only slot table for later stale-fallback
+                # completeness checks; it does not claim empty means unread.
+                layout["recognition"]["team_slots"] = slot_card_states(image)
             portrait_status: dict[str, Any] = {"available": False, "reason": "portrait_pack_not_configured"}
             portrait_started = time.monotonic()
             check_current(cancelled)
-            if self.avatar_pack is not None and not text_details.get("relic_priority"):
+            yielding = callable(yield_requested) and yield_requested()
+            if self.avatar_pack is not None and not text_details.get("relic_priority") and not yielding:
                 portraits, portrait_status = self.avatar_pack.match(image, page_type=page_type, rows=rows)
                 check_current(cancelled)
                 layout["characters"], conflicts = merge_character_evidence(
                     layout["characters"], portraits, self.catalog
                 )
                 portrait_status["conflicting_slots"] = conflicts
+            elif yielding:
+                portrait_status = {"available": False, "reason": "yielded_for_query"}
             portrait_seconds = time.monotonic() - portrait_started
             if page_type in {"unknown", "exploration_hud", "map_or_quest"}:
                 rows = rows or infer_complete_team_rows(layout["characters"], height=image.height)
