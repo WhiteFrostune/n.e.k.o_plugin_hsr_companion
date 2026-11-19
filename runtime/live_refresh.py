@@ -1191,7 +1191,13 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
         return
     owner._last_visual_query_at = time.monotonic()
     trace = {"started": time.monotonic(), "stages": [], "plan": query_plan}
-    deadline = trace["started"] + timeout
+    if timeout >= 4:
+        deadline = trace["started"] + timeout - .05
+        stale_reserve = min(.8, timeout * .25)
+    else:
+        deadline = trace["started"] + timeout
+        stale_reserve = 0
+    fresh_deadline = max(trace["started"], deadline - stale_reserve)
     owner._active_refresh_trace = trace
     trace_refresh(owner, "query_started", require_characters=require_characters,
                   require_content=require_content, require_navigation=require_navigation)
@@ -1218,7 +1224,7 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
             # Preserve already-ready complete results without queuing native
             # OCR for unrelated text. A miss cannot erase the checked page.
             richer = None
-            if deadline - time.monotonic() > .4:
+            if fresh_deadline - time.monotonic() > .4:
                 try:
                     richer = await asyncio.wait_for(try_reuse(owner, **original_reuse_args, pixel_only=True), timeout=.35)
                 except TimeoutError:
@@ -1239,10 +1245,14 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
             trace_refresh(owner, "answer_incomplete", missing_fields=sorted(query_plan.fields - satisfied_fields(query_plan, value)))
         return enough or has_answerable_content(query_plan, value)
     try:
+        # A cold start must not spend the whole budget waiting for a cache
+        # review that is queued behind the producer. A miss falls through to
+        # the region path and, at the deadline, to the guarded stale reading.
         reused = await asyncio.wait_for(reuse_selected(),
-            timeout=max(.001, deadline - time.monotonic()))
+            timeout=min(1.5, max(.001, fresh_deadline - time.monotonic())))
     except TimeoutError:
         reused = None
+        trace_refresh(owner, "reuse_deferred", reason="initial_budget")
     except asyncio.CancelledError:
         if getattr(owner, "_active_refresh_trace", None) is trace:
             owner._active_refresh_trace = None
@@ -1271,7 +1281,7 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
     # Use the same clock/precision as utc_now_iso, not a freshness tolerance.
     owner._query_refresh_after = datetime.now(timezone.utc).timestamp()
     owner._query_refresh_generation = getattr(owner, "_query_refresh_generation", 0) + 1
-    owner._query_refresh_deadline = deadline  # Checkpoint work shares, never renews, this budget.
+    owner._query_refresh_deadline = fresh_deadline  # Checkpoint work shares, never renews, this budget.
     owner._query_refresh_serial = getattr(owner, "_observation_serial", 0)
     region_waiter = bool(query_plan is not None and query_plan.fields)
     wake = getattr(owner, "_observer_wake_event", None)
@@ -1279,14 +1289,26 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
         wake.set()
     if not hasattr(owner, "_visual_update_event"):
         owner._visual_update_event = asyncio.Event()
+
+    async def stale_on_timeout():
+        try:
+            from .query_reuse import try_reuse
+            remaining = max(.001, deadline - time.monotonic())
+            return await asyncio.wait_for(
+                try_reuse(owner, **{**reuse_args, "allow_stale": True}), timeout=remaining)
+        except asyncio.CancelledError:
+            raise
+        except (TimeoutError, Exception):
+            return None
+
     try:
         if region_waiter:
             owner._region_query_waiters = getattr(owner, "_region_query_waiters", 0) + 1
             try:
                 from .region_query import read_query_regions
                 region_visual = await asyncio.wait_for(
-                    read_query_regions(owner, query_plan, deadline),
-                    timeout=max(.001, deadline - time.monotonic()))
+                    read_query_regions(owner, query_plan, fresh_deadline),
+                    timeout=max(.001, fresh_deadline - time.monotonic()))
             except (TimeoutError, Exception):
                 region_visual = None
             finally:
@@ -1296,13 +1318,13 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
                 completed = True
                 return region_visual
         owner._push_current_visual_context(await asyncio.wait_for(
-            owner._current_visual_evidence(), timeout=max(.001, deadline - time.monotonic())))
-        while time.monotonic() < deadline:
+            owner._current_visual_evidence(), timeout=max(.001, fresh_deadline - time.monotonic())))
+        while time.monotonic() < fresh_deadline:
             if not owner._observer_status.get("enabled") or getattr(owner, "_observer_stop_requested", False):
                 trace["observer_unavailable"] = True
                 return None
             owner._visual_update_event.clear()
-            evidence = await asyncio.wait_for(owner._current_visual_evidence(), timeout=max(.001, deadline - time.monotonic()))
+            evidence = await asyncio.wait_for(owner._current_visual_evidence(), timeout=max(.001, fresh_deadline - time.monotonic()))
             if not require_characters and not require_content:
                 snapshot = getattr(owner, "_reusable_observations", {}).get("navigation" if require_navigation else "scene")
                 if snapshot is None and require_navigation:
@@ -1318,14 +1340,14 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
                     # A just-finished read can start before the question and
                     # still be current. Validate its live evidence instead of
                     # throwing it away solely because of its capture time.
-                    reused = await asyncio.wait_for(reuse_selected(), timeout=max(.001, deadline - time.monotonic()))
+                    reused = await asyncio.wait_for(reuse_selected(), timeout=max(.001, fresh_deadline - time.monotonic()))
                     if ready(reused):
                         trace_refresh(owner, "completed_read_revalidated", serial=serial)
                         completed = True
                         return reused
                     # try_reuse may revoke the observation while awaiting the
                     # live frame. Never finish with the pre-check evidence.
-                    evidence = await asyncio.wait_for(owner._current_visual_evidence(), timeout=max(.001, deadline - time.monotonic()))
+                    evidence = await asyncio.wait_for(owner._current_visual_evidence(), timeout=max(.001, fresh_deadline - time.monotonic()))
             if require_navigation:
                 # A title preview has not read the task stack yet. A fresh
                 # completed navigation/full pass may return partial/unknown,
@@ -1335,7 +1357,7 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
                     "observed_at": evidence.get("observed_at"),
                 })
                 if not pending_navigation and evidence.get("fresh") and evidence.get("read_scope") in {"navigation", "full"}:
-                    selected = await asyncio.wait_for(validated_delivery(owner, evidence, plan=execution_plan), timeout=max(.001, deadline - time.monotonic()))
+                    selected = await asyncio.wait_for(validated_delivery(owner, evidence, plan=execution_plan), timeout=max(.001, fresh_deadline - time.monotonic()))
                     if ready(selected):
                         completed = True
                         return selected
@@ -1343,12 +1365,12 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
                 "observation_serial": (evidence.get("screen_facts") or {}).get("observation_serial"),
                 "observed_at": evidence.get("observed_at"),
             }) and evidence.get("fresh") and evidence.get("status") not in {"recognizing_characters", "scene_not_recognized"}:
-                selected = await asyncio.wait_for(validated_delivery(owner, evidence, plan=execution_plan), timeout=max(.001, deadline - time.monotonic()))
+                selected = await asyncio.wait_for(validated_delivery(owner, evidence, plan=execution_plan), timeout=max(.001, fresh_deadline - time.monotonic()))
                 if ready(selected):
                     completed = True
                     return selected
             if not require_navigation and not require_characters and (evidence.get("scene") or {}).get("verified"):
-                selected = await asyncio.wait_for(validated_delivery(owner, evidence, plan=execution_plan), timeout=max(.001, deadline - time.monotonic()))
+                selected = await asyncio.wait_for(validated_delivery(owner, evidence, plan=execution_plan), timeout=max(.001, fresh_deadline - time.monotonic()))
                 if ready(selected):
                     completed = True
                     return selected
@@ -1359,7 +1381,7 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
                 pending.add("recognizing_characters")
             if (not require_navigation and (not require_characters or evidence.get("read_scope", "full") == "full")
                     and evidence.get("fresh") and evidence.get("status") not in pending):
-                selected = await asyncio.wait_for(validated_delivery(owner, evidence, plan=execution_plan), timeout=max(.001, deadline - time.monotonic()))
+                selected = await asyncio.wait_for(validated_delivery(owner, evidence, plan=execution_plan), timeout=max(.001, fresh_deadline - time.monotonic()))
                 if ready(selected):
                     completed = True
                     return selected
@@ -1370,16 +1392,33 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
                 # whose capture/verification was transiently unavailable.
                 # Keep recovery within the original deadline and one worker.
                 recovered = await asyncio.wait_for(reuse_selected(),
-                    timeout=max(.001, deadline - time.monotonic()))
+                    timeout=max(.001, fresh_deadline - time.monotonic()))
                 if ready(recovered):
                     trace_refresh(owner, "reuse_recovered")
                     completed = True
                     return recovered
             try:
-                await asyncio.wait_for(owner._visual_update_event.wait(), timeout=min(1.0, deadline - time.monotonic()))
+                await asyncio.wait_for(owner._visual_update_event.wait(), timeout=min(1.0, fresh_deadline - time.monotonic()))
             except TimeoutError:
                 pass
+        if not completed:
+            # The fresh read used the whole budget. A guarded older reading is
+            # still better than a zero-field answer, but it must say its age.
+            stale = await stale_on_timeout()
+            if ready(stale):
+                completion_state = "stale"
+                trace_refresh(owner, "stale_reuse_on_timeout",
+                              age_seconds=(stale or {}).get("age_seconds"))
+                completed = True
+                return stale
     except TimeoutError:
+        stale = await stale_on_timeout()
+        if ready(stale):
+            completion_state = "stale"
+            trace_refresh(owner, "stale_reuse_on_timeout",
+                          age_seconds=(stale or {}).get("age_seconds"))
+            completed = True
+            return stale
         return None
     except asyncio.CancelledError:
         trace["cancelled"] = True

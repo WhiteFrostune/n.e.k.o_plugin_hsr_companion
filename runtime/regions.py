@@ -22,11 +22,11 @@ PAGE_FIELDS = {
 CACHE_SECONDS = 30.0
 
 
-def _union(boxes):
-    left = max(0.0, min(float(box["left"]) for box in boxes) - .003)
-    top = max(0.0, min(float(box["top"]) for box in boxes) - .003)
-    right = min(1.0, max(float(box["right"]) for box in boxes) + .003)
-    bottom = min(1.0, max(float(box["bottom"]) for box in boxes) + .003)
+def _union(boxes, padding=.003):
+    left = max(0.0, min(float(box["left"]) for box in boxes) - padding)
+    top = max(0.0, min(float(box["top"]) for box in boxes) - padding)
+    right = min(1.0, max(float(box["right"]) for box in boxes) + padding)
+    bottom = min(1.0, max(float(box["bottom"]) for box in boxes) + padding)
     return {"left": left, "top": top, "right": right, "bottom": bottom}
 
 
@@ -46,9 +46,12 @@ def _regions_for_field(facts, field, *, page=None, visual=None):
         # name row short (the topmost name can be ~30px above the first path
         # label), so include the same-frame name boxes too. The result spans
         # every displayed member position, not only the names OCR recognized.
+        # The first slot sits close to the crop edge; leave a wider margin so
+        # frame jitter cannot clip its first glyph.
         boxes += [item["region"] for item in (visual or {}).get("characters") or []
                   if isinstance(item, dict) and item.get("region")
                   and item.get("identity_scope") in {None, "team_selection", "hud_label"}]
+        return _union(boxes, padding=.01) if boxes else None
     return _union(boxes) if boxes else None
 
 

@@ -3,7 +3,6 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image
-
 from plugin.plugins.hsr_companion.adapters.text_reader import read_region
 from plugin.plugins.hsr_companion.runtime.regions import cached_region_plan, region_plan, remember_region_plan
 
@@ -23,7 +22,7 @@ def test_team_name_strip_comes_from_entity_label_evidence():
     assert selected["page_type"] == "team_setup"
     assert selected["regions"][0]["fields"] == ["characters"]
     assert selected["regions"][0]["region"] == pytest.approx(
-        {"left": .057, "top": .691, "right": .849, "bottom": .778})
+        {"left": .05, "top": .684, "right": .856, "bottom": .785})
 
 
 def test_team_region_covers_names_above_the_path_labels():

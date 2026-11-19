@@ -10,11 +10,40 @@ from PIL import Image
 
 from ..adapters.text_reader import ObservationSuperseded
 from ..detectors.character import detect_characters
-from .contracts import TEAM_MEMBER_SLOTS, team_roster_state
+from ..detectors.team import assign_slot_names, slot_card_states
+from .contracts import team_roster_state
 from .live_refresh import fetch_recent_frame, trace_refresh
 from .regions import cached_region_plan, region_plan, remember_region_plan
 from .screen_facts import extract_screen_facts
 from .vision_scheduler import vision_turn
+
+
+def _named_boxes(boxes, width, height, catalog):
+    found = []
+    if catalog is None:
+        return found
+    for box in boxes:
+        text = str(box.get("text") or "").strip()
+        if not text:
+            continue
+        for record in catalog.match_characters_in_text(text):
+            found.append({
+                "entity_id": record.get("id"), "name": record.get("name"),
+                "region": {
+                    "left": float(box["left"]) / max(width, 1),
+                    "top": float(box["top"]) / max(height, 1),
+                    "right": float(box["right"]) / max(width, 1),
+                    "bottom": float(box["bottom"]) / max(height, 1),
+                },
+            })
+    return found
+
+
+def _team_slots(owner, boxes, latest, catalog):
+    with Image.open(BytesIO(latest.image_bytes)) as image:
+        width, height = image.size
+        states = slot_card_states(image)
+        return assign_slot_names(states, _named_boxes(boxes, width, height, catalog))
 
 
 def _known_page(visual):
@@ -49,7 +78,7 @@ async def read_query_regions(owner, plan, deadline):
         trace_refresh(owner, "region_skip", reason="empty_regions", page=plan_regions["page_type"])
         return None
     boxes, latest = [], None
-    best_boxes, best_frame = [], None
+    best_boxes, best_frame, best_slots = [], None, []
     texts = []
     started = time.monotonic()
     attempts = 0
@@ -85,11 +114,15 @@ async def read_query_regions(owner, plan, deadline):
         texts.append("\n".join(str(box.get("text") or "") for box in boxes))
         if plan_regions["page_type"] != "team_setup":
             break
-        read = len({item["entity_id"] for item in detect_characters("\n".join(texts), owner._catalog)})
-        if read >= TEAM_MEMBER_SLOTS:
+        slots = _team_slots(owner, boxes, latest, owner._catalog)
+        best_slots = slots
+        characters_now = detect_characters("\n".join(texts), owner._catalog)
+        roster = team_roster_state(plan_regions["page_type"], characters_now, slots=slots)
+        if roster["characters_complete"] or not roster.get("team_roster_known", True):
             break
-        trace_refresh(owner, "team_roster_short", attempt=attempts, characters=read,
-                      expected=TEAM_MEMBER_SLOTS)
+        trace_refresh(owner, "team_roster_short", attempt=attempts,
+                      characters=roster["team_members_read"],
+                      expected=roster["team_members_expected"])
         if time.monotonic() + 1.0 >= deadline:
             break
         await asyncio.sleep(.05)
@@ -106,7 +139,19 @@ async def read_query_regions(owner, plan, deadline):
     characters = []
     if "characters" in plan.fields:
         characters = detect_characters("\n".join(texts), owner._catalog)
-    roster = team_roster_state(page["page_type"], characters)
+    if page["page_type"] == "team_setup" and best_slots:
+        by_id = {item.get("entity_id"): item for item in characters}
+        characters = []
+        for slot in best_slots:
+            if slot.get("state") != "filled_named":
+                continue
+            known = by_id.get(slot.get("entity_id")) or {}
+            characters.append({
+                "entity_id": slot.get("entity_id"), "name": slot.get("name"),
+                "evidence": known.get("evidence", "exact_catalog_text"),
+                "confidence": known.get("confidence", "high"),
+            })
+    roster = team_roster_state(page["page_type"], characters, slots=best_slots)
     result = {
         "fresh": True,
         "page": page,
@@ -120,11 +165,20 @@ async def read_query_regions(owner, plan, deadline):
         **roster,
     }
     remember_region_plan(owner, plan_regions)
+    if page["page_type"] == "team_setup" and best_slots:
+        # A later stale fallback may only have a full-frame snapshot without
+        # slot states. Keep the last slot table so it can still mark a short
+        # old roster incomplete instead of presenting it as complete.
+        owner._team_slot_states = [dict(slot) for slot in best_slots]
     if roster and not roster["characters_complete"]:
         trace_refresh(owner, "team_roster_incomplete", read=roster["team_members_read"],
-                      expected=roster["team_members_expected"])
+                      expected=roster["team_members_expected"],
+                      slots=[slot.get("state") for slot in best_slots])
+    if roster.get("team_roster_known") is False:
+        trace_refresh(owner, "team_roster_unknown", slots=[slot.get("state") for slot in best_slots])
     trace_refresh(owner, "region_query_ready", page=page["page_type"], regions=len(regions),
                   boxes=len(boxes), characters=len(characters),
                   characters_complete=roster.get("characters_complete"),
+                  roster_known=roster.get("team_roster_known"),
                   read_seconds=round(time.monotonic() - started, 3))
     return result

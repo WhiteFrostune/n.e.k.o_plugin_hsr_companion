@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ..game_state import GAME_STATE_LABELS
+from .contracts import FRESH_LIVE_AGE_SECONDS
 from .query_plan import (
     asks_controlled_identity as asks_controlled_identity,
 )
@@ -73,6 +74,16 @@ def public_visual_evidence(
         unavailable = "expired"
     elif not value.get("ok"):
         unavailable = "error"
+
+    if unavailable:
+        freshness = "unavailable"
+    elif value.get("freshness") in {"fresh", "stale"}:
+        freshness = value["freshness"]
+    else:
+        freshness = "stale" if age > FRESH_LIVE_AGE_SECONDS else "fresh"
+    age_seconds = round(max(0.0, age), 1) if age >= 0 else None
+    age_label = (f"这是 {max(1, int(round(age_seconds)))} 秒前的画面，现在可能变了"
+                 if freshness == "stale" and age_seconds is not None else "")
 
     page = dict(value.get("page") or {})
     raw_scene = dict(value.get("scene") or {})
@@ -192,16 +203,31 @@ def public_visual_evidence(
     # Only the name-region reader knows the member positions; a full-frame
     # read keeps its existing partial semantics and must not be relabeled here.
     roster = {key: value[key] for key in
-              ("team_members_expected", "team_members_read", "characters_complete") if key in value}
-    roster_note = (
-        f"编队页只读到 {roster['team_members_read']}/{roster['team_members_expected']} 位队员；"
-        "名单不完整，不得当作完整队伍回答，必须说明可能还有未识别队员，空位与漏识别不可区分。"
-    ) if (roster.get("characters_complete") is False
-          and "team_members_read" in roster and "team_members_expected" in roster) else ""
+              ("team_members_expected", "team_members_read", "characters_complete",
+               "team_roster_known", "team_slots") if key in value}
+    if roster.get("team_roster_known") is False:
+        roster_note = (
+            f"编队页名单未完全确认：只读到 {roster['team_members_read']}/"
+            f"{roster['team_members_expected']} 位，另有位置是空位还是漏读未确认；"
+            "不当作完整队伍，也不断言空位。"
+        )
+    elif roster.get("characters_complete") is False:
+        roster_note = (
+            f"编队页只读到 {roster['team_members_read']}/{roster['team_members_expected']} 位队员；"
+            "名单不完整，不得当作完整队伍回答，必须说明可能还有未识别队员，空位与漏识别不可区分。"
+        )
+    else:
+        roster_note = ""
+    display_message = message
+    if age_label and not message.startswith(age_label):
+        display_message = age_label + "：" + message
     return {
         "status": status,
-        "message": message,
+        "message": display_message,
         "fresh": not bool(unavailable),
+        "freshness": freshness,
+        "age_seconds": age_seconds,
+        "age_label": age_label,
         "read_scope": ("navigation" if recognition.get("navigation_only_query") else
                        "scene" if recognition.get("scene_only_query") or recognition.get("phase") == "scene_only" else "full"),
         "observed_at": timestamp,
@@ -252,6 +278,8 @@ def public_visual_evidence(
             "这些事实只描述 observed_at 时刻的画面，不保证玩家此刻仍停留在该页；不要说‘一直盯着’或承诺即时识别。"
             + roster_note
             + priority_note
+            + ("若 freshness=stale，必须原样说明 age_label 的秒数，不得说成现在。"
+               if freshness == "stale" else "")
         ),
     }
 
@@ -275,7 +303,11 @@ def visual_context_text(evidence: dict[str, Any]) -> str:
         or "无"
     )
     roster_line = ""
-    if evidence.get("characters_complete") is False:
+    if evidence.get("team_roster_known") is False:
+        roster_line = (f"编队页名单未完全确认：只读到 {evidence.get('team_members_read')}/"
+                       f"{evidence.get('team_members_expected')} 位，另有位置是空位还是漏读未确认，"
+                       "不得当作完整队伍转述。")
+    elif evidence.get("characters_complete") is False:
         roster_line = (f"编队页名单不完整：只读到 {evidence.get('team_members_read')}/"
                        f"{evidence.get('team_members_expected')} 位，不得当作完整队伍转述。")
     return "\n".join(
@@ -284,6 +316,7 @@ def visual_context_text(evidence: dict[str, Any]) -> str:
             SERVICE_ROUTING_RULE,
             f"识别时间：{evidence.get('observed_at') or '尚无'}；最近核验：{evidence.get('last_verified_at') or '尚无独立核验时间'}；"
             "识别时间不代表最近核验时间；更新中不证明切页，暂停或无法核验时不得把历史当当前答案。",
+            *([evidence["age_label"]] if evidence.get("age_label") else []),
             f"当前场景：{(evidence.get('scene') or {}).get('label') or '暂时无法判断'}",
             f"当前已确认界面角色：{names}",
             *([roster_line] if roster_line else []),

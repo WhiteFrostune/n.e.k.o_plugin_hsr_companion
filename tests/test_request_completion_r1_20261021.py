@@ -32,8 +32,9 @@ book, catalog = cases.book, cases.catalog
 
 
 @pytest.fixture(scope="module")
-def retained():
+def retained(require_live_artifact):
     freeze = json.loads((ROOT / "tests/fixtures/request_chain_r0_20261021.json").read_text(encoding="utf-8"))
+    require_live_artifact(freeze["record"])
     raw = (ROOT / freeze["record"]).read_bytes()
     expected = next(r["sha256"] for r in freeze["source_hashes"] if r["path"] == freeze["record"])
     assert hashlib.sha256(raw).hexdigest() == expected, "Never overwrite the original failed D run"
