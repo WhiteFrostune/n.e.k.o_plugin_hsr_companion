@@ -6,6 +6,8 @@ from types import SimpleNamespace
 
 from plugin.plugins.hsr_companion.runtime.fact_lifecycle import candidate_evidence, current_evidence
 from plugin.plugins.hsr_companion.runtime.observation import public_visual_evidence
+from plugin.plugins.hsr_companion.detectors.team import TEAM_SLOT_CARDS
+from plugin.plugins.hsr_companion.runtime.observation_store import attach_team_roster, richer_last_successful
 from plugin.plugins.hsr_companion.runtime.query_coordinator import answer_status
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.runtime.query_reuse import prefer_richer_roster, stale_state
@@ -62,6 +64,40 @@ def test_candidate_evidence_uses_real_age():
     stale = candidate_evidence({**base, "observed_at": (now - timedelta(seconds=20)).isoformat()})
     assert stale["freshness"] == "stale" and len(stale["characters"]) == 1
     assert stale["age_seconds"] >= 20
+    assert stale["message"].startswith(stale["age_label"])
+
+
+def test_old_roster_uses_last_slots_to_mark_incomplete():
+    def member(center):
+        return {"entity_id": str(center), "name": str(center),
+                "region": {"left": center - .02, "top": .66, "right": center + .02, "bottom": .70}}
+    slots = [{"slot": index, "state": "filled_named",
+              "region": TEAM_SLOT_CARDS[index - 1]["region"]} for index in range(1, 5)]
+    latest = {"page": {"page_type": "team_setup"}, "characters": [member(.08), member(.62)]}
+    attach_team_roster(latest, slots)
+    assert latest["team_members_expected"] == 4 and latest["team_members_read"] == 2
+    assert latest["characters_complete"] is False
+
+    three = [{"slot": 1, "state": "filled_named", "region": TEAM_SLOT_CARDS[0]["region"]},
+             {"slot": 2, "state": "empty", "region": TEAM_SLOT_CARDS[1]["region"]},
+             {"slot": 3, "state": "filled_named", "region": TEAM_SLOT_CARDS[2]["region"]},
+             {"slot": 4, "state": "filled_named", "region": TEAM_SLOT_CARDS[3]["region"]}]
+    latest = {"page": {"page_type": "team_setup"},
+              "characters": [member(.08), member(.62), member(.84)]}
+    attach_team_roster(latest, three)
+    assert latest["team_members_expected"] == 3 and latest["team_members_read"] == 3
+    assert latest["characters_complete"] is True
+
+
+def test_richer_last_successful_prefers_a_same_page_full_read():
+    now = datetime.now(timezone.utc)
+    latest = {"page": {"page_type": "team_setup"}, "observed_at": now.isoformat(),
+              "characters": [{"entity_id": "a"}, {"entity_id": "b"}]}
+    previous = {"page": {"page_type": "team_setup"}, "observed_at": (now - timedelta(seconds=30)).isoformat(),
+                "characters": [{"entity_id": item} for item in "abcd"]}
+    assert richer_last_successful(latest, previous, now=now) is previous
+    old = {**previous, "observed_at": (now - timedelta(seconds=61)).isoformat()}
+    assert richer_last_successful(latest, old, now=now) is latest
 
 
 def test_current_evidence_never_delivers_past_the_hard_cap():

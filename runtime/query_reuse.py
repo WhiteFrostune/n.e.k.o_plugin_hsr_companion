@@ -662,6 +662,10 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
         record_verified_regions(owner, {p[0] for p in patches}, latest.timestamp, serial=serial)
     result["last_verified_at"] = result["reuse"]["validated_at"]
     result["freshness_basis"] = "scoped_live_verification"
+    slots = getattr(owner, "_team_slot_states", None)
+    if slots:
+        from .observation_store import attach_team_roster
+        attach_team_roster(result, slots)
     trace_refresh(owner, "reuse_validated", original_age_seconds=round(age, 3),
                   stale=stale, age_seconds=result["age_seconds"])
     return result

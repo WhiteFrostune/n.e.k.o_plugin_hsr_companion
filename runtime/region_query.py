@@ -165,6 +165,11 @@ async def read_query_regions(owner, plan, deadline):
         **roster,
     }
     remember_region_plan(owner, plan_regions)
+    if page["page_type"] == "team_setup" and best_slots:
+        # A later stale fallback may only have a full-frame snapshot without
+        # slot states. Keep the last slot table so it can still mark a short
+        # old roster incomplete instead of presenting it as complete.
+        owner._team_slot_states = [dict(slot) for slot in best_slots]
     if roster and not roster["characters_complete"]:
         trace_refresh(owner, "team_roster_incomplete", read=roster["team_members_read"],
                       expected=roster["team_members_expected"],

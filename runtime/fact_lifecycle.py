@@ -56,6 +56,8 @@ def candidate_evidence(raw):
     value["freshness"] = "stale" if age > FRESH_LIVE_AGE_SECONDS else "fresh"
     if value["freshness"] == "stale":
         value["age_label"] = f"这是 {max(1, int(round(age)))} 秒前的画面，现在可能变了"
+        if not str(value.get("message") or "").startswith(value["age_label"]):
+            value["message"] = value["age_label"] + "：" + str(value.get("message") or "")
     return value
 
 

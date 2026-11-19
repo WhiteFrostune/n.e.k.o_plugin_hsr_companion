@@ -13,7 +13,7 @@ from ..detectors import analyze_layout
 from ..detectors.exploration import exploration_controls, navigation_boxes
 from ..detectors.layout import PAGE_RULES, classify_supported_page, scene_control_regions
 from ..detectors.scene_preview import scene_preview
-from ..detectors.team import assign_team_slots, infer_complete_team_rows, locate_team_rows
+from ..detectors.team import assign_team_slots, infer_complete_team_rows, locate_team_rows, slot_card_states
 from ..runtime.screen_facts import extract_screen_facts, safe_text
 from ..runtime.vision_trace import measure, record
 from ..session import visual_fingerprint
@@ -503,6 +503,10 @@ class LocalVisionAdapter:
                 text_details["relic_value_recheck"] = numeric_details
                 text_details.setdefault("backend_calls", []).extend(numeric_details["backend_calls"])
             rows = locate_team_rows(boxes, width=image.width, height=image.height)
+            if page_type == "team_setup":
+                # Keep a pixel-only slot table for later stale-fallback
+                # completeness checks; it does not claim empty means unread.
+                layout["recognition"]["team_slots"] = slot_card_states(image)
             portrait_status: dict[str, Any] = {"available": False, "reason": "portrait_pack_not_configured"}
             portrait_started = time.monotonic()
             check_current(cancelled)
