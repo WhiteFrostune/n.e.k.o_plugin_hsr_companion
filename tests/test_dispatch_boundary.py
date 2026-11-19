@@ -11,9 +11,8 @@ from plugin.plugins.hsr_companion.tests.test_current_observation import plugin_f
 
 
 def test_passive_manifest_does_not_disable_startup_or_direct_tools():
-    from plugin.sdk.plugin.llm_tool import collect_llm_tool_methods
-
     from plugin.plugins.hsr_companion import HsrCompanionPlugin
+    from plugin.sdk.plugin.llm_tool import collect_llm_tool_methods
 
     manifest = tomllib.loads((Path(__file__).resolve().parents[1] / "plugin.toml").read_text(encoding="utf-8"))
     assert manifest["plugin"]["passive"] is True
