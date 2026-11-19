@@ -3,7 +3,6 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image
-
 from plugin.plugins.hsr_companion.adapters.text_reader import read_region
 from plugin.plugins.hsr_companion.runtime.regions import cached_region_plan, region_plan, remember_region_plan
 

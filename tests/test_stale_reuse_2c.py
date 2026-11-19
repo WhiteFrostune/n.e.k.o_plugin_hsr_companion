@@ -1,12 +1,11 @@
 """2c: age policy, stale wording, and unknown-page clarification."""
 from datetime import datetime, timedelta, timezone
-
-from plugin.plugins.hsr_companion.runtime.answer_message import render_followup
 from types import SimpleNamespace
 
+from plugin.plugins.hsr_companion.detectors.team import TEAM_SLOT_CARDS
+from plugin.plugins.hsr_companion.runtime.answer_message import render_followup
 from plugin.plugins.hsr_companion.runtime.fact_lifecycle import candidate_evidence, current_evidence
 from plugin.plugins.hsr_companion.runtime.observation import public_visual_evidence
-from plugin.plugins.hsr_companion.detectors.team import TEAM_SLOT_CARDS
 from plugin.plugins.hsr_companion.runtime.observation_store import attach_team_roster, richer_last_successful
 from plugin.plugins.hsr_companion.runtime.query_coordinator import answer_status
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan

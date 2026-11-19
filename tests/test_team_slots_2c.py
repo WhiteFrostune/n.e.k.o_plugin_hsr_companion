@@ -1,6 +1,5 @@
 """2c: empty team cards are not missing members; only filled cards can be unread."""
 from PIL import Image, ImageDraw
-
 from plugin.plugins.hsr_companion.detectors.team import (
     TEAM_SLOT_CARDS,
     assign_slot_names,

@@ -4,7 +4,6 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image
-
 from plugin.plugins.hsr_companion.adapters.text_reader import QueryPreempted, read_native_text
 from plugin.plugins.hsr_companion.runtime.vision_scheduler import query_yield_requested
 

@@ -28,7 +28,6 @@ HOST_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(HOST_ROOT))
 
 from PIL import Image, ImageOps  # noqa: E402
-
 from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter  # noqa: E402
 from plugin.plugins.hsr_companion.adapters.text_reader import native_tiles  # noqa: E402
 from plugin.plugins.hsr_companion.assistant import VisionAssistantClient, VisionAssistantProcess  # noqa: E402
