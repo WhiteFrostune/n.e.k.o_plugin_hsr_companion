@@ -116,7 +116,7 @@ def test_ready_current_panel_keeps_only_current_totals_while_preserving_saved_ac
 
         owner._imported_roster = imported
         packet = await owner.hsr_companion_prepare(query=QUESTION, intent='assess_panel', consultation=SUBJECT)
-        assert packet['query_answer']['state'] == 'ready'
+        assert packet['query_answer']['state'] == 'ready', packet.get('query_timing')
         assert '3335' in json.dumps(packet['guidance_answer']['assessment'], ensure_ascii=False)
         assert '3132' not in json.dumps(packet, ensure_ascii=False)
         assert packet['guidance_answer']['imported_builds']['characters'][0]['light_cone']['superimposition'] == 1
