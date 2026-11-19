@@ -21,7 +21,7 @@ from plugin.sdk.plugin import Err, Ok
 # inside it. Isolate the PUBLIC facade, including awaiting its result, from the
 # plugin loop. The worker pool is shared; the pending-read state is per bus so
 # one owner's stuck transport cannot block another question.
-_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="hsr-activity")
+_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="hsr-activity")
 _states_lock = threading.Lock()
 _states = weakref.WeakKeyDictionary()
 _fallback_states = {}
