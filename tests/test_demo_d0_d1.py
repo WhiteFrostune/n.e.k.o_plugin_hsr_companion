@@ -30,6 +30,7 @@ def test_receipt_audits_sent_rows_not_recomputed_visual(channel):
     assert not hasattr(owner, "_delivery_value_trace")
 
 
+@pytest.mark.host_clock_guard
 def test_trace_opt_in_expiry_copies_exact_packet_and_never_retains_question(monkeypatch):
     clock = [100.0]
     monkeypatch.setattr(contract.time, "monotonic", lambda: clock[0])

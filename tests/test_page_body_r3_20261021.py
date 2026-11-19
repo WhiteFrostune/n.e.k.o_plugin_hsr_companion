@@ -23,6 +23,8 @@ from plugin.plugins.hsr_companion.tests.test_d1_subject_contract_20261020 import
 from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner
 
 ROOT = Path(__file__).resolve().parents[1]
+LIVE_ARTIFACTS = ("dist/roundtrip-d-live-20261021-2.json",)
+pytestmark = pytest.mark.live_artifact
 GOALS = ["取得胜利时,剩余10轮以上", "取得胜利时,剩余20轮以上", "没有角色无法战斗"]
 TITLE = "来生泅渡其十二"
 book, catalog = cases.book, cases.catalog

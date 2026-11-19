@@ -6,12 +6,14 @@ import asyncio
 import tomllib
 from pathlib import Path
 
+import pytest
 from plugin.plugins.hsr_companion.tests.test_current_observation import plugin_fixture
 
 
 def test_passive_manifest_does_not_disable_startup_or_direct_tools():
-    from plugin.plugins.hsr_companion import HsrCompanionPlugin
     from plugin.sdk.plugin.llm_tool import collect_llm_tool_methods
+
+    from plugin.plugins.hsr_companion import HsrCompanionPlugin
 
     manifest = tomllib.loads((Path(__file__).resolve().parents[1] / "plugin.toml").read_text(encoding="utf-8"))
     assert manifest["plugin"]["passive"] is True
@@ -21,6 +23,7 @@ def test_passive_manifest_does_not_disable_startup_or_direct_tools():
 
 
 def test_host_background_assessment_excludes_this_manifest_without_llm():
+    pytest.importorskip("brain.task_executor", reason="host brain module is not installed in this environment")
     from brain.task_executor import DirectTaskExecutor
 
     manifest = tomllib.loads((Path(__file__).resolve().parents[1] / "plugin.toml").read_text(encoding="utf-8"))

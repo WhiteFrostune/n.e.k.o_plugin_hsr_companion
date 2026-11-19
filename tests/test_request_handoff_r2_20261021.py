@@ -24,6 +24,8 @@ from plugin.plugins.hsr_companion.tests.test_review_policy_20261017 import resid
 
 offline = original.offline
 ROOT = Path(__file__).resolve().parents[1]
+LIVE_ARTIFACTS = ("dist/roundtrip-d-live-20261021-2.json",)
+pytestmark = pytest.mark.live_artifact
 
 
 @pytest.fixture(scope="module")

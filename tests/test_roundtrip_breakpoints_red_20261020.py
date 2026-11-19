@@ -30,8 +30,15 @@ from plugin.plugins.hsr_companion.scripts.replay_roundtrip_breakpoints import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-pytestmark = pytest.mark.skipif(os.environ.get('HSR_ROUNDTRIP_DIAGNOSTIC_RED') != '1',
-    reason='Opt-in saved-input regression; original RED reports remain immutable')
+LIVE_ARTIFACTS = (
+    "dist/page-roundtrip-live-20261020-2.json",
+    "dist/page-roundtrip-breakpoints-20261020-3.json",
+)
+pytestmark = [
+    pytest.mark.skipif(os.environ.get('HSR_ROUNDTRIP_DIAGNOSTIC_RED') != '1',
+                       reason='Opt-in saved-input regression; original RED reports remain immutable'),
+    pytest.mark.live_artifact,
+]
 
 
 @pytest.fixture(autouse=True)
