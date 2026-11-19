@@ -4,7 +4,7 @@ import threading
 import time
 from types import SimpleNamespace
 
-from plugin.plugins.hsr_companion.runtime.chat_activity import latest_user_activity
+from plugin.plugins.hsr_companion.runtime.chat_activity import _state_for, latest_user_activity
 
 
 def test_timed_out_read_does_not_block_the_next_question():
@@ -30,3 +30,23 @@ def test_timed_out_read_does_not_block_the_next_question():
         release.set()
 
     asyncio.run(run())
+
+
+def test_unhashable_bus_keeps_its_state_on_the_object():
+    """A recycled object id must not inherit a dead bus's pending read."""
+    bus = SimpleNamespace(memory=SimpleNamespace(get=lambda **_kw: []))
+    state = _state_for(bus)
+    assert _state_for(bus) is state
+    assert bus.__dict__.get("_hsr_companion_activity_state") is state
+
+
+def test_bus_that_cannot_store_state_never_shares_a_pending_read():
+    class SlottedBus:
+        __slots__ = ("memory",)
+
+        def __init__(self, get):
+            self.memory = SimpleNamespace(get=get)
+
+    bus = SlottedBus(get=lambda **_kw: [])
+    assert _state_for(bus) is not _state_for(bus)
+

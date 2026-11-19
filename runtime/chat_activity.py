@@ -24,7 +24,7 @@ from plugin.sdk.plugin import Err, Ok
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="hsr-activity")
 _states_lock = threading.Lock()
 _states = weakref.WeakKeyDictionary()
-_fallback_states = {}
+_STATE_ATTRIBUTE = "_hsr_companion_activity_state"
 
 
 class _ActivityState:
@@ -45,13 +45,20 @@ def _state_for(bus):
                 _states[bus] = state
             return state
         except TypeError:
-            # Unhashable compatibility bus: keep it out of the weak map.
-            key = id(bus)
-            state = _fallback_states.get(key)
-            if state is None:
-                state = _ActivityState()
-                _fallback_states[key] = state
-            return state
+            pass
+    # Some compatibility buses (e.g. SimpleNamespace) are unhashable and not
+    # weak-referenceable. Keying those by id() lets a recycled address inherit
+    # a dead bus's stuck read, so keep the state on the bus instead. If the bus
+    # cannot store it either, each call reads independently rather than
+    # blocking a later question on an unrelated review.
+    try:
+        state = getattr(bus, _STATE_ATTRIBUTE, None)
+        if state is None:
+            state = _ActivityState()
+            setattr(bus, _STATE_ATTRIBUTE, state)
+        return state
+    except (AttributeError, TypeError):
+        return _ActivityState()
 
 
 def user_record(record):
