@@ -25,8 +25,6 @@ from plugin.plugins.hsr_companion.tests.test_d1_subject_contract_20261020 import
 from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner
 
 ROOT = Path(__file__).resolve().parents[1]
-LIVE_ARTIFACTS = ("dist/roundtrip-d-live-20261021-2.json",)
-pytestmark = pytest.mark.live_artifact
 QUERY = "真珠这面板怎么样，接下来先养哪儿？"
 DECLARATION = {"scope": "current_panel", "subject_state": "specified", "character": "真珠"}
 HOST_PREVIEW = answer_message.bridge_preview
@@ -34,8 +32,9 @@ book, catalog = cases.book, cases.catalog
 
 
 @pytest.fixture(scope="module")
-def retained():
+def retained(require_live_artifact):
     freeze = json.loads((ROOT / "tests/fixtures/request_chain_r0_20261021.json").read_text(encoding="utf-8"))
+    require_live_artifact(freeze["record"])
     raw = (ROOT / freeze["record"]).read_bytes()
     expected = next(r["sha256"] for r in freeze["source_hashes"] if r["path"] == freeze["record"])
     assert hashlib.sha256(raw).hexdigest() == expected, "Never overwrite the original failed D run"

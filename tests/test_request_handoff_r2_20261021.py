@@ -24,12 +24,11 @@ from plugin.plugins.hsr_companion.tests.test_review_policy_20261017 import resid
 
 offline = original.offline
 ROOT = Path(__file__).resolve().parents[1]
-LIVE_ARTIFACTS = ("dist/roundtrip-d-live-20261021-2.json",)
-pytestmark = pytest.mark.live_artifact
 
 
 @pytest.fixture(scope="module")
-def retained_costs():
+def retained_costs(require_live_artifact):
+    require_live_artifact("dist/roundtrip-d-live-20261021-2.json")
     source = (ROOT / "dist/roundtrip-d-live-20261021-2.json").read_bytes()
     assert hashlib.sha256(source).hexdigest() == "42b85cb008812fac790ecfb3aa862b8ebd695c64b55bd674df187a38adcef153"
     record = json.loads(source)

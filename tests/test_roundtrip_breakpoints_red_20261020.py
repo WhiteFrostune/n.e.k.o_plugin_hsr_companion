@@ -30,15 +30,9 @@ from plugin.plugins.hsr_companion.scripts.replay_roundtrip_breakpoints import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-LIVE_ARTIFACTS = (
-    "dist/page-roundtrip-live-20261020-2.json",
-    "dist/page-roundtrip-breakpoints-20261020-3.json",
-)
-pytestmark = [
-    pytest.mark.skipif(os.environ.get('HSR_ROUNDTRIP_DIAGNOSTIC_RED') != '1',
-                       reason='Opt-in saved-input regression; original RED reports remain immutable'),
-    pytest.mark.live_artifact,
-]
+pytestmark = pytest.mark.skipif(
+    os.environ.get('HSR_ROUNDTRIP_DIAGNOSTIC_RED') != '1',
+    reason='Opt-in saved-input regression; original RED reports remain immutable')
 
 
 @pytest.fixture(autouse=True)
@@ -62,12 +56,14 @@ def local_text_channel(monkeypatch):
 
 
 @pytest.fixture(scope='module')
-def records():
+def records(require_live_artifact):
+    require_live_artifact('dist/page-roundtrip-live-20261020-2.json')
     return json.loads((ROOT / 'dist/page-roundtrip-live-20261020-2.json').read_text(encoding='utf-8'))
 
 
 @pytest.fixture(scope='module')
-def diagnosis():
+def diagnosis(require_live_artifact):
+    require_live_artifact('dist/page-roundtrip-breakpoints-20261020-3.json')
     return json.loads((ROOT / 'dist/page-roundtrip-breakpoints-20261020-3.json').read_text(encoding='utf-8'))
 
 

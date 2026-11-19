@@ -11,6 +11,15 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "host_clock_guard: skip when the host forbids stdlib clock patching")
 
 
+@pytest.fixture(scope="session")
+def require_live_artifact():
+    def check(*paths):
+        missing = [path for path in paths if not (ROOT / path).exists()]
+        if missing:
+            pytest.skip("local live artifact missing: " + ", ".join(missing))
+    return check
+
+
 def pytest_collection_modifyitems(config, items):
     host_root = Path(config.rootpath)
     host_clock_guard = (host_root / "tests" / "clock_guard.py").is_file() and host_root != ROOT

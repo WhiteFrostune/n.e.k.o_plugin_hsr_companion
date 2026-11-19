@@ -27,8 +27,6 @@ from plugin.plugins.hsr_companion.tests import test_guidance as cases
 from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner
 
 ROOT = Path(__file__).resolve().parents[1]
-LIVE_ARTIFACTS = ("dist/page-roundtrip-live-20261020-2.json",)
-pytestmark = pytest.mark.live_artifact
 book = cases.book
 catalog = cases.catalog
 HOST_PREVIEW = answer_message.bridge_preview
@@ -45,7 +43,8 @@ def offline(monkeypatch):
 
 
 @pytest.fixture(scope='module')
-def records():
+def records(require_live_artifact):
+    require_live_artifact('dist/page-roundtrip-live-20261020-2.json')
     return json.loads((ROOT / 'dist/page-roundtrip-live-20261020-2.json').read_text(encoding='utf-8'))
 
 

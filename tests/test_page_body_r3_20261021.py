@@ -23,8 +23,6 @@ from plugin.plugins.hsr_companion.tests.test_d1_subject_contract_20261020 import
 from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner
 
 ROOT = Path(__file__).resolve().parents[1]
-LIVE_ARTIFACTS = ("dist/roundtrip-d-live-20261021-2.json",)
-pytestmark = pytest.mark.live_artifact
 GOALS = ["取得胜利时,剩余10轮以上", "取得胜利时,剩余20轮以上", "没有角色无法战斗"]
 TITLE = "来生泅渡其十二"
 book, catalog = cases.book, cases.catalog
@@ -39,7 +37,8 @@ def offline(monkeypatch):
 
 
 @pytest.fixture(scope="module")
-def retained():
+def retained(require_live_artifact):
+    require_live_artifact("dist/roundtrip-d-live-20261021-2.json")
     raw = (ROOT / "dist/roundtrip-d-live-20261021-2.json").read_bytes()
     assert hashlib.sha256(raw).hexdigest() == "42b85cb008812fac790ecfb3aa862b8ebd695c64b55bd674df187a38adcef153"
     record = json.loads(raw)
@@ -317,7 +316,9 @@ def test_legacy_panel_fixture_identity_gap_is_unchanged_without_verbatim_extensi
         "panel_subject_state": "unconfirmed", "max_questions": 0}))
 
 
-def test_formatter_production_budget_then_original_short_budget(book, catalog, monkeypatch, record_property, offline):
+def test_formatter_production_budget_then_original_short_budget(book, catalog, monkeypatch, record_property, offline,
+                                                                require_live_artifact):
+    require_live_artifact("dist/roundtrip-d-live-20261021-2.json")
     # The retained three-second cold failure remains a failure. Compare the
     # actual production budget and then the unchanged old test in a warm process;
     # neither outcome can erase that earlier deadline/temperature observation.
