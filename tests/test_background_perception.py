@@ -73,7 +73,7 @@ def test_panel_keeps_necessary_helper_status_without_internal_details() -> None:
     source = (ROOT / panel["entry"]).read_text(encoding="utf-8")
     copy = (ROOT / "i18n/zh-CN.json").read_text(encoding="utf-8")
 
-    assert manifest["plugin"]["version"] == "0.9.6"
+    assert manifest["plugin"]["version"] == "0.9.7"
     assert panel["entry"] == "ui/panel_v09.tsx"
     assert "安装独立视觉组件" not in source
     assert "运行方式：" not in source

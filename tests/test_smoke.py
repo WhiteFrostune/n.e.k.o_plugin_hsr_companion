@@ -25,7 +25,7 @@ def test_plugin_version_metadata_and_panel_are_consistent() -> None:
     manifest = tomllib.loads((ROOT / "plugin.toml").read_text(encoding="utf-8"))
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     version = manifest["plugin"]["version"]
-    assert version == project["project"]["version"] == "0.9.6"
+    assert version == project["project"]["version"] == "0.9.7"
     assert manifest["plugin"]["ui"]["panel"][0]["title"].endswith(version)
     module = ast.parse((ROOT / "__init__.py").read_text(encoding="utf-8"))
     panel_versions = [value.value for node in ast.walk(module) if isinstance(node, ast.Dict)

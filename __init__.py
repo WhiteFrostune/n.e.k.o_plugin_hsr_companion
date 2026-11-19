@@ -45,6 +45,7 @@ from .game_state import (
 )
 from .observer import capture_game_window, find_hsr_window, frame_difference
 from .runtime import CompanionRuntime, build_event_delivery
+from .runtime.build_info import BUILD_COMMIT, PLUGIN_VERSION
 from .runtime.chat_activity import latest_user_activity
 from .runtime.consultation_contract import CONSULTATION_SCHEMA, bound_followup_plan, normalize_model_consultation
 from .runtime.data_freshness import data_freshness
@@ -415,6 +416,7 @@ class HsrCompanionPlugin(NekoPluginBase):
 
     @lifecycle(id="startup")
     async def startup(self, **_):
+        self.logger.info("hsr_companion version=%s commit=%s", PLUGIN_VERSION, BUILD_COMMIT)
         self._vision_closing = False
         legacy = getattr(self, "_legacy_store", None)
         if legacy is not None:
@@ -3246,7 +3248,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             self._guidance_book = book = load_guidance_catalog(Path(__file__).parent / "resources/guidance.cn-4.6.json")
         return {
             "status": "ready",
-            "version": "0.9.6",
+            "version": "0.9.7",
             "catalog": self._catalog.meta,
             "record_count": self._catalog.record_count,
             "database_coverage": self._catalog.coverage,

@@ -4,7 +4,7 @@ name = "星铁游戏搭子"
 description = "公开测试版：无需开启语音或视频通话，通过独立本地助手观察星铁窗口，把数据库校验过的场景与角色事实交给 N.E.K.O；识别仍可能遗漏，不操作游戏客户端。"
 short_description = "无需开启通话的星铁后台陪玩；独立感知、严格校验、识别失败不乱猜。"
 keywords = ["崩坏：星穹铁道", "星铁", "陪玩", "后台感知", "主动陪伴", "外部资料包", "页面识别", "角色识别", "玩家纠错", "玩家语境"]
-version = "0.9.6"
+version = "0.9.7"
 type = "plugin"
 # Direct LLM tools and our event stream remain active. Do not let the legacy
 # after-turn Agent re-dispatch a completed conversation as a background task.
@@ -384,7 +384,7 @@ enabled = true
 
 [[plugin.ui.panel]]
 id = "demo"
-title = "星铁游戏搭子 0.9.6"
+title = "星铁游戏搭子 0.9.7"
 entry = "ui/panel_v09.tsx"
 context = "demo"
 permissions = ["state:read", "action:call"]
