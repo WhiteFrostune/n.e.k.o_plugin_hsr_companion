@@ -9,11 +9,36 @@ from __future__ import annotations
 import copy
 import json
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
 from plugin.sdk.plugin import unwrap_or
 
+from .contracts import STALE_MAX_AGE_SECONDS
 from .observation import public_visual_evidence
+
+
+def richer_last_successful(latest, previous, *, now=None):
+    """A same-page older full read may be richer than a current partial commit.
+
+    This is still an old reading: the caller labels its age and the pixel
+    guards decide whether it can be used. It never merges rows.
+    """
+    if not isinstance(latest, dict) or not isinstance(previous, dict):
+        return latest
+    latest_page = str(((latest.get("page") or {}).get("page_type")) or "")
+    previous_page = str(((previous.get("page") or {}).get("page_type")) or "")
+    if not latest_page or latest_page != previous_page:
+        return latest
+    if len(previous.get("characters") or []) <= len(latest.get("characters") or []):
+        return latest
+    try:
+        captured = datetime.fromisoformat(str(previous.get("observed_at") or "").replace("Z", "+00:00"))
+        if captured.tzinfo is None:
+            captured = captured.replace(tzinfo=timezone.utc)
+        age = ((now or datetime.now(timezone.utc)) - captured).total_seconds()
+    except (TypeError, ValueError):
+        return latest
+    return previous if 0 <= age <= STALE_MAX_AGE_SECONDS else latest
 
 
 def field_projection(value, fields):
@@ -34,6 +59,34 @@ def field_projection(value, fields):
         elif name != "page":
             projection[name] = [f for f in facts if f.get("kind") in kinds.get(name, set()) or f.get("scope") == name]
     return json.dumps(projection, sort_keys=True, ensure_ascii=True)
+
+
+def richest_usable(latest, candidates, *, now=None):
+    """Pick the most complete same-page reading that is still within the cap."""
+    best = latest
+    for candidate in candidates:
+        best = richer_last_successful(best, candidate, now=now)
+    return best
+
+
+def attach_team_roster(latest, slots):
+    """Attach completeness to an old full frame using the last slot table."""
+    if not isinstance(latest, dict) or not slots:
+        return latest
+    page = str(((latest.get("page") or {}).get("page_type")) or "")
+    if page != "team_setup":
+        return latest
+    from ..detectors.team import assign_slot_names
+    from .contracts import team_roster_state
+
+    normalized = []
+    for slot in slots:
+        state = slot.get("state")
+        normalized.append({**slot, "state": "filled" if state in {"filled_named", "filled_unread"} else state})
+    named = [item for item in latest.get("characters") or [] if isinstance(item, dict) and item.get("region")]
+    assigned = assign_slot_names(normalized, named)
+    latest.update(team_roster_state(page, latest.get("characters"), slots=assigned))
+    return latest
 
 
 @dataclass(frozen=True)
@@ -89,6 +142,24 @@ class ObservationStore:
         epoch = getattr(owner, "_observation_epoch", 0)
         latest = getattr(owner, "_committed_observation", None)
         live_commit = latest is not None
+        candidates = [getattr(owner, "_last_successful_observation", None)]
+        reusable = getattr(owner, "_reusable_observations", {}) or {}
+        for key in ("full", "full_previous"):
+            snapshot = reusable.get(key)
+            if isinstance(snapshot, dict):
+                candidates.append(snapshot.get("evidence"))
+        chosen = richest_usable(latest, candidates)
+        if chosen is not latest:
+            latest = copy.deepcopy(chosen)
+            live_commit = False
+        slots = getattr(owner, "_team_slot_states", None)
+        if latest is not None and slots:
+            latest = copy.deepcopy(latest)
+            stable = set(((latest.get("runtime") or {}).get("stable_character_ids")) or ())
+            if stable:
+                latest["characters"] = [item for item in latest.get("characters") or []
+                                        if item.get("entity_id") in stable]
+            attach_team_roster(latest, slots)
         if latest is None:
             latest = unwrap_or(await owner._get_store("last_local_vision"), {})
         latest = getattr(owner, "_scene_preview", None) or latest
@@ -122,6 +193,9 @@ class ObservationStore:
         from .live_refresh import cancel_guard_review
         cancel_guard_review(owner)  # The new immutable commit owns its own proof work.
         owner._committed_observation = copy.deepcopy(analysis)
+        team_slots = (analysis.get("recognition") or {}).get("team_slots")
+        if team_slots:
+            owner._team_slot_states = copy.deepcopy(team_slots)
         owner._producer_validation = None  # Set atomically with live guards by the producer only.
         owner._live_field_verification = None
         owner._deferred_verification = None

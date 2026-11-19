@@ -46,6 +46,10 @@ def query_yield_requested(owner, request_generation, scope):
         return False
     if getattr(owner, "_query_refresh_deadline", 0) <= time.monotonic():
         return False
+    if getattr(owner, "_region_query_waiters", 0) > 0:
+        # A region query reads one small block and returns it; it does not
+        # restart the full pass, so even a full producer yields here.
+        return True
     if scope == "full":
         return False
     if scope == "scene":

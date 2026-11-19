@@ -24,17 +24,10 @@ from collections import Counter
 from io import BytesIO
 from pathlib import Path
 
+from PIL import Image, ImageOps
+
 HOST_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(HOST_ROOT))
-
-from PIL import Image, ImageOps  # noqa: E402
-
-from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter  # noqa: E402
-from plugin.plugins.hsr_companion.adapters.text_reader import native_tiles  # noqa: E402
-from plugin.plugins.hsr_companion.assistant import VisionAssistantClient, VisionAssistantProcess  # noqa: E402
-from plugin.plugins.hsr_companion.data import ExternalKnowledgeCatalog  # noqa: E402
-from plugin.plugins.hsr_companion.data.avatar_pack import AvatarTemplatePack  # noqa: E402
-from plugin.plugins.hsr_companion.data.vision_runtime import VisionMatchRuntime  # noqa: E402
 
 NUMBER = re.compile(r"\d+(?:[.,]\d+)?%?")
 
@@ -77,6 +70,8 @@ def dedupe(boxes: list[dict]) -> list[dict]:
 
 
 def tiled_boxes(backend, image: Image.Image) -> list[dict]:
+    from plugin.plugins.hsr_companion.adapters.text_reader import native_tiles
+
     result = []
     for left, top, right, bottom in native_tiles(*image.size):
         _, values = backend.extract_text_with_boxes(image.crop((left, top, right, bottom)))
@@ -128,6 +123,13 @@ def equipment_region(analysis: dict, override: tuple[float, float, float, float]
 
 
 def main() -> int:
+    from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter
+    from plugin.plugins.hsr_companion.adapters.text_reader import native_tiles
+    from plugin.plugins.hsr_companion.assistant import VisionAssistantClient, VisionAssistantProcess
+    from plugin.plugins.hsr_companion.data import ExternalKnowledgeCatalog
+    from plugin.plugins.hsr_companion.data.avatar_pack import AvatarTemplatePack
+    from plugin.plugins.hsr_companion.data.vision_runtime import VisionMatchRuntime
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples", type=int, default=5, help="measured samples per item (default 5)")
     parser.add_argument("--assistant-url", default="http://127.0.0.1:8219")

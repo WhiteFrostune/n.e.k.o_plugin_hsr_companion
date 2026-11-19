@@ -361,6 +361,29 @@ def read_native_text(
     )
 
 
+def read_region(backend: Any, image: Any, region: dict, *, cancelled=None, yield_requested=None) -> list[dict[str, Any]]:
+    """One native read of one already-derived region, returned in full-frame boxes."""
+    check_current(cancelled)
+    if yield_requested is not None and yield_requested():
+        raise QueryPreempted()
+    try:
+        left = max(0, int(float(region["left"]) * image.width))
+        top = max(0, int(float(region["top"]) * image.height))
+        right = min(image.width, int(float(region["right"]) * image.width))
+        bottom = min(image.height, int(float(region["bottom"]) * image.height))
+    except (KeyError, TypeError, ValueError):
+        return []
+    if right <= left or bottom <= top:
+        return []
+    _, values = backend.extract_text_with_boxes(image.crop((left, top, right, bottom)))
+    boxes = []
+    for value in values:
+        box = _box_value(value)
+        boxes.append({**box, "left": float(box["left"]) + left, "right": float(box["right"]) + left,
+                      "top": float(box["top"]) + top, "bottom": float(box["bottom"]) + top})
+    return _deduplicate(boxes)
+
+
 def verify_name_regions(backend, image, boxes, catalog, *, cancelled=None, read=None):
     """Re-read canonical label pixels, not a second expensive full screenshot.
 

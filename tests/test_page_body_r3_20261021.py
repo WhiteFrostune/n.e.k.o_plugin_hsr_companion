@@ -37,7 +37,8 @@ def offline(monkeypatch):
 
 
 @pytest.fixture(scope="module")
-def retained():
+def retained(require_live_artifact):
+    require_live_artifact("dist/roundtrip-d-live-20261021-2.json")
     raw = (ROOT / "dist/roundtrip-d-live-20261021-2.json").read_bytes()
     assert hashlib.sha256(raw).hexdigest() == "42b85cb008812fac790ecfb3aa862b8ebd695c64b55bd674df187a38adcef153"
     record = json.loads(raw)
@@ -315,7 +316,9 @@ def test_legacy_panel_fixture_identity_gap_is_unchanged_without_verbatim_extensi
         "panel_subject_state": "unconfirmed", "max_questions": 0}))
 
 
-def test_formatter_production_budget_then_original_short_budget(book, catalog, monkeypatch, record_property, offline):
+def test_formatter_production_budget_then_original_short_budget(book, catalog, monkeypatch, record_property, offline,
+                                                                require_live_artifact):
+    require_live_artifact("dist/roundtrip-d-live-20261021-2.json")
     # The retained three-second cold failure remains a failure. Compare the
     # actual production budget and then the unchanged old test in a warm process;
     # neither outcome can erase that earlier deadline/temperature observation.

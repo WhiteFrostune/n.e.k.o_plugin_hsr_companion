@@ -37,6 +37,17 @@ def real_sdk_bus(delay):
     transport = ControlledTransport(delay)
     raw_context = SimpleNamespace(plugin_id="hsr_companion", _plugin_comm_queue=object(),
                                   _zmq_ipc_client=transport)
+
+    async def send_request_and_wait_async(**kwargs):
+        response = transport.request({"type": kwargs["request_type"], **kwargs["request_data"]},
+                                     kwargs["timeout"])
+        if not isinstance(response, dict):
+            raise TimeoutError("controlled transport failure")
+        return response.get("result")
+
+    # Host main moved the request/wait plumbing onto the context; older
+    # checkouts call _zmq_ipc_client directly. Support both in this fake.
+    raw_context._send_request_and_wait_async = send_request_and_wait_async
     owner = object.__new__(NekoPluginBase)
     owner.ctx = SimpleNamespace(bus=SimpleNamespace(memory=MemoryClient(raw_context)))
     return owner.bus, transport
@@ -120,6 +131,59 @@ def test_reproduce_committed_text_result_rejected_only_by_capture_timestamp(tmp_
             assert committed["screen_facts"]["visible_text"] == [{"text": "规则说明"}]
         else:
             assert result is not None and result["scene"]["verified"]
+    asyncio.run(run())
+
+
+def test_activity_attempt_budget_is_shared_across_both_guards():
+    bus, transport = real_sdk_bus(0)
+    reads = []
+
+    def failed_transport(*args, **kwargs):
+        reads.append(1)
+        return None
+
+    transport.request = failed_transport
+    owner = SimpleNamespace(bus=bus, _observer_status={"enabled": True, "state": "observing"},
+                            _target_character=lambda: "reproduction-only",
+                            push_message=lambda **kw: None)
+    now = time.monotonic()
+    req = followup.AnswerRequest("budget", "q", "reproduction-only", time.time(), now, now + 2,
+                                 "unknown", False, False, True, False, plan=None)
+    owner._pending_answer = req
+
+    async def run():
+        first = await followup.checked_activity(owner, req, bus)
+        second = await followup.checked_activity(owner, req, bus)
+        assert first == ("unavailable", None) and second == ("unavailable", None)
+        assert 1 <= len(reads) <= followup.ACTIVITY_ATTEMPTS
+
+    asyncio.run(run())
+
+
+def test_ready_request_gets_at_most_one_recovery_probe():
+    bus, transport = real_sdk_bus(0)
+    reads = []
+
+    def failed_transport(*args, **kwargs):
+        reads.append(1)
+        return None
+
+    transport.request = failed_transport
+    owner = SimpleNamespace(bus=bus, _observer_status={"enabled": True, "state": "observing"},
+                            _target_character=lambda: "reproduction-only",
+                            push_message=lambda **kw: None)
+    now = time.monotonic()
+    req = followup.AnswerRequest("ready-budget", "q", "reproduction-only", time.time(), now, now + 4,
+                                 "unknown", False, False, True, False, plan=None)
+    owner._pending_answer = req
+
+    async def run():
+        first = await followup.checked_activity(owner, req, bus, allow_recovery=True)
+        second = await followup.checked_activity(owner, req, bus, allow_recovery=True)
+        third = await followup.checked_activity(owner, req, bus, allow_recovery=True)
+        assert first == second == third == ("unavailable", None)
+        assert 1 <= len(reads) <= 4
+
     asyncio.run(run())
 
 

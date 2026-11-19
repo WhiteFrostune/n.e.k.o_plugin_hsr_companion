@@ -81,12 +81,13 @@ def test_slow_newly_committed_candidate_enters_cache_before_live_review(tmp_path
         raw = navigation_raw()
         await commit_raw(owner, raw)
         owner._reusable_observations = {}
-        old = (datetime.now(timezone.utc) - timedelta(seconds=60)).isoformat()
+        # Stay inside the 60s stale cap; the read itself is still "slow".
+        old = (datetime.now(timezone.utc) - timedelta(seconds=55)).isoformat()
         await owner._apply_local_analysis(raw, observed_at=old, image_fingerprint="slow-read",
             source="assistant_local_ocr", deliver_event=False)
         assert owner._reusable_observations.get("navigation") is not None
         result = await query_reuse.try_reuse(owner, navigation=True,
-            plan=build_query_plan("现在在哪，接下来任务做什么"))
+            plan=build_query_plan("现在在哪，接下来任务做什么"), allow_stale=True)
         assert result is not None and result["observed_at"] == old
         assert result["reuse"]["validated_at"] != old  # Actual fresh capture proof.
         owner._assistant_client.fetch_frame = lambda seq: None
