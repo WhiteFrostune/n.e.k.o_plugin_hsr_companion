@@ -147,6 +147,9 @@ async def latest_user_activity(bus, *, target: str, now: float | None = None, li
                 state.abandoned_at = time.monotonic()
         raise
     except Exception:
+        import sys
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         with state.lock:
             if state.inflight is future and not future.done():
                 state.abandoned_at = time.monotonic()
