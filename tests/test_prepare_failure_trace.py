@@ -389,3 +389,45 @@ def test_out_of_bound_numbers_are_hashed_without_breaking_capture(value):
     captured = trace.capture_arguments(SimpleNamespace(), {"screen_fields": value})
     exported = trace.public_records([{"arguments": captured}])[0]["arguments"]["screen_fields"]
     assert exported["sha256"] and "value" not in exported
+
+
+def test_prepare_failure_forbids_reusing_the_previous_screen(tmp_path):
+    owner, _, _ = plugin_fixture(tmp_path)
+
+    async def run():
+        result = await owner.hsr_companion_prepare(
+            query=QUERY, intent="assess_relic",
+            consultation={**DECLARATION, "scope": "current_cone"})
+        assert result["is_error"] and "scope_intent_conflict" in result["output"]["reason"]
+        assert result["output"]["screen_read"] is False
+        assert "本轮没有读取当前画面" in result["output"]["instruction"]
+        assert "不能沿用" in result["output"]["instruction"]
+
+    asyncio.run(run())
+
+
+def test_stale_reference_build_with_team_guide_is_dropped():
+    from plugin.plugins.hsr_companion.runtime.consultation_contract import normalize_model_consultation
+
+    value = {"scope": "reference_build", "subject_state": "specified", "character": "真珠",
+             "topics": ["relic", "cone"], "answer_parts": ["assessment"]}
+    normalized, corrections = normalize_model_consultation(value, intent="team_guide")
+    assert normalized is None
+    assert corrections == [{
+        "reason": "stale_reference_build_for_team_dropped",
+        "original_scope": "reference_build",
+        "original_subject_state": "specified",
+        "intent": "team_guide",
+    }]
+
+
+def test_prepare_accepts_team_guide_with_stale_reference_build(tmp_path):
+    owner, _, _ = plugin_fixture(tmp_path)
+    value = {"scope": "reference_build", "subject_state": "specified", "character": "真珠",
+             "topics": ["relic", "cone"], "answer_parts": ["assessment"]}
+
+    async def run():
+        result = await owner.hsr_companion_prepare(query="这个队伍呢", intent="team_guide", consultation=value)
+        assert not result.get("is_error"), result
+
+    asyncio.run(run())

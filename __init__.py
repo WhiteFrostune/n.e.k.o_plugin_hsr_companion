@@ -733,6 +733,16 @@ class HsrCompanionPlugin(NekoPluginBase):
         corrections = await self._read_corrections()
         if epoch != getattr(self, "_observation_epoch", 0) or getattr(self, "_observer_stop_requested", False):
             return {"delivery": {"submitted": False, "reason": "observation_revoked"}}
+        recognition = analysis.get("recognition") or {}
+        if (recognition.get("yielded_for_query") is True
+                or (recognition.get("portrait_templates") or {}).get("reason") == "yielded_for_query"):
+            # A query may preempt the producer. The text-only frame is not a
+            # complete observation; keep the previous complete evidence and
+            # let the producer retry after the query.
+            trace_refresh(self, "candidate_retained", reason="yielded_for_query")
+            if hasattr(self, "_visual_update_event"):
+                self._visual_update_event.set()
+            return {"delivery": {"submitted": False, "reason": "analysis_yielded_incomplete"}}
         corrected_characters: list[dict[str, Any]] = []
         for candidate in list(analysis.get("characters") or []):
             if not isinstance(candidate, dict):
@@ -1349,6 +1359,10 @@ class HsrCompanionPlugin(NekoPluginBase):
                             else "plugin_compatibility_local_ocr"
                         ),
                     )
+                    if (local_result.get("delivery") or {}).get("reason") == "analysis_yielded_incomplete":
+                        self._set_observer_status("updating", "提问优先，保留上一次完整画面，稍后补读")
+                        await asyncio.sleep(.1)
+                        continue
                     trace_refresh(self, "commit_finished")
                     self._observer_last_signature = signature
                     self._observer_last_push_monotonic = time.monotonic()
@@ -2629,8 +2643,24 @@ class HsrCompanionPlugin(NekoPluginBase):
             mark_service_request(self, answer_generation, "completed")
             prepare_stage("payload")
             equipment_answer = equipment_card(current_visual) if "equipment" in query_plan.fields else {"state": "not_requested"}
+            equipment_notice = ""
+            verification_notice = ""
             if "equipment" in query_plan.fields:
                 record_handoff(self, equipment_answer, channel="direct")
+                if equipment_answer.get("complete") is False and equipment_answer.get("sub_stats_complete") is False:
+                    observed = int(equipment_answer.get("observed_sub_stat_count") or 0)
+                    expected = int(equipment_answer.get("expected_sub_stat_count") or 4)
+                    equipment_notice = (
+                        f"副词条只读到 {observed}/{expected} 条，缺项未读全，不补。"
+                        if observed < expected
+                        else "本次词条完整性未确认，缺项未读全，不补。"
+                    )
+                boundary = final_visual.get("delivery_boundary") or {}
+                stages = (query_observation.refresh or {}).get("stages") or []
+                if ("equipment" in (boundary.get("withheld_fields") or ())
+                        or any(stage.get("stage") == "text_verification"
+                               and stage.get("reason") == "unconfirmed" for stage in stages)):
+                    verification_notice = "主/副词条本次未通过核对，没读到，不要当成完整读数。"
             from .runtime.consultation import model_guidance
             payload = {
                 "response_contract": response_contract(self, answer_generation, channel="direct"),
@@ -2723,6 +2753,11 @@ class HsrCompanionPlugin(NekoPluginBase):
                     ) if scene_only_request or navigation_request else "",
                 },
             }
+            if equipment_notice or verification_notice:
+                notice = " ".join(item for item in (equipment_notice, verification_notice) if item)
+                answer = payload["query_answer"]
+                answer["instruction"] = (str(answer.get("instruction") or "") + " " + notice).strip()
+                payload["delivery_notice"] = notice
             from .runtime.equipment_reply import offer_equipment_reply
             payload["player_reply_contract"] = offer_equipment_reply(
                 self, current_visual, character_ids=resolved_guidance_plan.character_ids,
@@ -2746,8 +2781,16 @@ class HsrCompanionPlugin(NekoPluginBase):
         except (ValueError, RuntimeError) as exc:
             prepare_failure(exc)
             mark_service_request(self, answer_generation, "failed")
+            instruction = (
+                "本轮没有读取当前画面；不能沿用上一次的名单、属性或队伍作为当前画面回答。"
+                "请直接告诉玩家这次没读到，并询问是否再试。"
+            )
             return {
-                "output": {"reason": str(exc)},
+                "output": {
+                    "reason": str(exc),
+                    "screen_read": False,
+                    "instruction": instruction,
+                },
                 "is_error": True,
                 "error": "HSR_PREPARE_FAILED",
             }
