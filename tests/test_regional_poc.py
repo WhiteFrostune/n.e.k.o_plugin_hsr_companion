@@ -1,13 +1,12 @@
 """PoC methodology/geometry, NOT model accuracy or installed-host acceptance."""
+import threading
 from io import BytesIO
 from types import SimpleNamespace
-import threading
 
 import pytest
 from PIL import Image
-
 from plugin.plugins.hsr_companion.experiments.regional_reader import RegionalReader, select_regions, translate_boxes
-from plugin.plugins.hsr_companion.scripts.benchmark_regional_poc import arm_order, read_pair, focused
+from plugin.plugins.hsr_companion.scripts.benchmark_regional_poc import arm_order, focused, read_pair
 from plugin.plugins.hsr_companion.tests.test_relic_fields import relic_boxes
 from plugin.plugins.hsr_companion.tests.test_screen_facts import catalog
 

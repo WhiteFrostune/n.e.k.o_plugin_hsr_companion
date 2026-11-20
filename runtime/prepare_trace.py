@@ -19,6 +19,7 @@ from functools import wraps
 from pathlib import Path
 from uuid import uuid4
 
+from .consultation_contract import CORRECTION_REASONS, CURRENT_SCOPES
 from .query_plan import SCREEN_FIELDS, SEMANTIC_INTENTS
 
 STORE_KEY = "prepare_failure_records_v1"
@@ -29,12 +30,13 @@ _active = ContextVar("hsr_prepare_trace", default=None)
 STAGES = {"entry", "argument_binding", "initialization", "pending_reply", "equipment_reply", "query_plan",
           "guidance_catalog", "guidance_plan", "data_pack", "session", "player_context", "observation",
           "fact_projection", "grounding", "tool_audit", "delivery_boundary", "evaluation",
-          "request_completion", "followup_registration", "payload", "answer_delivery", "returned"}
+          "request_completion", "followup_registration", "payload", "answer_delivery", "returned",
+          "consultation_corrected"}
 ENUMS = set(SCREEN_FIELDS) | set(SEMANTIC_INTENTS) | {
     "conversation", "character_identity", "knowledge", "team", "profile", "correction", "game_state",
     "chat", "voice", "vision", "character", "light_cone", "relic", "brief", "full", "cone",
     "current_relic", "current_cone", "current_panel", "reference_build", "saved_cone", "inherit",
-    "specified", "unresolved", "rows", "assessment", "next_step", "options", "confirm", "cancel",
+    "specified", "unresolved", "current", "rows", "assessment", "next_step", "options", "confirm", "cancel",
     "new_request", "uncertain", "ascension", "trace", ""}
 ARGUMENTS = ("query", "intent", "observed_character_names", "modality", "category", "cultivation_plan",
              "screen_fields", "response_detail", "discussion_character", "consultation", "player_reply", "pending_reply")
@@ -49,7 +51,7 @@ ERROR_CODES = {"invalid_screen_fields", "invalid_response_detail", "missing_scre
                "subject_conflict", "internal_exception", "request_cancelled", "request_timeout", "tool_error"}
 STATES = {"ready", "partial", "unconfirmed", "paused", "capture_failed", "not_requested", "complete",
           "needs_evidence", "needs_subject", "needs_subject_binding", "subject_mismatch", "rules_unavailable",
-          "needs_source", "needs_saved_build", "needs_cone_data", "superseded"}
+          "needs_source", "needs_saved_build", "needs_cone_data", "superseded", "experiment_disabled"}
 
 
 def _digest(value):
@@ -131,7 +133,7 @@ def prepare_stage(stage, *, completed=False, snapshot=None, visual=None):
         if stage == "initialization":
             record["generation"] = getattr(active[0], "_answer_query_generation", None)
     if snapshot is not None and visual is not None:
-        from .equipment import equipment_card, equipment_digest
+        from .equipment_view import equipment_card, equipment_digest
         record["selection"] = {"epoch": snapshot.epoch, "serial": snapshot.serial}
         try:
             record["selection"].update(page_sha256=_digest(visual.get("page_type")), evidence_sha256=_digest(visual),
@@ -139,6 +141,19 @@ def prepare_stage(stage, *, completed=False, snapshot=None, visual=None):
         except Exception:
             # An optional diagnostic hash must never invalidate good evidence.
             record["selection_hash_available"] = False
+
+
+def prepare_correction(corrections):
+    active = _active.get()
+    if not active:
+        return
+    record = active[1]
+    rows = record.setdefault("corrections", [])
+    for item in corrections if isinstance(corrections, (list, tuple)) else ():
+        if isinstance(item, dict):
+            rows.append({key: item[key] for key in (
+                "reason", "original_scope", "original_subject_state",
+                "corrected_scope", "corrected_subject_state", "intent") if key in item})
 
 
 def prepare_failure(exc):
@@ -255,6 +270,19 @@ def public_records(records):
         record["selection"] = {k: v for k, v in selection.items() if (
             k in {"epoch", "serial"} and type(v) is int and v >= 0 or
             k in {"page_sha256", "evidence_sha256", "equipment_sha256"} and isinstance(v, str) and re.fullmatch(r"[a-f0-9]{64}", v))} if isinstance(selection, dict) else {}
+        corrections = row.get("corrections") if isinstance(row.get("corrections"), list) else []
+        record["corrections"] = [
+            {key: item.get(key) if isinstance(item.get(key), str) and item.get(key) in allowed else None
+             for key, allowed in (
+                 ("reason", CORRECTION_REASONS),
+                 ("original_scope", CURRENT_SCOPES),
+                 ("original_subject_state", {"inherit", "specified", "unresolved", "current", "legacy"}),
+                 ("corrected_scope", CURRENT_SCOPES),
+                 ("corrected_subject_state", {"inherit", "specified", "unresolved", "current"}),
+                 ("intent", ENUMS),
+             )}
+            for item in corrections[:4] if isinstance(item, dict)
+        ]
         result.append(record)
     return result
 

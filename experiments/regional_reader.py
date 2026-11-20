@@ -3,15 +3,15 @@
 No remembered names/items, game input or fallback full reader. Unknown is an
 experiment failure, not permission to infer a page from the user's question.
 """
-from io import BytesIO
 import math
 import time
+from io import BytesIO
 
 from ..adapters.text_reader import _box_value, check_current
-from ..detectors.layout import classify_supported_page
-from ..detectors.scene_preview import scene_preview, preview_regions
 from ..detectors.exploration import navigation_boxes
-from ..runtime.screen_facts import extract_screen_facts, _boxes, _relic_panel, safe_text
+from ..detectors.layout import classify_supported_page
+from ..detectors.scene_preview import preview_regions, scene_preview
+from ..runtime.screen_facts import _boxes, _relic_panel, extract_screen_facts, safe_text
 
 
 def translate_boxes(values, *, left=0, top=0, sx=1, sy=1):

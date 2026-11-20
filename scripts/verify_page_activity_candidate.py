@@ -74,7 +74,7 @@ async def verify(args):
     report = Path(args.report).resolve()
     if not report.is_relative_to(root / "dist") or report.exists():
         raise ValueError("A new plugin-owned report is required")
-    app = Path("C:/Users/USER/AppData/Local/N.E.K.O")
+    app = Path("C:/Users/cai/AppData/Local/N.E.K.O")
     installed = app / ".neko-plugin-installations/plugins/hsr_companion"
     pointer = app / "data-packs/hsr_companion/assistant/current.json"
     helper_root = pointer.parent

@@ -12,8 +12,6 @@ import unicodedata
 from typing import Any
 
 from ..data import normalize_lookup_text
-from ..detectors.relic_geometry import boundary_label, center_y, detail_column, unique_readings, upgrade_label
-from ..detectors.relic_labels import STAT_LABELS, label_key, label_text
 from ..detectors.exploration import (
     distinct_rows,
     exploration_controls,
@@ -22,6 +20,8 @@ from ..detectors.exploration import (
     navigation_boxes,
     task_stacks,
 )
+from ..detectors.relic_geometry import boundary_label, center_y, detail_column, unique_readings, upgrade_label
+from ..detectors.relic_labels import STAT_LABELS, label_key, label_text
 
 SCHEMA_VERSION = 1
 _UID = re.compile(r"(?i)\bUID\s*[:：]?\s*\d+")
@@ -388,7 +388,7 @@ def extract_screen_facts(boxes, *, width: int, height: int, page: dict, catalog:
 
 
 def public_screen_facts(value: object, *, fresh: bool, observed_at: str, serial: int = 0) -> dict:
-    from .equipment import equipment_card
+    from .equipment_view import equipment_card
     data = value if isinstance(value, dict) else {}
     return {
         "schema_version": SCHEMA_VERSION, "observed_at": observed_at, "observation_serial": serial,

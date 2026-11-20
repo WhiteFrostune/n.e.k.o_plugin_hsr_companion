@@ -1,0 +1,114 @@
+# Module-to-layer declaration for the v2 architecture.
+#
+# L1  capture + OCR boxes
+# L2a recognition (page / screen facts)
+# L2b observation state and scheduling
+# L3  question understanding
+# L4  analysis (pure functions)
+# L5  delivery
+#
+# Sidebars are shared by every layer: contracts, knowledge, trace.
+# The layering test resolves imports (including function-local imports) and
+# fails on any dependency not allowed by ALLOWED in tests/test_layering.py.
+
+[layers]
+L1 = [
+  "assistant.py",
+  "observer.py",
+  "vision.py",
+  "assistant_runtime/**/*.py",
+  "adapters/text_reader.py",
+  "adapters/upright_ocr.py",
+  "adapters/ocr_work_queue.py",
+]
+L2a = [
+  "detectors/**/*.py",
+  "adapters/__init__.py",
+  "adapters/local_vision.py",
+  "adapters/navigation_reader.py",
+  "adapters/relic_values.py",
+  "adapters/text_verification.py",
+  "runtime/screen_facts.py",
+  "runtime/regions.py",
+  "game_state.py",
+]
+L2b = [
+  "runtime/observation.py",
+  "runtime/observation_store.py",
+  "runtime/fact_lifecycle.py",
+  "runtime/delivery_scope.py",
+  "runtime/delivery_boundary.py",
+  "runtime/review_policy.py",
+  "runtime/query_reuse.py",
+  "runtime/page_handoff.py",
+  "runtime/manual_refresh.py",
+  "runtime/vision_scheduler.py",
+  "runtime/live_refresh.py",
+  "runtime/region_query.py",
+]
+L3 = [
+  "runtime/query_plan.py",
+  "runtime/consultation.py",
+  "runtime/consultation_contract.py",
+  "runtime/semantic_guidance.py",
+  "runtime/guidance.py",
+  "runtime/query_coordinator.py",
+  "runtime/pending_reply.py",
+  "runtime/request_completion.py",
+  "runtime/navigation.py",
+]
+L4 = [
+  "core.py",
+  "runtime/equipment.py",
+  "runtime/mechanics.py",
+  "runtime/challenge.py",
+  "runtime/team_overview.py",
+  "runtime/progression.py",
+  "runtime/saved_cone.py",
+  "runtime/data_freshness.py",
+  "runtime/grounding.py",
+  "runtime/player_builds.py",
+  "runtime/uid_import.py",
+  "runtime/uid_service.py",
+  "adapters/showcase.py",
+]
+L5 = [
+  "session.py",
+  "runtime/__init__.py",
+  "runtime/answer_message.py",
+  "runtime/page_message.py",
+  "runtime/cone_message.py",
+  "runtime/service_contract.py",
+  "runtime/followup.py",
+  "runtime/chat_activity.py",
+  "runtime/equipment_reply.py",
+  "runtime/arbiter.py",
+  "runtime/delivery.py",
+  "runtime/engine.py",
+  "runtime/speech.py",
+  "runtime/storage.py",
+]
+
+[sidebars]
+contracts = [
+  "runtime/contracts.py",
+  "runtime/build_info.py",
+  "runtime/equipment_view.py",
+]
+knowledge = [
+  "data/**/*.py",
+]
+trace = [
+  "runtime/diagnostic_export.py",
+  "runtime/diagnostic_reader.py",
+  "runtime/diagnostics.py",
+  "runtime/page_control_trace.py",
+  "runtime/prepare_trace.py",
+  "runtime/revocation_trace.py",
+  "runtime/vision_trace.py",
+]
+
+[entrypoints]
+paths = [
+  "__init__.py",
+]

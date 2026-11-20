@@ -1,7 +1,7 @@
 """A review runs in the producer thread between native calls, never alongside."""
-import threading
 import asyncio
-import time
+import threading
+
 import pytest
 
 
@@ -75,15 +75,16 @@ def test_failed_review_does_not_abort_or_unlock_the_producer():
 
 
 def test_formal_cache_review_finishes_while_resident_full_read_is_still_running(tmp_path):
+    from types import SimpleNamespace
+
     from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter, serial_ocr
     from plugin.plugins.hsr_companion.adapters.text_reader import check_current
     from plugin.plugins.hsr_companion.adapters.text_verification import proof_key
     from plugin.plugins.hsr_companion.runtime import live_refresh
     from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
     from plugin.plugins.hsr_companion.runtime.query_reuse import try_reuse
-    from plugin.plugins.hsr_companion.tests.test_review_policy_20261017 import resident_owner, changed_pixels, QUERY
-    from plugin.plugins.hsr_companion.tests.test_delivery_fix_20261012 import picture, frame, text_result
-    from types import SimpleNamespace
+    from plugin.plugins.hsr_companion.tests.test_delivery_fix_20261012 import frame, picture, text_result
+    from plugin.plugins.hsr_companion.tests.test_review_policy_20261017 import QUERY, changed_pixels, resident_owner
     entered, release = threading.Event(), threading.Event()
     threads, calls = [], []
     class Vision(LocalVisionAdapter):
@@ -127,15 +128,16 @@ def test_checkpoint_review_selects_changed_fields_from_execution_frame(tmp_path,
     authorize an unselected literal. Reproduces confirmed -> deferred at the
     handoff when a second region changes while the review waits.
     """
+    from types import SimpleNamespace
+
     from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter, serial_ocr
     from plugin.plugins.hsr_companion.adapters.text_reader import check_current
     from plugin.plugins.hsr_companion.adapters.text_verification import proof_key
     from plugin.plugins.hsr_companion.runtime import live_refresh
     from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
     from plugin.plugins.hsr_companion.runtime.query_reuse import try_reuse
-    from plugin.plugins.hsr_companion.tests.test_review_policy_20261017 import resident_owner, changed_pixels, QUERY
-    from plugin.plugins.hsr_companion.tests.test_delivery_fix_20261012 import picture, frame, text_result
-    from types import SimpleNamespace
+    from plugin.plugins.hsr_companion.tests.test_delivery_fix_20261012 import frame, picture, text_result
+    from plugin.plugins.hsr_companion.tests.test_review_policy_20261017 import QUERY, changed_pixels, resident_owner
     entered, release = threading.Event(), threading.Event()
     reviewed = []
 

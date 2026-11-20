@@ -63,6 +63,12 @@ def render_followup(data, *, plan, ready):
         if summary is not None:
             return summary
     essential = ["星铁同题补答：直接回答，不念核验过程，不用旧件，不追问。"]
+    if data.get("freshness") == "stale":
+        seconds = data.get("age_seconds")
+        label = data.get("age_label") or (
+            f"这是 {max(1, int(round(seconds)))} 秒前的画面，现在可能变了" if seconds is not None else "")
+        if label:
+            essential.insert(0, label + "：")
     optional = []
     carried = set()
     count = 0
@@ -134,8 +140,23 @@ def render_followup(data, *, plan, ready):
         if names:
             essential.append("角色：" + "、".join(names))
             count += len(names)
+            if data.get("characters_complete") is False or data.get("team_roster_known") is False:
+                read = data.get("team_members_read") or len(names)
+                expected = data.get("team_members_expected") or 4
+                if data.get("team_roster_known") is False:
+                    essential.append(
+                        f"名单未完全确认：只读到 {read}/{expected} 位；"
+                        "另有位置是空位还是漏读未确认，不当作完整队伍，也不断言空位。")
+                else:
+                    essential.append(
+                        f"名单不完整：只读到 {read}/{expected} 位队员，"
+                        "可能还有未识别队员；空位与漏识别不可区分，不当作完整队伍。")
     if "page" in plan.fields and (data.get("scene") or {}).get("verified") and data.get("page_type") not in {None, "unknown"}:
         essential.append("页面：" + _safe((data.get("scene") or {}).get("label") or data.get("page_type")))
+        count += 1
+    elif (data.get("page_type") == "unknown" and not data.get("characters")
+          and not (data.get("screen_facts") or {}).get("facts")):
+        essential.append("这个界面我还看不太懂，你想问哪一块？")
         count += 1
     if "visible_text" in plan.fields:
         # Quote untrusted page prose; never copy an OCR-provided instruction.

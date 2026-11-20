@@ -49,6 +49,7 @@ type CompanionState = {
   observation_display?: { current?: Visual; last_successful?: Visual; revision?: number }
   manual_refresh?: { state?: string; requested_at?: string; finished_at?: string; revision?: number; field_count?: number }
   proactive_companionship?: { enabled?: boolean }
+  experimental_features?: { idle_chatter_enabled?: boolean; extended_guidance_enabled?: boolean }
   data_pack?: { state?: string; installed?: boolean; update_available?: boolean; meta?: { game_version?: string; snapshot_date?: string } }
   avatar_pack?: { state?: string; installed?: boolean }
   last_operation?: { operation?: string; state?: string; message?: string }
@@ -141,7 +142,8 @@ export default function HsrCompanionPanel(props: PluginSurfaceProps<CompanionSta
   const roles = usable ? (visual.characters || []).map(item => item.name).filter(Boolean) : []
   const facts = usable ? (visual.screen_facts?.facts || []) : []
   const equipment = usable ? visual.screen_facts?.equipment_card : null
-  const proactive = state.proactive_companionship?.enabled !== false
+  const proactive = state.proactive_companionship?.enabled === true
+  const experiments = state.experimental_features || {}
   const dataPack = state.data_pack || {}
   const avatarPack = state.avatar_pack || {}
   const lastOperation = state.last_operation || {}
@@ -444,13 +446,21 @@ export default function HsrCompanionPanel(props: PluginSurfaceProps<CompanionSta
         </Stack>
       </Card>
 
-      <Card title={t("panel.proactive")}>
+      <Card title={t("panel.experiments")}>
         <Stack>
           <Text>{t(proactive ? "panel.proactiveOn" : "panel.proactiveOff")}</Text>
           <Button disabled={!!running} onClick={() => call("set_proactive_companionship", { enabled: !proactive }, "proactive", t(proactive ? "panel.proactiveOff" : "panel.proactiveOn"))}>
             {running === "proactive" ? t("panel.working") : t(proactive ? "panel.disableProactive" : "panel.enableProactive")}
           </Button>
           <Tip>{t("panel.proactiveHelp")}</Tip>
+          <Button disabled={!!running} onClick={() => call("set_experimental_features", { idle_chatter_enabled: !experiments.idle_chatter_enabled }, "experiments", t("panel.experimentsSaved"))}>
+            {t(experiments.idle_chatter_enabled ? "panel.disableIdleChatter" : "panel.enableIdleChatter")}
+          </Button>
+          <Tip>{t("panel.idleChatterHelp")}</Tip>
+          <Button disabled={!!running} onClick={() => call("set_experimental_features", { extended_guidance_enabled: !experiments.extended_guidance_enabled }, "experiments", t("panel.experimentsSaved"))}>
+            {t(experiments.extended_guidance_enabled ? "panel.disableExtendedGuidance" : "panel.enableExtendedGuidance")}
+          </Button>
+          <Tip>{t("panel.extendedGuidanceHelp")}</Tip>
         </Stack>
       </Card>
 

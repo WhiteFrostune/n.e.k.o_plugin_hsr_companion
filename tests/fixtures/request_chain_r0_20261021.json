@@ -1,0 +1,134 @@
+{
+  "schema_version": 1,
+  "baseline_build": "demo-roundtrip-handoff-20261021.1",
+  "scope": "R0_R1_request_lifecycle_only",
+  "source_hashes": [
+    {
+      "path": "__init__.py",
+      "sha256": "5d4ca482275eb8370ffc1aceaa2677cc0f9269c9fd75be4dd820e3631975aa20"
+    },
+    {
+      "path": "runtime/followup.py",
+      "sha256": "fc942ca4c80059bf954c8dfbb59eb98187dff7d6eb6da616937eb4d19117b4b5"
+    },
+    {
+      "path": "runtime/query_coordinator.py",
+      "sha256": "bb9eaa99fe435b54f375206ef82eaac3465ec77517a11c3a600292ba0e6f871c"
+    },
+    {
+      "path": "runtime/consultation_contract.py",
+      "sha256": "1b8dd0dd2db3c32f47663d829f169adb9629696e79ed818f4ef74463aeb0d656"
+    },
+    {
+      "path": "runtime/answer_message.py",
+      "sha256": "28f139b256efa1e6c130a3346f1be6be3bed71f68a0374f8f51402acb093640d"
+    },
+    {
+      "path": "runtime/page_handoff.py",
+      "sha256": "7d8a5ef23427961111f7e71e3e44e10cca0d0aeddc588ad350be307e99f250f3"
+    },
+    {
+      "path": "runtime/service_contract.py",
+      "sha256": "2a99194027f97354e384ff3bee109c0e5321052fba841fe6c919b81535e55dcb"
+    },
+    {
+      "path": "runtime/observation_store.py",
+      "sha256": "fceb37d8bd4ef433be18157faae5bf966fdcc03cb4357567b6f11ad58947d0be"
+    },
+    {
+      "path": "runtime/guidance.py",
+      "sha256": "be9074178689ec452407b39086b731def2e446173394e5f9d688bcca6a18a71f"
+    },
+    {
+      "path": "runtime/build_info.py",
+      "sha256": "7f5806b5e71194b78bb3c6e81d6f9729390d2e7a458a3e8d298e30ed43777912"
+    },
+    {
+      "path": "plugin.toml",
+      "sha256": "ba0e808f5d95b7e047df2009bd2c49cbac35133ca74b1b0f8faf5a25d442582b"
+    },
+    {
+      "path": "assistant.py",
+      "sha256": "a8bfe13ea99cdeec3ac37d641ecacd080c01bb326d8db2f271efd52ee3e9f03a"
+    },
+    {
+      "path": "assistant_runtime/server.py",
+      "sha256": "d6fdc599c9da99aa29f3ec76752751606e2e1f8126e1dc86385bb588c7ea4c39"
+    },
+    {
+      "path": "assistant_runtime/window_capture.py",
+      "sha256": "35b7981e4b358a41e882d4252ee110f5d12bbd5b28e794e27c3c65ae8e44d73a"
+    },
+    {
+      "path": "dist/roundtrip-d-live-20261021-2.json",
+      "sha256": "42b85cb008812fac790ecfb3aa862b8ebd695c64b55bd674df187a38adcef153"
+    }
+  ],
+  "record": "dist/roundtrip-d-live-20261021-2.json",
+  "frozen_requests": [
+    {
+      "phase": "attributes",
+      "intent": "assess_panel",
+      "screen_fields": [
+        "attributes"
+      ],
+      "consultation": {
+        "scope": "current_panel",
+        "subject_state": "specified",
+        "character": "真珠"
+      },
+      "observed": {
+        "direct_seconds": 8.078,
+        "total_seconds": 19.625,
+        "reading_complete": true,
+        "evaluation_complete": false,
+        "panel_subject_state": "unconfirmed"
+      }
+    },
+    {
+      "phase": "challenge",
+      "intent": "explain_page",
+      "screen_fields": [
+        "page",
+        "visible_text"
+      ],
+      "observed": {
+        "total_seconds": 13.187,
+        "mode": "transport_limited_notice",
+        "required_rows": 24,
+        "message_rows": 0
+      },
+      "deferred_to": "R3"
+    },
+    {
+      "phase": "probe",
+      "observed": {
+        "attempts": 6,
+        "total_seconds": 8.564,
+        "same_page": 5,
+        "request_obsolete": 1
+      },
+      "deferred_to": "R2"
+    }
+  ],
+  "preserve": [
+    "8 second direct wait",
+    "35 second original followup deadline",
+    "one partial and one final notification",
+    "same selected snapshot for reading, assessment and projection",
+    "full main stat plus four substats",
+    "changed character/equipment/value revocation",
+    "D2 no duplicate team members"
+  ],
+  "later_summary_acceptance": [
+    "verified page name",
+    "verified stage title",
+    "at least one verified stage explanation",
+    "not a zero-content capacity notice"
+  ],
+  "evidence_limits": [
+    "retained text and receipts, not a complete screenshot replay",
+    "lifecycle tests stub capture/IPC explicitly",
+    "not cat paraphrase or live page-switch acceptance"
+  ]
+}

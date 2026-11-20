@@ -2,15 +2,15 @@
   "meta": {
     "registry_id": "hsr-playable-character-registry-cn",
     "schema_version": 1,
-    "record_count": 88,
-    "snapshot_date": "2026-09-28",
+    "record_count": 89,
+    "snapshot_date": "2026-11-11",
     "upstream_name": "Mar-7th/StarRailRes",
     "upstream_url": "https://github.com/Mar-7th/StarRailRes",
-    "upstream_revision": "541e1100dcfe9a299c6bd500c6d3c4115e0451e4",
+    "upstream_revision": "03907e798b46f9eb109a1f882055cdf49ce3d374",
     "upstream_file": "index_min/cn/characters.json",
     "upstream_license": "AGPL-3.0-only",
-    "license_url": "https://github.com/Mar-7th/StarRailRes/blob/541e1100dcfe9a299c6bd500c6d3c4115e0451e4/LICENSE",
-    "official_version_reference": "https://hsr.hoyoverse.com/zh-cn/news/166468",
+    "license_url": "https://github.com/Mar-7th/StarRailRes/blob/03907e798b46f9eb109a1f882055cdf49ce3d374/LICENSE",
+    "official_version_reference": "https://www.hoyolab.com/article/47394097",
     "verification_status": "pinned_upstream_snapshot",
     "notice": "仅抽取角色ID、中文名称和检索标签；合并三月七与开拓者的多命途形态。未知名称严格拒绝，不做模糊猜测。"
   },
@@ -100,6 +100,7 @@
     {"source_ids":["1508"],"name":"远坂凛","tag":"tohsakarin","aliases":[]},
     {"source_ids":["1509"],"name":"吉尔伽美什","tag":"gilgamesh","aliases":[]},
     {"source_ids":["1510"],"name":"姬子•启行","tag":"himekonova","aliases":["姬子启行"]},
+    {"source_ids":["1511"],"name":"星神★阿哈","tag":"aeonaha","aliases":[]},
     {"source_ids":["1512"],"name":"知更鸟•晴歌","tag":"robinsummeretto","aliases":["知更鸟晴歌"]},
     {"source_ids":["1513"],"name":"砂金•戏浪","tag":"aventurinewaveflair","aliases":["砂金戏浪"]},
     {"source_ids":["8001","8002","8003","8004","8005","8006","8007","8008","8009","8010"],"name":"开拓者","tag":"trailblazer","aliases":["穹","星","物理主","火主","同谐主","记忆主","欢愉主"]}

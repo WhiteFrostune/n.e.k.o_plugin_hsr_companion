@@ -13,10 +13,12 @@ from ..detectors import analyze_layout
 from ..detectors.exploration import exploration_controls, navigation_boxes
 from ..detectors.layout import PAGE_RULES, classify_supported_page, scene_control_regions
 from ..detectors.scene_preview import scene_preview
-from ..detectors.team import assign_team_slots, infer_complete_team_rows, locate_team_rows
+from ..detectors.team import assign_team_slots, infer_complete_team_rows, locate_team_rows, slot_card_states
 from ..runtime.screen_facts import extract_screen_facts, safe_text
+from ..runtime.vision_trace import measure, record
 from ..session import visual_fingerprint
 from .text_reader import ObservationSuperseded, check_current, read_native_text
+from .text_reader import read_region as read_text_region
 
 
 def serial_ocr(method=None, *, cooperative=False):
@@ -47,6 +49,22 @@ def serial_ocr(method=None, *, cooperative=False):
     return run
 
 
+class _MeasuredOCR:
+    def __init__(self, backend, adapter):
+        self._backend = backend
+        self._adapter = adapter
+
+    def __getattr__(self, name):
+        method = getattr(self._backend, name)
+        if name not in {"extract_text_with_boxes", "recognize_line"}:
+            return method
+
+        def read(*args, **kwargs):
+            with measure(self._adapter, "ocr_call"):
+                return method(*args, **kwargs)
+        return read
+
+
 class LocalVisionAdapter:
     def __init__(
         self, catalog: StructuredCatalog, *, logger: Any | None = None, avatar_pack: Any | None = None
@@ -64,19 +82,22 @@ class LocalVisionAdapter:
         self._team_geometry: tuple[tuple[int, int], float, list[float]] | None = None
 
     def _get_backend(self) -> Any:
-        if self._backend is not None:
-            return self._backend
+        if self._backend is None:
+            with measure(self, "ocr_backend_setup"):
+                self._backend = _MeasuredOCR(self._load_backend(), self)
+        return self._backend
+
+    def _load_backend(self) -> Any:
         from .upright_ocr import UprightOCRBackend, verified_models
 
         root = self.catalog.root / "model-comparison" / "v5"
         try:
             if verified_models(root):
-                self._backend = UprightOCRBackend(root)
-                return self._backend
-        except (ImportError, RuntimeError, ValueError):
+                return UprightOCRBackend(root)
+        except (ImportError, RuntimeError, ValueError) as exc:
             # Optional isolated model/runtime unavailable: existing host OCR
             # remains usable. Never put v5 files into its default v4 cache.
-            pass
+            record(self, "ocr_backend_fallback", error_type=type(exc).__name__)
         from plugin.plugins._shared.rapidocr import (
             DEFAULT_RAPIDOCR_ENGINE_TYPE,
             DEFAULT_RAPIDOCR_LANG_TYPE,
@@ -85,7 +106,7 @@ class LocalVisionAdapter:
             RapidOcrBackend,
         )
 
-        self._backend = RapidOcrBackend(
+        return RapidOcrBackend(
             install_target_dir_raw="",
             engine_type=DEFAULT_RAPIDOCR_ENGINE_TYPE,
             lang_type=DEFAULT_RAPIDOCR_LANG_TYPE,
@@ -93,7 +114,6 @@ class LocalVisionAdapter:
             ocr_version=DEFAULT_RAPIDOCR_OCR_VERSION,
             plugin_id="hsr_companion",
         )
-        return self._backend
 
     def enqueue_review(self, callback):
         """Offer one short review at a native-call boundary, never another OCR worker."""
@@ -107,6 +127,14 @@ class LocalVisionAdapter:
         return exploration_control_evidence(boxes, width=width, height=height)[1]
 
     def status(self) -> dict[str, Any]:
+        if not self._inference_lock.acquire(blocking=False):
+            return {"backend": "neko_shared_rapidocr", "available": None, "state": "busy"}
+        try:
+            return self._status()
+        finally:
+            self._inference_lock.release()
+
+    def _status(self) -> dict[str, Any]:
         portrait_backend: dict[str, Any] = {"available": False, "method": "opencv_sift_ransac"}
         if self.avatar_pack is not None:
             try:
@@ -133,14 +161,31 @@ class LocalVisionAdapter:
                 "portrait_backend": portrait_backend,
             }
 
-    def analyze_live(self, image_bytes: bytes, *, cancelled, on_scene) -> dict[str, Any]:
-        return self.analyze(image_bytes, cancelled=cancelled, on_scene=on_scene)
+    def analyze_live(self, image_bytes: bytes, *, cancelled, on_scene, wants_relic=None, yield_requested=None) -> dict[str, Any]:
+        return self.analyze(image_bytes, cancelled=cancelled, on_scene=on_scene,
+                            **({"wants_relic": wants_relic} if wants_relic is not None else {}),
+                            **({"yield_requested": yield_requested} if yield_requested is not None else {}))
+
+    @serial_ocr
+    def read_region(self, image_bytes: bytes, regions: list, *, cancelled=None, yield_requested=None) -> list:
+        """Read already-derived normalized regions; never classify a new page."""
+        from PIL import Image, ImageOps
+
+        with Image.open(BytesIO(image_bytes)) as opened:
+            image = ImageOps.exif_transpose(opened).convert("RGB")
+        boxes = []
+        for region in list(regions)[:3]:
+            check_current(cancelled)
+            boxes.extend(read_text_region(self._get_backend(), image, region, cancelled=cancelled,
+                                          yield_requested=yield_requested))
+        return boxes
 
     @serial_ocr
     def verify_text_regions(self, image_bytes: bytes, proofs: list, *, cancelled=None, trace=None) -> set:
         from .text_verification import verify_text_regions
 
-        return verify_text_regions(self._get_backend(), image_bytes, proofs, cancelled=cancelled, trace=trace)
+        with measure(self, "ocr_verification"):
+            return verify_text_regions(self._get_backend(), image_bytes, proofs, cancelled=cancelled, trace=trace)
 
     def analyze_navigation(self, image_bytes: bytes, *, cancelled=None) -> dict[str, Any]:
         """One frame, scene plus native left HUD; no portrait/name pipeline."""
@@ -313,7 +358,8 @@ class LocalVisionAdapter:
         return result
 
     @serial_ocr(cooperative=True)
-    def analyze(self, image_bytes: bytes, *, cancelled=None, on_scene=None) -> dict[str, Any]:
+    def analyze(self, image_bytes: bytes, *, cancelled=None, on_scene=None, wants_relic=None,
+                yield_requested=None) -> dict[str, Any]:
         try:
             from PIL import Image, ImageOps
 
@@ -326,9 +372,12 @@ class LocalVisionAdapter:
             text_details: dict[str, Any] = {}
             sent_pages = set()
             scene_results = {}
+            probe_boxes = None
 
             def progress(boxes):
+                nonlocal probe_boxes
                 check_current(cancelled)
+                probe_boxes = boxes
                 if on_scene is None:
                     return
                 preview = scene_preview(boxes, width=image.width, height=image.height)
@@ -338,11 +387,78 @@ class LocalVisionAdapter:
                     scene_results[preview["page"]["page_type"]] = preview
                     on_scene(preview)
 
+            def accept_native_relic(boxes):
+                if wants_relic is None or not wants_relic():
+                    return False
+                from ..detectors.relic_geometry import detail_column
+                from ..runtime.screen_facts import _boxes, _relic_panel, relic_stat_rows
+
+                preview = scene_results.get("relic_detail")
+                if preview is not None and preview["page"].get("confidence") == "high":
+                    page_ok = True
+                else:
+                    page = classify_supported_page("\n".join(b["text"] for b in boxes), boxes,
+                                                   width=image.width, height=image.height)
+                    page_ok = page["page_type"] == "relic_detail" and page["confidence"] == "high"
+                if not page_ok:
+                    return False
+                native = _boxes(boxes, image.width, image.height)
+                panel = _relic_panel(native)
+                return bool(panel and relic_stat_rows(detail_column(native, *panel)) and wants_relic(claim=True))
+
+            def relic_tiles(tiles):
+                preview = scene_results.get("relic_detail")
+                if (probe_boxes is None or preview is None
+                        or preview["page"].get("confidence") != "high"):
+                    return None
+                from ..detectors.relic_geometry import detail_column
+                from ..runtime.screen_facts import _boxes, _relic_panel
+
+                native = _boxes(probe_boxes, image.width, image.height)
+                panel = _relic_panel(native)
+                if panel is None:
+                    return None
+                part, end = panel
+                column = detail_column(native, part, end)
+                if not column:
+                    return None
+                left = min(part["left"], *(item["left"] for item in column))
+                right = max(end["right"], *(item["right"] for item in column))
+                top = min(part["top"], *(item["top"] for item in column))
+                bottom = max(end["bottom"], *(item["bottom"] for item in column))
+                ranked = []
+                for index, (tile_left, tile_top, tile_right, tile_bottom) in enumerate(tiles):
+                    width = max(0, min(tile_right, right) - max(tile_left, left))
+                    height = max(0, min(tile_bottom, bottom) - max(tile_top, top))
+                    if width and height:
+                        ranked.append((width * height, index))
+                ranked.sort(key=lambda item: (-item[0], item[1]))
+                if not ranked:
+                    return None
+                terms = {normalize_lookup_text(term) for rule in PAGE_RULES
+                         for term in (*rule["strong"], *rule["anchors"])}
+                header = []
+                for item in native:
+                    if (self.catalog.resolve_character(item["text"]) is None
+                            and normalize_lookup_text(item["text"]) not in terms):
+                        continue
+                    cx = (item["left"] + item["right"]) / 2
+                    cy = (item["top"] + item["bottom"]) / 2
+                    for index, (tile_left, tile_top, tile_right, tile_bottom) in enumerate(tiles):
+                        if tile_left <= cx <= tile_right and tile_top <= cy <= tile_bottom:
+                            header.append(index)
+                            break
+                header = list(dict.fromkeys(header))
+                return [*header, *(index for _, index in ranked if index not in set(header))] or None
+
             try:
                 text, boxes, text_details = read_native_text(
                     self._get_backend(), image, catalog=self.catalog, cancelled=cancelled,
                     on_progress=progress if on_scene is not None else None,
                     verify_names=True,
+                    yield_requested=yield_requested,
+                    **({"accept_native_relic": accept_native_relic, "relic_tiles": relic_tiles}
+                       if wants_relic is not None else {}),
                 )
             except ObservationSuperseded:
                 raise
@@ -387,16 +503,25 @@ class LocalVisionAdapter:
                 text_details["relic_value_recheck"] = numeric_details
                 text_details.setdefault("backend_calls", []).extend(numeric_details["backend_calls"])
             rows = locate_team_rows(boxes, width=image.width, height=image.height)
+            if page_type == "team_setup":
+                # Keep a pixel-only slot table for later stale-fallback
+                # completeness checks; it does not claim empty means unread.
+                layout["recognition"]["team_slots"] = slot_card_states(image)
             portrait_status: dict[str, Any] = {"available": False, "reason": "portrait_pack_not_configured"}
             portrait_started = time.monotonic()
             check_current(cancelled)
-            if self.avatar_pack is not None:
+            yielding = callable(yield_requested) and yield_requested()
+            if self.avatar_pack is not None and not text_details.get("relic_priority") and not yielding:
                 portraits, portrait_status = self.avatar_pack.match(image, page_type=page_type, rows=rows)
                 check_current(cancelled)
                 layout["characters"], conflicts = merge_character_evidence(
                     layout["characters"], portraits, self.catalog
                 )
                 portrait_status["conflicting_slots"] = conflicts
+            elif yielding:
+                portrait_status = {"available": False, "reason": "yielded_for_query"}
+                if self.avatar_pack is not None and not text_details.get("relic_priority"):
+                    layout["recognition"]["yielded_for_query"] = True
             portrait_seconds = time.monotonic() - portrait_started
             if page_type in {"unknown", "exploration_hud", "map_or_quest"}:
                 rows = rows or infer_complete_team_rows(layout["characters"], height=image.height)
@@ -463,6 +588,12 @@ class LocalVisionAdapter:
                 except (TypeError, ValueError, OSError):
                     pass
             self._last_error = ocr_error
+            facts = extract_screen_facts(
+                boxes, width=image.width, height=image.height, page=layout["page"], catalog=self.catalog,
+            )
+            if text_details.get("relic_priority"):
+                facts = {**facts, "facts": [f for f in facts["facts"] if f["scope"] == "equipment"],
+                         "visible_text": [], "unclassified_text": []}
             return {
                 "ok": not ocr_error or bool(layout["characters"]),
                 "ocr": {
@@ -476,9 +607,7 @@ class LocalVisionAdapter:
                 "scene": layout["scene"],
                 "characters": layout["characters"],
                 "recognition": layout["recognition"],
-                "screen_facts": extract_screen_facts(
-                    boxes, width=image.width, height=image.height, page=layout["page"], catalog=self.catalog,
-                ),
+                "screen_facts": facts,
                 "image_stored": False,
                 "catalog_revision": self.catalog.revision,
             }

@@ -6,6 +6,7 @@ import hashlib
 import importlib
 import json
 import os
+import re
 import tomllib
 import urllib.error
 import zipfile
@@ -72,7 +73,7 @@ def test_panel_keeps_necessary_helper_status_without_internal_details() -> None:
     source = (ROOT / panel["entry"]).read_text(encoding="utf-8")
     copy = (ROOT / "i18n/zh-CN.json").read_text(encoding="utf-8")
 
-    assert manifest["plugin"]["version"] == "0.9.6"
+    assert manifest["plugin"]["version"] == "0.9.7"
     assert panel["entry"] == "ui/panel_v09.tsx"
     assert "安装独立视觉组件" not in source
     assert "运行方式：" not in source
@@ -80,11 +81,13 @@ def test_panel_keeps_necessary_helper_status_without_internal_details() -> None:
     for text in ("无需开启语音或视频通话", "未下载独立助手", "正在运行", "启动失败或已退出",
                  "进程已启动，尚未连接", "重试下载视觉助手", "刷新状态"):
         assert text in copy
-    assert 't("panel.privacyHelp")' in source[source.index('<Accordion title={t("panel.help")}>'):]
+    help_section = re.search(r'<Accordion\b[^>]*title=\{t\("panel\.help"\)\}[^>]*>(.*?)</Accordion>',
+                             source, re.S)
+    assert help_section and 't("panel.privacyHelp")' in help_section.group(1)
     assert "submit_game_screenshot" not in source
     assert "submit_roster_screenshot" not in source
     assert "test_proactive_message" not in source
-    proactive_section = source[source.index('<Card title={t("panel.proactive")}>'):source.index('<Card title={t("diagnostics.title")}>')]
+    proactive_section = source[source.index('<Card title={t("panel.experiments")}>'):source.index('<Card title={t("diagnostics.title")}>')]
     assert "set_proactive_companionship" in proactive_section
 
 

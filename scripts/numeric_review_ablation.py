@@ -1,8 +1,8 @@
 """Same in-memory frame/proof, line recognizer vs detector+recognizer. Diagnostic only."""
-from io import BytesIO
 import hashlib
 import math
 import time
+from io import BytesIO
 
 
 def compare(adapter, payload, proof):

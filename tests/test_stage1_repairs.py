@@ -131,13 +131,14 @@ def test_entry_mixed_question_then_short_followup_preserves_state_not_profile(tm
         changed = await owner.hsr_companion_prepare(query="我有专了，这个遗器要换吗？")
         assert not changed["guidance_answer"]["player_conditions"]["signature_excluded"]
         follow = await owner.hsr_companion_prepare(query="这个呢")
-        assert follow["guidance_answer"]["guides"][0]["name"] == "真珠"
+        assert follow["guidance_answer"]["assessment"]["subject_ids"] == ["character.pearl"]
+        assert follow["guidance_answer"]["reply_plan"]["goal"] == "assess"
         assert follow["query_plan"]["screen"]
         assert follow["guidance_answer"]["assessment"]["state"] == "unconfirmed"
         assert values["player_context"] == profile_before
         await owner.hsr_companion_prepare(query="今天好开心")
         cleared = await owner.hsr_companion_prepare(query="这个呢")
-        assert not cleared["guidance_answer"].get("guides")
+        assert not cleared["guidance_answer"].get("assessment", {}).get("subject_ids")
 
     asyncio.run(run())
 
@@ -168,7 +169,10 @@ def test_followup_waits_for_stats_and_sends_same_demand_once(book, catalog, monk
     demand = cases.plan(query, book, catalog)
     observation = demand.observation_plan(build_query_plan(query))
     partial = visual(fact("equipment_slot", "遗器部位", "脚部"))
-    ready = visual(fact("main_stat", "主词条·速度", "25"), fact("sub_stat", "副词条·防御力", "12.9%"),
+    # A later whole packet owns its slot and numbers. The partial packet's
+    # slot must never be pasted onto the final packet to enable assessment.
+    ready = visual(fact("equipment_slot", "遗器部位", "脚部"),
+                   fact("main_stat", "主词条·速度", "25"), fact("sub_stat", "副词条·防御力", "12.9%"),
                    fact("sub_stat", "副词条·暴击率", "3%"), fact("sub_stat", "副词条·生命值", "80"),
                    fact("sub_stat", "副词条·效果抵抗", "5%"))
     owner, sent = followup_owner(monkeypatch, value=ready)
@@ -186,9 +190,13 @@ def test_followup_waits_for_stats_and_sends_same_demand_once(book, catalog, monk
     text = sent[0]["parts"][0]["text"]
     from utils.result_parser import parse_push_message_content
     received = parse_push_message_content(text, lang="zh")
-    assert "速度25" in received and "防御力12.9%" in received
-    assert not owner._test_answer_payloads[-1]["guidance_answer"]["assessment"]["evaluation_available"]
-    assert "适配评价未核验" in received
+    delivered = owner._test_answer_payloads[-1]
+    assert delivered["equipment_answer"]["main_stat"]["value"] == "25"
+    assert delivered["equipment_answer"]["sub_stats"][0]["value"] == "12.9%"
+    assert delivered["guidance_answer"]["assessment"]["evaluation_available"]
+    assert delivered["request_completion"]["delivered_complete"]
+    assert "真珠" in received and "依据：" in received
+    assert "速度25" not in received and "防御力12.9%" not in received
     assert owner._guidance_context["request_focus"] == "equipment"
 
 

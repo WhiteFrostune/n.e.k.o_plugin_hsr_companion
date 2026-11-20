@@ -15,7 +15,6 @@ def emit(value):
 
 def profile(url, samples, codecs):
     from PIL import Image, features
-
     from plugin.plugins.hsr_companion.assistant import VisionAssistantClient
 
     client = VisionAssistantClient(base_url=url)

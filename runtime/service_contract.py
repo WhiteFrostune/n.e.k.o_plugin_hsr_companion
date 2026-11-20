@@ -9,16 +9,11 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 PREPARE_TOOL_DESCRIPTION = (
-    "星铁统一入口：画面、角色、任务、遗器光锥与配队；答前调用，query保留原话，追问补数也调用。"
-    "精确intent选目的，read_screen传必要screen_fields。"
-    "眼前装备/面板用评价intent，传consultation且scope匹配；存档光锥用saved_cone，不读屏；"
-    "subject_state选inherit沿用、specified指定、unresolved未解析；指定时填规范character。"
-    "discussion_character兼容旧调用；讨论对象不是视觉身份。换件沿用目的与角色，不沿用旧词条。"
-    "通用配装用build_guide/equipment_guide，不强制读屏；consultation.topics声明实际主题，可并列，排除不要的。"
-    "answer_parts声明玩家要听的内容，不是内部读取需求；rows只与完整逐项需求的response_detail=full配套。"
-    "equipment_answer取原值，guidance_answer.reply_plan给评价；completion分开读数/评价，完整词条不漏。"
-    "缺角色先澄清；followup.pending才有补答。待办确认/取消按pending_reply_contract传pending_reply，不重启查询；新需求正常调用。"
-    "遗器补数用player_reply传本条原话，不当视觉确认。答完交还话轮。"
+    "星铁答前调用，query保留原话。只读遗器词条用read_screen+equipment、full；适配才用assess_relic。"
+    "光锥区分当前与saved_cone；通用培养用reference_build；按档案推荐一队直接用team_guide，无需预查档案或读屏。"
+    "评价声明scope和subject_state；discussion_character是讨论对象提示。换件只继承角色和目的。"
+    "普通评价按reply_plan答重点。完整请求用full，词条按equipment_answer原值。缺评价角色先澄清。"
+    "仅followup.pending=true才有补答；待办确认和取消用pending_reply；玩家补数用player_reply。"
 )
 
 SERVICE_ROUTING_RULE = (
@@ -29,6 +24,7 @@ SERVICE_ROUTING_RULE = (
     "装备/面板需求中的‘看看’‘这个呢’继续原需求；只认部位或套装不等于读到词条，不能凭资料候选宣布适配。"
     "discussion_character只携带先前已明确的讨论对象，不是当前画面事实。"
     "评价眼前遗器/光锥/面板分别用assess_relic/assess_cone/assess_panel，并传consultation的对应scope。"
+    "只报遗器词条用read_screen与equipment，不要求角色。按档案推荐阵容用team_guide、无需读屏，直接使用返回的候选与缺项。"
     "问存档配队中某角色的光锥影响用assess_cone或continue_consultation，scope=saved_cone，specified填角色；"
     "不要因出现‘这把光锥’就用current_cone。只有明确问眼前装备才声明current_cone；来源不明先澄清。"
     "讨论过期后，明确角色的saved_cone重新查本次档案；仅指‘这队/她’不能复活过期名单，也不能改成读屏。"
@@ -43,7 +39,7 @@ SERVICE_ROUTING_RULE = (
     "报出的装备词条以本次equipment_answer原值为准，保留数值与百分号；缺行不补，推荐词条不是实际词条。"
     "表达范围统一按guidance_answer.reply_plan；consultation.topics声明本题需要的主题（可并列、排除不要的），"
     "answer_parts声明玩家要听的评价、下一步或候选；需要完整数据来判断不等于要求朗读数据。"
-    "明确读数用rows及response_detail=full，完整/逐项请求仍列全已确认项。"
+    "明确读数用response_detail=full；同时要求评价时用rows和assessment，完整/逐项请求仍列全已确认项。"
     "咨询中玩家补充循环、输出或生存需求仍调用统一入口，不重新背整篇配装。"
     "重点/怎么养等自然追问沿用仍有效的咨询对象；需求已回答就交还话轮，不把可选资料缺失或等待玩家回答变成补答。"
     "属性多少合适及随后玩家补数也调用；玩家数值不是画面，未提供阈值不编数值目标或宣称越高越好。"
@@ -98,6 +94,8 @@ def response_contract(owner, generation, *, channel, request_id=None):
         "current_equipment_rule": "this_request_snapshot_not_discussion_history",
         "external_task_control": "not_available", "ack_scope": "plugin_payload_not_host_speech",
         "instruction": "本包是这个问题的插件结果；补答替换同题旧的未确认状态，不开启第二个任务。"
+                       "首答等待未读到当前画面时先说‘稍等我看一下’，不要道歉、不要让玩家移动光标；"
+                       "后台补答沿用原题详细程度。"
                        "后台网页不能补齐当前装备读数；未另有明确联网请求时，不为本包已回答或已登记补答的事项再派相同查询。"
                        "桌面重新加载不是删除玩家资料或重置插件讨论；不能把旧讨论装备当作现在画面。",
     }
@@ -148,7 +146,7 @@ def record_answer_delivery(owner, *, generation, channel, payload, visual, answe
     a constructed plugin return, followup means an SDK submission attempt.
     Neither is a receipt for host generation, playback or transcription.
     """
-    from .equipment import equipment_card, equipment_digest, equipment_exact_text, handoff_receipt
+    from .equipment_view import equipment_card, equipment_digest, equipment_exact_text, handoff_receipt
     selected = equipment_card(visual)
     requested = isinstance(payload.get("equipment_answer"), dict) and payload["equipment_answer"].get("state") != "not_requested"
     sent = copy.deepcopy(payload["equipment_answer"]) if requested else equipment_card({"fresh": False})

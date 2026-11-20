@@ -7,9 +7,9 @@ import argparse
 import asyncio
 import io
 import json
-from pathlib import Path
-from contextlib import redirect_stdout
 import sys
+from contextlib import redirect_stdout
+from pathlib import Path
 from types import SimpleNamespace
 
 

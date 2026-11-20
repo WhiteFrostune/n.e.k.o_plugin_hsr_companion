@@ -5,7 +5,7 @@ import copy
 from dataclasses import replace
 
 from ..adapters.text_verification import identity_literal
-from .equipment import equipment_card
+from .equipment_view import equipment_card
 
 
 def coordinates(item):
@@ -30,6 +30,10 @@ def project_evidence(evidence, plan):
         subjects = [a for a in value.get("characters") or [] if a.get("identity_scope") == "detail_subject"] if "attributes" in plan.fields else []
         value.update(characters=subjects, team=[], controlled_character=None, can_answer_character_identity=False,
                      identity_list_complete=False)
+    if (value.get("equipment_complete") and not value.get("characters")
+            and not value.get("page_characters")
+            and value.get("failure_reason") in {"", None, "ocr_incomplete"}):
+        value["failure_reason"] = "character_pending"
     value["text_coverage_complete"] = False
     return value
 

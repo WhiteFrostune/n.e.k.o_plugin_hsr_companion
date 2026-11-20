@@ -8,12 +8,12 @@ drains so it cannot contaminate the formal query's scheduling.
 import argparse
 import asyncio
 import copy
-from datetime import datetime, timezone
 import hashlib
 import json
 import logging
-from pathlib import Path
 import time
+from datetime import datetime
+from pathlib import Path
 
 
 async def audit(args):
@@ -172,8 +172,9 @@ async def audit(args):
             row = next((p for p in fact.get("evidence", []) if p.get("text") == "速度"), None)
             table = next((v.get("search_crop") for v in fact.get("value_verification", []) if v.get("search_crop")), None)
             if table is None and row:
-                from PIL import Image
                 from io import BytesIO
+
+                from PIL import Image
                 with Image.open(BytesIO(payload)) as image:
                     width, height = image.size
                 bounds = next((v.get("crop") for v in fact.get("value_verification", [])
@@ -184,8 +185,9 @@ async def audit(args):
                     table = [max(r["right"] * width + rh, bounds[0] + (bounds[2]-bounds[0])*.55),
                              r["top"] * height - rh*.15, bounds[2], r["bottom"] * height + rh*.15]
             if proof and table:
-                from PIL import Image
                 from io import BytesIO
+
+                from PIL import Image
                 with Image.open(BytesIO(payload)) as image:
                     width, height = image.size
                 wide = {**proof, "region": dict(zip(("left", "top", "right", "bottom"),

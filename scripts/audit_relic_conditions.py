@@ -7,14 +7,14 @@ NOT the formal live admission/host speech path.
 """
 import argparse
 import copy
-from datetime import datetime, timezone
 import hashlib
 import json
-from pathlib import Path
 import time
+from datetime import datetime, timezone
+from pathlib import Path
 
 from plugin.plugins.hsr_companion.experiments.regional_reader import RegionalReader
-from plugin.plugins.hsr_companion.scripts.benchmark_regional_poc import focused, fields, Meter
+from plugin.plugins.hsr_companion.scripts.benchmark_regional_poc import Meter, fields, focused
 
 
 def complete_stats(value):

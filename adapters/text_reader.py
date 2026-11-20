@@ -12,6 +12,10 @@ class ObservationSuperseded(Exception):
     """Cooperative exit between OCR calls; never a recognition failure."""
 
 
+class QueryPreempted(ObservationSuperseded):
+    """A waiting query gets the next native-call boundary."""
+
+
 def check_current(cancelled=None):
     if cancelled is not None and cancelled():
         raise ObservationSuperseded()
@@ -99,15 +103,25 @@ def split_label_geometry(image, box):
 
 def read_native_text(
     backend: Any, image: Any, *, catalog: Any = None, cancelled=None, on_progress=None,
-    verify_names: bool = False,
+    verify_names: bool = False, accept_native_relic=None, relic_tiles=None, yield_requested=None,
 ) -> tuple[str, list[dict[str, Any]], dict[str, Any]]:
     """Uniform native tiles, then one bounded reread of wide merged OCR rows."""
     started = time.monotonic()
     boxes, failures = [], []
     tiles = native_tiles(*image.size)
     completed = 0
+    relic_priority = False
     scene_probe_seconds = None
     calls = []
+
+    def try_priority():
+        nonlocal relic_priority
+        if accept_native_relic is None or relic_priority:
+            return
+        try:
+            relic_priority = bool(accept_native_relic(boxes))
+        except Exception:
+            relic_priority = False
 
     def read(sample, stage):
         check_current(cancelled)
@@ -142,8 +156,21 @@ def read_native_text(
             raise
         except Exception as exc:
             failures.append("scene_probe_" + type(exc).__name__)
-    for left, top, right, bottom in tiles:
+    preferred = []
+    if relic_tiles is not None:
+        try:
+            preferred = list(dict.fromkeys(
+                index for index in (relic_tiles(tiles) or [])
+                if isinstance(index, int) and 0 <= index < len(tiles)))
+        except Exception:
+            preferred = []
+    preferred_set = set(preferred)
+    order = [*preferred, *(index for index in range(len(tiles)) if index not in preferred_set)]
+    for index in order:
+        left, top, right, bottom = tiles[index]
         check_current(cancelled)
+        if yield_requested is not None and yield_requested():
+            raise QueryPreempted()
         if time.monotonic() - started > 22:
             failures.append("ocr_time_budget")
             break
@@ -168,15 +195,22 @@ def read_native_text(
             failures.append(type(exc).__name__)
         if on_progress is not None:
             on_progress(_deduplicate(boxes))
+        try_priority()
+        if relic_priority:
+            break
     if not completed:
         raise RuntimeError("文字识别未完成：" + ",".join(failures[:3]))
+    try_priority()
     boxes = _deduplicate(boxes)
     rereads = 0
     icon_rereads = 0
     # Re-read detected text geometry, not hard-coded exploration coordinates.
     # Wide lines commonly merge several character nameplates with their fields.
-    if time.monotonic() - started < 18:
+    try_priority()
+    if not relic_priority and time.monotonic() - started < 18:
         check_current(cancelled)
+        if yield_requested is not None and yield_requested():
+            raise QueryPreempted()
         from PIL import Image, ImageOps
 
         parts = []
@@ -270,6 +304,8 @@ def read_native_text(
                     y += crop.height + padding
                 try:
                     check_current(cancelled)
+                    if yield_requested is not None and yield_requested():
+                        raise QueryPreempted()
                     _, values = read(atlas, "unresolved_lines")
                     check_current(cancelled)
                     rereads = len(parts)
@@ -294,10 +330,14 @@ def read_native_text(
                 except Exception as exc:
                     failures.append("reread_" + type(exc).__name__)
     check_current(cancelled)
+    if yield_requested is not None and yield_requested():
+        raise QueryPreempted()
+    try_priority()
     boxes = _deduplicate(boxes)
     verification = {"attempted": 0, "confirmed": 0}
-    if verify_names and catalog is not None:
+    if not relic_priority and verify_names and catalog is not None:
         boxes, verification = verify_name_regions(backend, image, boxes, catalog, cancelled=cancelled, read=read)
+    try_priority()
     return (
         "\n".join(str(box["text"]) for box in boxes),
         boxes,
@@ -306,6 +346,10 @@ def read_native_text(
             "tiles_total": len(tiles),
             "tiles_completed": completed,
             "full_frame_covered": completed == len(tiles),
+            "relic_priority": relic_priority,
+            "tiles_skipped": len(tiles) - completed,
+            "priority_tiles": preferred,
+            "tile_order": order,
             "line_rereads": rereads,
             "icon_name_rereads": icon_rereads,
             "scene_probe_seconds": scene_probe_seconds,
@@ -315,6 +359,29 @@ def read_native_text(
             "errors": failures[:5],
         },
     )
+
+
+def read_region(backend: Any, image: Any, region: dict, *, cancelled=None, yield_requested=None) -> list[dict[str, Any]]:
+    """One native read of one already-derived region, returned in full-frame boxes."""
+    check_current(cancelled)
+    if yield_requested is not None and yield_requested():
+        raise QueryPreempted()
+    try:
+        left = max(0, int(float(region["left"]) * image.width))
+        top = max(0, int(float(region["top"]) * image.height))
+        right = min(image.width, int(float(region["right"]) * image.width))
+        bottom = min(image.height, int(float(region["bottom"]) * image.height))
+    except (KeyError, TypeError, ValueError):
+        return []
+    if right <= left or bottom <= top:
+        return []
+    _, values = backend.extract_text_with_boxes(image.crop((left, top, right, bottom)))
+    boxes = []
+    for value in values:
+        box = _box_value(value)
+        boxes.append({**box, "left": float(box["left"]) + left, "right": float(box["right"]) + left,
+                      "top": float(box["top"]) + top, "bottom": float(box["bottom"]) + top})
+    return _deduplicate(boxes)
 
 
 def verify_name_regions(backend, image, boxes, catalog, *, cancelled=None, read=None):

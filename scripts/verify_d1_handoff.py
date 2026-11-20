@@ -16,10 +16,10 @@ import pytest
 
 def run():
     from config import TASK_DETAIL_MAX_TOKENS
-    from utils.tokenize import count_tokens
-    from utils.result_parser import parse_push_message_content
     from plugin.plugins.hsr_companion.runtime.build_info import BUILD_REVISION
-    from plugin.plugins.hsr_companion.tests.test_d1_handoff_closeout import shoe, delivered, received_text
+    from plugin.plugins.hsr_companion.tests.test_d1_handoff_closeout import delivered, received_text, shoe
+    from utils.result_parser import parse_push_message_content
+    from utils.tokenize import count_tokens
 
     query = "这个呢？完整报出主词条和四项副词条，分别是多少？"
     with pytest.MonkeyPatch.context() as patch:

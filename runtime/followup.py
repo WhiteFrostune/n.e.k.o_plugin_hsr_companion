@@ -9,14 +9,15 @@ from __future__ import annotations
 import asyncio
 import time
 from copy import deepcopy
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from uuid import uuid4
 
 from .chat_activity import latest_user_activity
 from .live_refresh import validated_delivery
 from .navigation import navigation_answer
+from .observation_store import ObservationSnapshot
 from .pending_reply import message_allows, relation_contract
-from .query_coordinator import answer_status, satisfied_fields
+from .query_coordinator import answer_status, has_answerable_content, satisfied_fields
 from .query_plan import QueryPlan, build_query_plan
 from .request_completion import evaluate_request
 from .service_contract import record_answer_delivery, response_contract
@@ -49,6 +50,7 @@ class AnswerRequest:
     delivered_fields: frozenset[str] = frozenset()
     delivered_key: str = ""
     delivered_reply: dict | None = None
+    activity_budget: dict[str, int] = field(default_factory=dict)
 
 
 def request_plan(request: AnswerRequest) -> QueryPlan:
@@ -99,7 +101,7 @@ def reply_data(visual: dict, request: AnswerRequest, *, catalog=None) -> dict:
         result["screen_facts"] = {"facts": plan.relevant_facts(screen.get("facts") or []),
                                   "visible_text": screen.get("visible_text", []) if "visible_text" in plan.fields else []}
         if "equipment" in plan.fields:
-            from .equipment import equipment_card
+            from .equipment_view import equipment_card
             result["equipment_answer"] = equipment_card(visual)
             if catalog is not None:
                 from .grounding import build_grounding
@@ -135,9 +137,26 @@ def _can_observe(owner) -> bool:
                 and owner._observer_status.get("state") not in {"stopped", "paused", "waiting_for_game"})
 
 
-async def checked_activity(owner, request: AnswerRequest, bus) -> tuple[str, float | None]:
-    """Retry transient read failures, never treat failed reads as silence."""
-    for attempt in range(ACTIVITY_ATTEMPTS):
+async def checked_activity(owner, request: AnswerRequest, bus, *, allow_recovery=False) -> tuple[str, float | None]:
+    """Retry transient read failures, never treat failed reads as silence.
+
+    The attempt budget belongs to the request, not to this call. Persistent
+    failures stop at ACTIVITY_ATTEMPTS. A ready request may spend one recovery
+    probe after the budget is exhausted; a successful probe resets the budget.
+    """
+    budget = request.activity_budget
+    used = int(budget.get("attempts", 0))
+    limit = ACTIVITY_ATTEMPTS
+    if used >= ACTIVITY_ATTEMPTS:
+        if allow_recovery and not budget.get("recovery_used"):
+            budget["recovery_used"] = True
+            limit = used + 1
+        else:
+            owner._followup_status = {**getattr(owner, "_followup_status", {}),
+                                      "request_id": request.request_id, "state": "pending",
+                                      "reason": "activity_retry", "activity_attempt": used}
+            return "unavailable", None
+    for attempt in range(used, limit):
         if (getattr(owner, "_pending_answer", None) is not request or not _can_observe(owner)
                 or owner._target_character() != request.target):
             return "cancelled", None
@@ -152,9 +171,12 @@ async def checked_activity(owner, request: AnswerRequest, bus) -> tuple[str, flo
             include_identity=True,
             transport_timeout=min(ACTIVITY_TRANSPORT_SECONDS, remaining),
             wait_timeout=min(ACTIVITY_TRANSPORT_SECONDS + .1, remaining))
+        request.activity_budget["attempts"] = attempt + 1
         if getattr(owner, "_pending_answer", None) is not request:
             return "cancelled", None
         if activity != "unavailable":
+            request.activity_budget["attempts"] = 0
+            request.activity_budget["recovery_used"] = False
             return activity, stamp
         owner._followup_status = {**getattr(owner, "_followup_status", {}), "request_id": request.request_id, "state": "pending",
                                   "reason": "activity_retry", "activity_attempt": attempt + 1}
@@ -199,6 +221,22 @@ async def wait_message_relation(owner, request):
         _cancel_current(owner, request, "message_relation_unresolved")
         return False
     return getattr(owner, "_pending_answer", None) is request
+
+
+async def _wait_for_update(owner, request):
+    """Yield inside the original deadline, including silent evidence progress."""
+    remaining = request.expires_at - time.monotonic()
+    if remaining <= 0:
+        return
+    event = getattr(owner, "_visual_update_event", None)
+    if event is None:
+        await asyncio.sleep(min(.25, remaining))
+    else:
+        event.clear()
+        try:
+            await asyncio.wait_for(event.wait(), timeout=min(.5, remaining))
+        except TimeoutError:
+            pass
 
 
 def arm_followup(owner, *, query: str, visual: dict, asked_at: float, scene_only: bool,
@@ -253,7 +291,7 @@ async def deliver_followup(owner, request: AnswerRequest) -> None:
             from .consultation import for_followup
             return for_followup((guidance or {}).get("reply_plan") or {}, previous=delivered_reply)
 
-        def advances(state, guidance):
+        def advances(state, guidance, visual):
             if state.service_ready:
                 return True
             if selected_reply(guidance).get("answer_increment") is False:
@@ -262,17 +300,24 @@ async def deliver_followup(owner, request: AnswerRequest) -> None:
             if not state.can_wait:
                 return changed and bool(state.confirmed)
             return not partial_sent and (bool(state.confirmed - delivered)
-                or bool(request.guidance_plan is not None and state.confirmed and changed))
+                # The same readiness policy used by direct/cache selection
+                # exposes useful PARTIAL equipment too. A missing fourth row
+                # must not prevent its existing reply_plan from reaching the
+                # normal proof gate; completion/one-progress limits stay intact.
+                or bool(request.guidance_plan is not None and changed
+                        and has_answerable_content(request_plan(request), visual)))
 
         def expire():
             if getattr(owner, "_pending_answer", None) is request:
                 previous = getattr(owner, "_followup_status", {})
                 owner._pending_answer = None
+                blocked = {"activity_retry": "activity_unavailable_after_retries",
+                           "awaiting_message_relation": "message_relation_unresolved"}.get(previous.get("reason"))
+                reason = blocked or ("service_incomplete" if request.guidance_plan is not None and delivered >= request_plan(request).fields
+                                     else "partial_delivered_missing_fields" if partial_sent else "no_new_verified_facts")
                 owner._followup_status = {"request_id": request.request_id, "state": "expired",
                     "outcome": "partial" if partial_sent else "timeout",
-                    "reason": "service_incomplete" if request.guidance_plan is not None and delivered >= request_plan(request).fields
-                              else "partial_delivered_missing_fields" if partial_sent else "no_new_verified_facts",
-                    "confirmed_fields": sorted(delivered), "result_ready": False,
+                    "reason": reason, "confirmed_fields": sorted(delivered), "result_ready": previous.get("result_ready") is True,
                     "answer_complete": False, "request_completion": previous.get("request_completion")}
         # Do not race the original tool-result reply. This is a grace period,
         # not a guarantee of host speech mutual exclusion.
@@ -332,12 +377,32 @@ async def deliver_followup(owner, request: AnswerRequest) -> None:
                         visual = recovered
                         state, guidance = recovered_state, recovered_guidance
                         ready = state.service_ready
-                        from .observation_store import ObservationSnapshot
                         recovered_snapshot = ObservationSnapshot.select(owner, recovered, fields=plan.fields)
-            progress = advances(state, guidance) and not ready
+            progress = advances(state, guidance, visual) and not ready
             validated = None
+            transport = None
             if ready or progress:
                 epoch = getattr(owner, "_observation_epoch", 0)
+                check_path = getattr(owner, "_check_message_path", None)
+                if callable(check_path):
+                    # Keep this exact candidate across the new await. A
+                    # revision can change without invalidating the whole page.
+                    before_probe = recovered_snapshot or ObservationSnapshot.select(
+                        owner, visual, fields=request_plan(request).fields)
+                    transport = await check_path()
+                    if getattr(owner, "_pending_answer", None) is not request:
+                        return
+                    if time.monotonic() >= request.expires_at:
+                        expire()
+                        return
+                    # Only use the snapshot comparison for a new commit.
+                    # The normal live review still owns admission, including
+                    # recovery from a transient capture or control failure.
+                    if (epoch != getattr(owner, "_observation_epoch", 0)
+                            or (before_probe.serial != getattr(owner, "_observation_serial", 0)
+                                and not before_probe.matches(owner))):
+                        await _wait_for_update(owner, request)
+                        continue
                 if recovered_snapshot is not None:
                     # try_reuse checked THIS detached packet's own pixels. A
                     # second check against a newer partial commit's guard would
@@ -352,7 +417,6 @@ async def deliver_followup(owner, request: AnswerRequest) -> None:
                             visual = checked
                             state, guidance = request_completion(owner, visual, request)
                             ready = state.service_ready
-                            from .observation_store import ObservationSnapshot
                             recovered_snapshot = ObservationSnapshot.select(owner, visual, fields=request_plan(request).fields)
                     except TimeoutError:
                         validated = False
@@ -364,12 +428,13 @@ async def deliver_followup(owner, request: AnswerRequest) -> None:
                     ready = False
                     progress = False
                 else:
-                    progress = advances(state, guidance) and not ready
+                    progress = advances(state, guidance, visual) and not ready
             if getattr(owner, "_pending_answer", None) is not request:
                 return
             status = state.public() if validated is not False else {
                 "facts_ready": False, "service_ready": False, "state": "awaiting_validation"}
-            owner._followup_status = {"request_id": request.request_id, "state": "pending", "result_ready": ready,
+            owner._followup_status = {**getattr(owner, "_followup_status", {}),
+                                      "request_id": request.request_id, "state": "pending", "result_ready": ready,
                                       "request_completion": status}
             if time.monotonic() >= request.expires_at:
                 expire()
@@ -380,7 +445,8 @@ async def deliver_followup(owner, request: AnswerRequest) -> None:
                 owner._pending_answer = None
                 owner._followup_status.update(state="ended_incomplete", reason=state.state, answer_complete=False)
                 return
-            activity, stamp = await checked_activity(owner, request, bus)
+            activity, stamp = await checked_activity(owner, request, bus,
+                                                     allow_recovery=bool(ready or progress))
             if activity == "awaiting_relation":
                 if await wait_message_relation(owner, request):
                     continue
@@ -426,10 +492,17 @@ async def deliver_followup(owner, request: AnswerRequest) -> None:
                 text, message_projection = (None, {}) if silent else await asyncio.to_thread(
                     render_followup, data, plan=request_plan(request), ready=True)
                 if not message_projection.get("has_content", True):
+                    if state.can_wait:
+                        # Reading progress is not necessarily useful speech.
+                        # Keep the SAME obligation for later self-contained
+                        # evidence; an empty brief answer cannot complete it.
+                        owner._followup_status.update(reason="awaiting_answer_content")
+                        await _wait_for_update(owner, request)
+                        continue
                     _cancel_current(owner, request, "empty_projection")
                     return
                 # Final async guard, then synchronous claim/submission.
-                activity, stamp = await checked_activity(owner, request, bus)
+                activity, stamp = await checked_activity(owner, request, bus, allow_recovery=True)
                 if activity == "awaiting_relation":
                     if await wait_message_relation(owner, request):
                         continue
@@ -482,7 +555,8 @@ async def deliver_followup(owner, request: AnswerRequest) -> None:
                 answer_complete = bool(ready and message_projection["complete"]
                                        and message_projection.get("answer_complete", True))
                 outcome = ("ready" if answer_complete else "partial") if message_projection["complete"] else "transport_limited"
-                pushed = owner.push_message(visibility=[], ai_behavior="respond", source="hsr_companion",
+                pushed = owner.push_message(**({"_message_transport": transport} if transport is not None else {}),
+                                            visibility=[], ai_behavior="respond", source="hsr_companion",
                                             target_lanlan=request.target, priority=5,
                                             coalesce_key="hsr_explicit_answer",
                                             parts=[{"type": "text", "text": text}],
@@ -522,15 +596,7 @@ async def deliver_followup(owner, request: AnswerRequest) -> None:
                 partial_sent = True
                 owner._followup_status.update(state="pending", partial_submitted=True,
                                                confirmed_fields=sorted(delivered))
-            event = getattr(owner, "_visual_update_event", None)
-            if event is None:
-                await asyncio.sleep(.25)
-            else:
-                event.clear()
-                try:
-                    await asyncio.wait_for(event.wait(), timeout=min(.5, max(.001, request.expires_at - time.monotonic())))
-                except TimeoutError:
-                    pass
+            await _wait_for_update(owner, request)
     except asyncio.CancelledError:
         raise
     except Exception:

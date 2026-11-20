@@ -37,6 +37,17 @@ def real_sdk_bus(delay):
     transport = ControlledTransport(delay)
     raw_context = SimpleNamespace(plugin_id="hsr_companion", _plugin_comm_queue=object(),
                                   _zmq_ipc_client=transport)
+
+    async def send_request_and_wait_async(**kwargs):
+        response = transport.request({"type": kwargs["request_type"], **kwargs["request_data"]},
+                                     kwargs["timeout"])
+        if not isinstance(response, dict):
+            raise TimeoutError("controlled transport failure")
+        return response.get("result")
+
+    # Host main moved the request/wait plumbing onto the context; older
+    # checkouts call _zmq_ipc_client directly. Support both in this fake.
+    raw_context._send_request_and_wait_async = send_request_and_wait_async
     owner = object.__new__(NekoPluginBase)
     owner.ctx = SimpleNamespace(bus=SimpleNamespace(memory=MemoryClient(raw_context)))
     return owner.bus, transport
@@ -123,17 +134,86 @@ def test_reproduce_committed_text_result_rejected_only_by_capture_timestamp(tmp_
     asyncio.run(run())
 
 
-def test_persistent_real_sdk_transport_failure_safely_cancels_after_bounded_retries(monkeypatch):
+def test_activity_attempt_budget_is_shared_across_both_guards():
     bus, transport = real_sdk_bus(0)
-    transport.request = lambda *args, **kwargs: None  # Controlled IPC failure, not a live failure claim.
+    reads = []
+
+    def failed_transport(*args, **kwargs):
+        reads.append(1)
+        return None
+
+    transport.request = failed_transport
+    owner = SimpleNamespace(bus=bus, _observer_status={"enabled": True, "state": "observing"},
+                            _target_character=lambda: "reproduction-only",
+                            push_message=lambda **kw: None)
+    now = time.monotonic()
+    req = followup.AnswerRequest("budget", "q", "reproduction-only", time.time(), now, now + 2,
+                                 "unknown", False, False, True, False, plan=None)
+    owner._pending_answer = req
+
+    async def run():
+        first = await followup.checked_activity(owner, req, bus)
+        second = await followup.checked_activity(owner, req, bus)
+        assert first == ("unavailable", None) and second == ("unavailable", None)
+        assert 1 <= len(reads) <= followup.ACTIVITY_ATTEMPTS
+
+    asyncio.run(run())
+
+
+def test_ready_request_gets_at_most_one_recovery_probe():
+    bus, transport = real_sdk_bus(0)
+    reads = []
+
+    def failed_transport(*args, **kwargs):
+        reads.append(1)
+        return None
+
+    transport.request = failed_transport
+    owner = SimpleNamespace(bus=bus, _observer_status={"enabled": True, "state": "observing"},
+                            _target_character=lambda: "reproduction-only",
+                            push_message=lambda **kw: None)
+    now = time.monotonic()
+    req = followup.AnswerRequest("ready-budget", "q", "reproduction-only", time.time(), now, now + 4,
+                                 "unknown", False, False, True, False, plan=None)
+    owner._pending_answer = req
+
+    async def run():
+        first = await followup.checked_activity(owner, req, bus, allow_recovery=True)
+        second = await followup.checked_activity(owner, req, bus, allow_recovery=True)
+        third = await followup.checked_activity(owner, req, bus, allow_recovery=True)
+        assert first == second == third == ("unavailable", None)
+        assert 1 <= len(reads) <= 4
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("duration", [.1, 1])
+def test_persistent_real_sdk_transport_failure_safely_cancels_after_bounded_retries(monkeypatch, duration):
+    bus, transport = real_sdk_bus(0)
+    reads, captures = [], []
+
+    def failed_transport(*args, **kwargs):
+        reads.append(1)
+        return None  # Controlled IPC failure, not a live failure claim.
+
+    async def current():
+        captures.append(1)
+        return {"fresh": False, "page_type": "unknown", "screen_facts": {"facts": []}}
+
+    transport.request = failed_transport
     sent = []
     owner = SimpleNamespace(bus=bus, _observer_status={"enabled": True, "state": "observing"},
-                            _target_character=lambda: "reproduction-only", push_message=lambda **kw: sent.append(kw))
+                            _target_character=lambda: "reproduction-only", push_message=lambda **kw: sent.append(kw),
+                            _current_visual_evidence=current)
     now = time.monotonic()
-    req = followup.AnswerRequest("repro-failure", "页面文字写了什么", "reproduction-only", time.time(), now,
-                                 now + 1, "unknown", False, False, True, False)
+    from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
+    plan = build_query_plan("页面文字写了什么", "read_screen", screen_fields=["visible_text"])
+    assert plan.fields == {"visible_text"}
+    req = followup.AnswerRequest("repro-failure", plan.query, "reproduction-only", time.time(), now,
+                                 now + duration, "unknown", False, False, True, False, plan=plan)
     owner._pending_answer = req
     monkeypatch.setattr(followup, "FOLLOWUP_GRACE_SECONDS", 0)
     asyncio.run(followup.deliver_followup(owner, req))
     print({"controlled_transport_failure": True, "state": owner._followup_status, "messages_sent": len(sent)})
     assert owner._followup_status["reason"] == "activity_unavailable_after_retries" and not sent
+    assert captures and 1 <= len(reads) <= followup.ACTIVITY_ATTEMPTS

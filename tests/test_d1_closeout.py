@@ -6,12 +6,15 @@ import json
 import time
 
 import pytest
-
 from plugin.plugins.hsr_companion.runtime.guidance import build_guidance
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
-from plugin.plugins.hsr_companion.tests.test_guidance import book, catalog, plan
-from plugin.plugins.hsr_companion.tests.test_stage2_assessment import assess, relic
+from plugin.plugins.hsr_companion.tests import test_guidance as guidance_cases
+from plugin.plugins.hsr_companion.tests.test_guidance import plan
 from plugin.plugins.hsr_companion.tests.test_stage1_repairs import fact, visual
+from plugin.plugins.hsr_companion.tests.test_stage2_assessment import assess, relic
+
+book = guidance_cases.book
+catalog = guidance_cases.catalog
 
 
 def panel():

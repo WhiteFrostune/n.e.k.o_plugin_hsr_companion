@@ -13,12 +13,40 @@ from collections import Counter
 from datetime import datetime
 from io import BytesIO
 
+from .contracts import FRESH_LIVE_AGE_SECONDS, LIVE_PAGE_TYPES, STALE_MAX_AGE_SECONDS
 from .navigation import navigation_answer
 
 # Recognition age does not decide live-candidate admission. Fresh capture and
 # scoped literal/control proof do; persisted history never enters this cache.
 LIVE_FRAME_MAX_AGE_SECONDS = 2.0
 _SUPERSEDED = object()
+
+
+def stale_state(page_type, age, *, allow_stale=False):
+    """One age policy for cached readings.
+
+    Static pages may reuse a guarded older reading up to the hard cap. Live
+    pages only use an older reading when the caller is the timeout fallback.
+    """
+    if age < 0:
+        return "invalid"
+    if age > STALE_MAX_AGE_SECONDS:
+        return "expired"
+    if age > FRESH_LIVE_AGE_SECONDS:
+        if page_type in LIVE_PAGE_TYPES and not allow_stale:
+            return "not_allowed"
+        return "stale"
+    return "fresh"
+
+
+def prefer_richer_roster(candidates, plan, *, allow_stale):
+    """Stale fallback prefers a richer same-page roster, never merges rows."""
+    if not (allow_stale and plan is not None and "characters" in plan.fields):
+        return list(candidates)
+    def roster_size(candidate):
+        return len({item.get("entity_id") or item.get("name")
+                    for item in (candidate["evidence"].get("characters") or [])})
+    return sorted([candidate for candidate in candidates if candidate], key=roster_size, reverse=True)
 
 
 def content_coverage(evidence):
@@ -112,6 +140,24 @@ def regions_changed(before: tuple, after: tuple) -> bool:
     return False
 
 
+def _remember_candidate(snapshots, key, candidate):
+    """One current and at most one richer packet, each with its OWN proofs.
+
+    Retention compares coverage, not validity. Selection must still compare
+    post-review content; a formerly rich packet cannot hide a valid partial.
+    """
+    previous = snapshots.get(key)
+    retained_key = key + "_previous"
+    retained = snapshots.get(retained_key)
+    coverage = content_coverage(candidate["evidence"])
+    if previous and content_coverage(previous["evidence"]) - coverage:
+        if not retained or len(content_coverage(previous["evidence"])) > len(content_coverage(retained["evidence"])):
+            snapshots[retained_key] = previous
+    elif retained and content_coverage(retained["evidence"]) <= coverage:
+        snapshots.pop(retained_key, None)
+    snapshots[key] = candidate
+
+
 def remember_reusable(owner, analysis: dict) -> None:
     """Keep scoped answers, not an old roster or persisted restart cache."""
     stamp = getattr(owner, "_next_frame_stamp", None)
@@ -133,20 +179,13 @@ def remember_reusable(owner, analysis: dict) -> None:
         full = copy.deepcopy(evidence)
         if not getattr(owner, "_next_frame_identity_guarded", False):
             full.update(characters=[], team=[], controlled_character=None, can_answer_character_identity=False)
-        previous = snapshots.get("full")
-        retained = snapshots.get("full_previous")
-        if previous and content_coverage(previous["evidence"]) - content_coverage(full):
-            if not retained or len(content_coverage(previous["evidence"])) > len(content_coverage(retained["evidence"])):
-                snapshots["full_previous"] = previous
-        elif retained and content_coverage(retained["evidence"]) <= content_coverage(full):
-            snapshots.pop("full_previous", None)
-        snapshots["full"] = {"evidence": full, "stamp": stamp, "guard": full_guard,
+        _remember_candidate(snapshots, "full", {"evidence": full, "stamp": stamp, "guard": full_guard,
                              "control_trace": copy.deepcopy((analysis.get("recognition") or {}).get("control_trace") or {}),
                              "identity_proofs": copy.deepcopy(analysis.get("characters") or [])
                                  if getattr(owner, "_next_frame_identity_guarded", False) else [],
                              "page_controls": copy.deepcopy(getattr(owner, "_next_frame_page_regions", ())),
                              "epoch": getattr(owner, "_observation_epoch", 0),
-                             "game_pid": getattr(owner, "_analysis_game_pid", 0)}
+                             "game_pid": getattr(owner, "_analysis_game_pid", 0)})
     # A scene/navigation snapshot cannot answer who, equipment or skill questions.
     evidence.update(characters=[], team=[], controlled_character=None,
                     can_answer_character_identity=False, identity_list_complete=False)
@@ -165,15 +204,17 @@ def remember_reusable(owner, analysis: dict) -> None:
               "epoch": getattr(owner, "_observation_epoch", 0),
               "game_pid": getattr(owner, "_analysis_game_pid", 0)}
     answer = navigation_answer(evidence, requested=True)
-    if answer["current_location"]["known"] or evidence["page_type"] != "exploration_hud":
-        projected = scoped_snapshot(owner, evidence, guard, {"current_location"})
-        if projected:
-            snapshots["scene"] = {**common, **projected}
-    if answer["current_location"]["known"] and answer["objective"]["known"]:
+    # A proved page does not depend on readable corner text, and a proved
+    # quest does not require a proved location. These are guarded candidates,
+    # not a statement that the whole navigation request has been completed.
+    projected = scoped_snapshot(owner, evidence, guard, {"current_location"})
+    if projected:
+        _remember_candidate(snapshots, "scene", {**common, **projected})
+    if any(answer[field]["known"] for field in ("current_location", "objective", "quest_title", "destination")):
         projected = scoped_snapshot(owner, evidence, guard,
             {"current_location", "tracked_quest", "quest_objective", "quest_destination"})
         if projected:
-            snapshots["navigation"] = {**common, **projected}
+            _remember_candidate(snapshots, "navigation", {**common, **projected})
     owner._reusable_observations = snapshots
 
 
@@ -209,7 +250,7 @@ def scoped_snapshot(owner, evidence, guard, kinds):
     return {"evidence": scoped, "guard": ([r for r, _ in pairs], tuple(p for _, p in pairs))}
 
 
-async def try_reuse(owner, *, navigation: bool, full: bool = False, require_characters: bool = False, plan=None, pixel_only=False):
+async def try_reuse(owner, *, navigation: bool, full: bool = False, require_characters: bool = False, plan=None, pixel_only=False, allow_stale=False):
     from .live_refresh import delivery_turn, mark_delivery_verified
     if full and plan is not None:
         from .query_coordinator import has_answerable_content
@@ -221,16 +262,17 @@ async def try_reuse(owner, *, navigation: bool, full: bool = False, require_char
             return None  # Join the producer without waiting for a pointless check.
     async with delivery_turn(owner):
         result = await _try_reuse(owner, navigation=navigation, full=full, require_characters=require_characters, plan=plan,
-                                  pixel_only=pixel_only)
+                                  pixel_only=pixel_only, allow_stale=allow_stale)
         if result is not None:
             mark_delivery_verified(owner)
         return result
 
 
-async def _try_reuse(owner, *, navigation: bool, full: bool, require_characters: bool, plan=None, pixel_only=False):
+async def _try_reuse(owner, *, navigation: bool, full: bool, require_characters: bool, plan=None, pixel_only=False, allow_stale=False):
     # One bounded retry may use the newly committed snapshot. An obsolete
     # checker must never revoke it or force another complete recognition.
     generation = getattr(owner, "_answer_query_generation", 0)
+    key = "full" if full else "navigation" if navigation else "scene"
     for _ in range(2):
         if plan is not None:
             # The resident producer may have committed while an older cache
@@ -242,14 +284,14 @@ async def _try_reuse(owner, *, navigation: bool, full: bool, require_characters:
             if produced is not None:
                 return produced
         selected = await _try_reuse_once(owner, navigation=navigation, full=full, require_characters=require_characters, plan=plan,
-                                       pixel_only=pixel_only)
+                                       pixel_only=pixel_only, allow_stale=allow_stale)
         if selected is not _SUPERSEDED:
             from .query_coordinator import answer_coverage, satisfied_fields
-            current = getattr(owner, "_reusable_observations", {}).get("full")
+            current = getattr(owner, "_reusable_observations", {}).get(key)
             original = ((selected or {}).get("reuse") or {}).get("original_serial")
             current_serial = ((current or {}).get("evidence", {}).get("screen_facts") or {}).get("observation_serial")
-            if (full and plan is not None and current
-                    and getattr(owner, "_reusable_observations", {}).get("full_previous")
+            if (plan is not None and current
+                    and getattr(owner, "_reusable_observations", {}).get(key + "_previous")
                     and (selected is None or not plan.fields <= satisfied_fields(plan, selected))
                     and (selected is None or original != current_serial)
                     and answer_coverage(plan, current["evidence"]) > answer_coverage(plan, selected)):
@@ -258,7 +300,8 @@ async def _try_reuse(owner, *, navigation: bool, full: bool, require_characters:
                 # AFTER review, then review the current packet's OWN proofs.
                 # This is the existing bounded fallback, not a merge/retry.
                 fallback = await _try_reuse_once(owner, navigation=navigation, full=full,
-                    require_characters=require_characters, plan=plan, prefer_current=True, pixel_only=pixel_only)
+                    require_characters=require_characters, plan=plan, prefer_current=True, pixel_only=pixel_only,
+                    allow_stale=allow_stale)
                 if fallback is _SUPERSEDED:
                     continue
                 if fallback is not None and answer_coverage(plan, fallback) >= answer_coverage(plan, selected):
@@ -274,20 +317,25 @@ async def _try_reuse(owner, *, navigation: bool, full: bool, require_characters:
     return None
 
 
-async def _try_reuse_once(owner, *, navigation: bool, full: bool, require_characters: bool, plan=None, prefer_current=False, pixel_only=False):
+async def _try_reuse_once(owner, *, navigation: bool, full: bool, require_characters: bool, plan=None, prefer_current=False, pixel_only=False, allow_stale=False):
     from .query_coordinator import has_answerable_content
 
     snapshots = getattr(owner, "_reusable_observations", {})
-    snapshot = snapshots.get("full" if full else "navigation" if navigation else "scene")
+    key = "full" if full else "navigation" if navigation else "scene"
+    snapshot = snapshots.get(key)
     if snapshot is None and plan is not None and plan.fields == {"page"}:
         # A full candidate may contain good controls but no location. Do not
         # make independent page proof depend on a navigation cache existing.
         snapshot = snapshots.get("full")
-    if full and plan is not None:
+    if plan is not None:
         from .query_coordinator import satisfied_fields
         # Keep at most one detached richer read. It MUST still pass its own
         # age, epoch, process, page and literal guards below; never merge rows.
-        candidates = [snapshot] if prefer_current else [snapshot, snapshots.get("full_previous")]
+        candidates = [snapshot] if prefer_current else [snapshot, snapshots.get(key + "_previous")]
+        # A stale fallback should not answer with an early one-name commit
+        # when a richer same-page roster is also available. Pixels still
+        # decide admission; this only changes candidate order.
+        candidates = prefer_richer_roster(candidates, plan, allow_stale=allow_stale)
         complete = next((s for s in candidates if s and plan.fields <= satisfied_fields(plan, s["evidence"])), None)
         if complete is not None:
             snapshot = complete
@@ -306,10 +354,11 @@ async def _try_reuse_once(owner, *, navigation: bool, full: bool, require_charac
         if snapshot is None and scene and (scene["evidence"]["page_type"] != "exploration_hud"
                       or plan is not None and has_answerable_content(plan, scene["evidence"])):
             snapshot = scene
-    return await review_snapshot(owner, snapshot, navigation=navigation, full=full, plan=plan, pixel_only=pixel_only)
+    return await review_snapshot(owner, snapshot, navigation=navigation, full=full, plan=plan, pixel_only=pixel_only,
+                                 allow_stale=allow_stale)
 
 
-async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=None, allow_partial=True, pixel_only=False):
+async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=None, allow_partial=True, pixel_only=False, allow_stale=False):
     """The live admission policy shared by cache, direct and follow-up reads.
 
     Selection is separate from review. Pixels challenge dependencies; only a
@@ -318,7 +367,13 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
     import asyncio
 
     from .fact_lifecycle import observation_tick
-    from .live_refresh import fetch_recent_frame, frame_changed, frame_stamp, invalidate_frame_change, trace_refresh
+    from .live_refresh import (
+        compare_live_frames,
+        fetch_recent_frame,
+        frame_stamp,
+        invalidate_frame_change,
+        trace_refresh,
+    )
 
     if not snapshot or getattr(owner, "_observation_invalidated", False):
         trace_refresh(owner, "reuse_miss", reason="candidate_missing" if not snapshot else "observation_invalidated")
@@ -351,8 +406,15 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
         age = observation_tick(time.time()) - datetime.fromisoformat(evidence["observed_at"]).timestamp()
     except (ValueError, TypeError, KeyError):
         return None
-    if age < 0 or snapshot["epoch"] != epoch:
+    age_policy = stale_state(evidence.get("page_type"), age, allow_stale=allow_stale)
+    if age_policy == "invalid" or snapshot["epoch"] != epoch:
         trace_refresh(owner, "reuse_miss", reason="candidate_epoch_mismatch" if snapshot["epoch"] != epoch else "invalid_timestamp")
+        return None
+    if age_policy == "expired":
+        trace_refresh(owner, "reuse_miss", reason="stale_expired", age_seconds=round(age, 1))
+        return None
+    if age_policy == "not_allowed":
+        trace_refresh(owner, "reuse_miss", reason="stale_not_allowed", age_seconds=round(age, 1))
         return None
     client = getattr(owner, "_assistant_client", None)
     if client is None or not snapshot["game_pid"]:
@@ -391,7 +453,7 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
     # regions still determine whether this particular snapshot can be reused.
     # A complete native guard already includes independent page controls.
     # Coarse animated pixels are not a second, overriding page detector.
-    global_changed = frame_changed(snapshot["stamp"], current_stamp, (), ui_only=bool(regions))
+    global_changed = compare_live_frames(owner, snapshot["stamp"], current_stamp, ui_only=bool(regions))
     text_changed = regions_changed(patches, current_patches)
     native_reviewed = False
     if pixel_only and (global_changed or text_changed):
@@ -504,14 +566,14 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
                 # redundant tab is not a changed page when the remaining
                 # independently proved controls still classify that page.
                 # This subset belongs only to this delivery, never the store.
-                from PIL import Image
-
                 from ..detectors.layout import select_proved_equipment_controls
-                with Image.open(BytesIO(latest.image_bytes)) as current_image:
-                    admitted_controls = select_proved_equipment_controls(
-                        {"page_type": evidence.get("page_type")}, controls,
-                        lambda p: region_key(p) not in coordinates,
-                        width=current_image.width, height=current_image.height)
+                # frame_stamp already decoded THIS latest capture off-thread.
+                # Reuse its native dimensions, rather than reopen the same
+                # image synchronously on the query/follow-up event loop.
+                width, height = current_stamp[0]
+                admitted_controls = select_proved_equipment_controls(
+                    {"page_type": evidence.get("page_type")}, controls,
+                    lambda p: region_key(p) not in coordinates, width=width, height=height)
                 if not admitted_controls:
                     return None
                 snapshot = {**snapshot, "page_controls": admitted_controls}
@@ -559,20 +621,36 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
         owner._observer_status.update(state="observing", message="正在核对当前界面信息")
     result = copy.deepcopy(evidence)
     result["read_scope"] = "full" if full else "navigation" if navigation else "scene"
-    result.update(status="confirmed", failure_reason="", text_coverage_complete=False,
-                  message="已用新采集画面核对本结果依赖的文字和控件区域；未重复整轮识别，未确认的字段仍未知。")
+    pending_character = bool(result.get("equipment_complete") and not result.get("characters")
+                             and not result.get("page_characters"))
+    result.update(status="confirmed", failure_reason="character_pending" if pending_character else "",
+                  text_coverage_complete=False,
+                  message=("已用新采集画面核对遗器词条；当前帧未确认角色归属。" if pending_character else
+                           "已用新采集画面核对本结果依赖的文字和控件区域；未重复整轮识别，未确认的字段仍未知。"))
     result["screen_facts"]["unclassified_text"] = []
+    try:
+        final_age = observation_tick(time.time()) - datetime.fromisoformat(result["observed_at"]).timestamp()
+    except (ValueError, TypeError, KeyError):
+        final_age = age
+    stale = stale_state(result.get("page_type"), final_age, allow_stale=allow_stale) == "stale"
+    result["freshness"] = "stale" if stale else "fresh"
+    result["age_seconds"] = round(max(0.0, final_age), 1)
+    if stale:
+        seconds = max(1, int(round(final_age)))
+        result["age_label"] = f"这是 {seconds} 秒前的画面，现在可能变了"
+        result["message"] = result["age_label"] + "：" + result.get("message", "")
     original_serial = result["screen_facts"].get("observation_serial", 0)
     # This is a delivery revision, not a new OCR/capture timestamp. Pixels for
     # these scoped values passed validation against this stable store revision.
     result["screen_facts"]["observation_serial"] = serial
-    from .equipment import equipment_card
+    from .equipment_view import equipment_card
     result["screen_facts"]["equipment_card"] = equipment_card(result)
     result["reuse"] = {"validated_at": datetime.fromtimestamp(latest.timestamp).astimezone().isoformat(),
                        "original_age_seconds": round(age, 3), "ocr_repeated": False, "epoch": epoch,
                        "original_serial": original_serial, "validated_revision": serial,
                        "answer_generation": generation, "reviewed_fields": sorted(plan.fields) if plan else None,
-                       "native_text_reviewed": native_reviewed, "full_recognition_repeated": False}
+                       "native_text_reviewed": native_reviewed, "full_recognition_repeated": False,
+                       "stale": stale, "age_seconds": result["age_seconds"]}
     result["reuse"].update(reviewed_coordinates=[list(p[0]) for p in patches],
                            page_control_coordinates=[list(c) for c in sorted(control_coordinates)],
                            challenge_revision=getattr(owner, "_review_challenge_serial", 0),
@@ -584,5 +662,10 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
         record_verified_regions(owner, {p[0] for p in patches}, latest.timestamp, serial=serial)
     result["last_verified_at"] = result["reuse"]["validated_at"]
     result["freshness_basis"] = "scoped_live_verification"
-    trace_refresh(owner, "reuse_validated", original_age_seconds=round(age, 3))
+    slots = getattr(owner, "_team_slot_states", None)
+    if slots:
+        from .observation_store import attach_team_roster
+        attach_team_roster(result, slots)
+    trace_refresh(owner, "reuse_validated", original_age_seconds=round(age, 3),
+                  stale=stale, age_seconds=result["age_seconds"])
     return result

@@ -24,6 +24,7 @@ from plugin.plugins.hsr_companion.tests.test_stage2_assessment import relic
 book = guidance_cases.book
 catalog = guidance_cases.catalog
 builds = moc_cases.builds
+recorded_period = moc_cases.recorded_period
 
 
 def choose(query, book, catalog, *, hints=None, previous=None, hint=""):
@@ -44,8 +45,14 @@ def test_panel_priority_routes_to_assessment_without_unasked_reads(book, catalog
     assert chosen.kind == "build" and chosen.character_ids == ("character.pearl",)
     assert chosen.requires_pixels and chosen.request_focus == "attributes"
     assert demand.fields == {"attributes"}
-    result = build_guidance(chosen, query, book=book, catalog=catalog, profile={}, visual=panel())
+    current = panel()
+    unbound = build_guidance(chosen, query, book=book, catalog=catalog, profile={}, visual=current)
+    assert not unbound["assessment"]["evaluation_available"]
+    assert unbound["completion"]["panel_subject_state"] == "unconfirmed"
+    current["characters"] = [{"entity_id": "character.pearl", "name": "真珠", "identity_scope": "detail_subject"}]
+    result = build_guidance(chosen, query, book=book, catalog=catalog, profile={}, visual=current)
     assert result["assessment"]["evaluation_available"]
+    assert result["completion"]["panel_subject_state"] == "confirmed"
     assert result["reply_plan"]["enabled"]
 
 
@@ -151,7 +158,7 @@ def test_expired_followup_is_visible_in_safe_diagnostic():
     assert status["state"] == "expired" and status["reason"] == "no_new_verified_facts"
 
 
-def test_formal_entry_continuation_keeps_purpose_and_source(tmp_path, monkeypatch, catalog, builds):
+def test_formal_entry_continuation_keeps_purpose_and_source(tmp_path, monkeypatch, catalog, builds, recorded_period):
     """Same owner, accepted fixture fields, real prepare; not new OCR evidence."""
     from plugin.plugins.hsr_companion.runtime.observation import public_visual_evidence
     from plugin.plugins.hsr_companion.runtime.observation_store import ObservationSnapshot
@@ -219,6 +226,7 @@ def test_formal_entry_continuation_keeps_purpose_and_source(tmp_path, monkeypatc
                    "screen_facts": {"observation_serial": 5, "facts": [], "visible_text": [
                        {"text": "忘却之庭 来生泅渡其十二"}, {"text": "剩余10轮以上"}, {"text": "剩余20轮以上"}]}}
         owner._observation_serial = 5
+        await owner.set_experimental_features(extended_guidance_enabled=True)
         challenge = await owner.hsr_companion_prepare(query="这期怎么配队？", screen_fields=["quest"])
         assert demands[-1].fields == {"visible_text"}
         assigned = challenge["guidance_answer"]["challenge_plan"]["assignments"]

@@ -7,9 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-
-from plugin.plugins.hsr_companion.assistant_runtime import server
-from plugin.plugins.hsr_companion.assistant_runtime import window_capture
+from plugin.plugins.hsr_companion.assistant_runtime import server, window_capture
 from plugin.plugins.hsr_companion.tests.test_window_capture import FakeCapture, session, window
 
 
@@ -83,6 +81,7 @@ def test_native_copy_does_not_block_new_callback(monkeypatch):
     capture.close()
 
 
+@pytest.mark.host_clock_guard
 def test_timestamp_includes_callback_conversion_time(monkeypatch):
     capture = session()
     clock = [100.0]
@@ -108,6 +107,7 @@ def test_same_sequence_not_returned_as_a_new_capture():
     assert state.snapshot(include_image=True, since_frame=1)["image_base64"] == ""
 
 
+@pytest.mark.host_clock_guard
 def test_work_time_is_not_followed_by_another_full_capture_interval(monkeypatch):
     from types import SimpleNamespace
     state = server.CaptureState()

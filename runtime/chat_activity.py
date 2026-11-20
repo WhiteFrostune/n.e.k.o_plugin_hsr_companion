@@ -11,6 +11,7 @@ import inspect
 import math
 import threading
 import time
+import weakref
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 
@@ -18,10 +19,46 @@ from plugin.sdk.plugin import Err, Ok
 
 # Some supported SDK versions return an awaitable but perform blocking IPC
 # inside it. Isolate the PUBLIC facade, including awaiting its result, from the
-# plugin loop. One worker and no queued jobs: timeouts cannot accumulate reads.
-_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="hsr-activity")
-_read_lock = threading.Lock()
-_inflight = None
+# plugin loop. The worker pool is shared; the pending-read state is per bus so
+# one owner's stuck transport cannot block another question.
+_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="hsr-activity")
+_states_lock = threading.Lock()
+_states = weakref.WeakKeyDictionary()
+_STATE_ATTRIBUTE = "_hsr_companion_activity_state"
+
+
+class _ActivityState:
+    __slots__ = ("lock", "inflight", "abandoned_at")
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.inflight = None
+        self.abandoned_at = 0.0
+
+
+def _state_for(bus):
+    with _states_lock:
+        try:
+            state = _states.get(bus)
+            if state is None:
+                state = _ActivityState()
+                _states[bus] = state
+            return state
+        except TypeError:
+            pass
+    # Some compatibility buses (e.g. SimpleNamespace) are unhashable and not
+    # weak-referenceable. Keying those by id() lets a recycled address inherit
+    # a dead bus's stuck read, so keep the state on the bus instead. If the bus
+    # cannot store it either, each call reads independently rather than
+    # blocking a later question on an unrelated review.
+    try:
+        state = getattr(bus, _STATE_ATTRIBUTE, None)
+        if state is None:
+            state = _ActivityState()
+            setattr(bus, _STATE_ATTRIBUTE, state)
+        return state
+    except (AttributeError, TypeError):
+        return _ActivityState()
 
 
 def user_record(record):
@@ -86,20 +123,32 @@ async def latest_user_activity(bus, *, target: str, now: float | None = None, li
     def blocking_read():
         return asyncio.run(read())
 
-    global _inflight
-    with _read_lock:
-        if _inflight is not None and not _inflight.done():
-            return "unavailable", None
-        _inflight = _executor.submit(blocking_read)
-        future = _inflight
+    state = _state_for(bus)
+    with state.lock:
+        if state.inflight is not None and not state.inflight.done():
+            if state.abandoned_at:
+                # The prior caller already timed out; let the next question
+                # start its own read on the shared worker pool.
+                state.inflight = None
+            else:
+                return "unavailable", None
+        state.inflight = _executor.submit(blocking_read)
+        state.abandoned_at = 0.0
+        future = state.inflight
     try:
-        # Shield leaves the single worker occupied until the transport really
-        # exits. A timed-out result is never reused for a different query.
+        # Shield leaves this worker occupied until the transport really exits.
+        # A timed-out result is never reused for a different query.
         wrapped = asyncio.wrap_future(future)
         wrapped.add_done_callback(lambda task: None if task.cancelled() else task.exception())
         return "available", await asyncio.wait_for(asyncio.shield(wrapped), timeout=wait_timeout)
     except asyncio.CancelledError:
+        with state.lock:
+            if state.inflight is future and not future.done():
+                state.abandoned_at = time.monotonic()
         raise
     except Exception:
+        with state.lock:
+            if state.inflight is future and not future.done():
+                state.abandoned_at = time.monotonic()
         # Missing/failed optional activity observation must not send blindly.
         return "unavailable", None

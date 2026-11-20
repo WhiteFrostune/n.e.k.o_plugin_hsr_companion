@@ -22,8 +22,8 @@ from .verify_roundtrip_c_acceptance import loopback_only
 
 
 async def cone_phase(owner, args, result, emit):
-    from plugin.sdk.plugin import NekoPluginBase
     from plugin.plugins.hsr_companion.runtime.build_info import BUILD_REVISION
+    from plugin.sdk.plugin import NekoPluginBase
 
     submissions = []
     owner.ctx = SimpleNamespace(bus=NekoPluginBase(SimpleNamespace(plugin_id="isolated-stage3-cone", metadata={},

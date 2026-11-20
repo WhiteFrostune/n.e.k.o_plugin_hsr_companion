@@ -26,7 +26,9 @@ def plan_semantic_guidance(query, base, *, catalog, book, previous=None, now_mon
 
     action = base.intent
     if action in {"read_screen", "explain_page"}:
-        return GuidancePlan()
+        detail = (previous or {}).get("reply_detail")
+        return GuidancePlan(reply_detail=detail if detail in {"brief", "full"} else "",
+                            answer_parts=frozenset((previous or {}).get("answer_parts") or ()))
     prior = previous or {}
     clock = time.monotonic() if now_monotonic is None else now_monotonic
     valid = 0 <= clock - prior.get("at", -1e9) <= CONTEXT_TTL
@@ -68,6 +70,8 @@ def plan_semantic_guidance(query, base, *, catalog, book, previous=None, now_mon
                 raise ValueError("subject_conflict: 本轮明确新角色，不能声明沿用旧角色")
             targets, origin = inherited, "discussion_context" if inherited else "unresolved"
             subject_reason = "" if inherited else "no_valid_discussion_subject"
+        elif subject_state == "current":
+            targets, origin, subject_reason = (), "current_screen", "declared_current"
         else:
             targets, origin, subject_reason = (), "unresolved", "declared_unresolved"
     elif not targets and hint:
@@ -168,7 +172,8 @@ def plan_semantic_guidance(query, base, *, catalog, book, previous=None, now_mon
         challenge_difficulty=difficulty, challenge_side="upper" if "上半" in query and "下半" not in query else
         "lower" if "下半" in query and "上半" not in query else "", execution_fields=fields,
         subject_state=subject_state, subject_reason=subject_reason,
-        assessment_scope=declaration["scope"] if declaration else "", allow_visual_subject=declaration is None,
+        assessment_scope=declaration["scope"] if declaration else "",
+        allow_visual_subject=declaration is None or subject_state == "current",
         evidence_source="saved_profile" if saved_cone else "current_screen" if action in {
             "assess_cone", "assess_relic", "assess_panel"} else "",
         source_state="restored_named_archive" if saved_cone and not valid and targets else "declared" if declaration else "",

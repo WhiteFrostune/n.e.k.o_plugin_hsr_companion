@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .build_info import BUILD_REVISION, PLUGIN_VERSION
-from .equipment import equipment_card, handoff_receipt
+from .equipment_view import equipment_card, handoff_receipt
 from .navigation import navigation_answer
 from .query_plan import SCREEN_FIELDS
 from .service_contract import public_service_request
@@ -157,7 +157,9 @@ def build_diagnostic_report(*, observer: dict, assistant: dict, evidence: dict,
                             prepare_calls: dict | None = None,
                             followup_status: dict | None = None, answer_deliveries: list | None = None,
                             review_state: dict | None = None, page_control_trace: list | None = None,
-                            revocation_trace: list | None = None) -> dict:
+                            revocation_trace: list | None = None,
+                            vision_trace: list | None = None,
+                            frame_comparisons: dict | None = None) -> dict:
     """Project explicit safe fields, not arbitrary logs/config/raw errors."""
     checked_at = (now or datetime.now(timezone.utc)).isoformat()
     from .page_control_trace import sanitize_trace
@@ -236,7 +238,7 @@ def build_diagnostic_report(*, observer: dict, assistant: dict, evidence: dict,
         if not isinstance(item, dict):
             continue
         stage = {"stage": _code(item.get("stage"), allowed_stages), "after_seconds": _number(item.get("after_seconds"))}
-        for key in ("processing_seconds", "age_seconds", "original_age_seconds", "worker_elapsed_seconds", "health_polls", "frame_transfers", "serial", "current_serial", "region_count", "queue_seconds",
+        for key in ("processing_seconds", "age_seconds", "original_age_seconds", "worker_elapsed_seconds", "health_polls", "frame_transfers", "serial", "current_serial", "region_count", "queue_seconds", "job_id", "frame_seq",
                     "observed", "confirmed", "pixels_unchanged", "text_revalidated", "withheld", "attempt", "probe_seconds",
                     "native_calls", "native_seconds", "before_rows", "after_rows"):
             if key in item:
@@ -307,6 +309,28 @@ def build_diagnostic_report(*, observer: dict, assistant: dict, evidence: dict,
                               "ack_scope": "sdk_submission_only_not_host_speech"},
         "page_control_trace": sanitize_trace(page_control_trace),
         "revocation_trace": sanitize_revocations(revocation_trace),
+        "frame_comparisons": {key: _number((frame_comparisons or {}).get(key, 0))
+                              for key in ("calls", "total_seconds", "max_seconds")},
+        "vision_trace": [
+            {**{key: _number(event[key]) for key in ("age_seconds", "seconds", "pending", "frame_seq",
+                "job_id", "verification_frame_seq", "main_stats", "sub_stats", "ocr_lines", "tiles_completed", "tiles_total",
+                "tiles_skipped", "priority_tile_count", "serial") if key in event},
+             **{key: _timestamp(event[key]) for key in ("capture_at", "verification_frame_at") if key in event},
+             **({"relic_priority": event["relic_priority"] is True} if "relic_priority" in event else {}),
+             **({"ocr_failed": event["ocr_failed"] is True} if "ocr_failed" in event else {}),
+             "stage": _code(event.get("stage"), {"ocr_admission", "ocr_drain", "ocr_drain_error", "ocr_backend_setup",
+                 "ocr_backend_fallback", "ocr_call", "ocr_verification", "producer_verification",
+                 "delivery_verification", "capture_no_fresh_frame", "capture_waiting_frame",
+                 "relic_parsed", "relic_verified", "relic_committed", "relic_job_ended"}),
+             **({"outcome": _code(event["outcome"], {"started", "returned", "error", "timeout", "rejected"})} if "outcome" in event else {}),
+             **({"role": _code(event["role"], {"producer", "delivery", "manual"})} if "role" in event else {}),
+             **({"reason": _code(event["reason"], {"window_capture_no_new_frame", "window_capture_stale_frame",
+                 "obsolete_worker_draining", "analysis_superseded", "capture_changed_during_analysis", "candidate_too_old"})}
+                if "reason" in event else {}),
+             **({"error_type": event["error_type"]} if re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]{0,63}",
+                str(event.get("error_type") or "")) else {})}
+            for event in (vision_trace or [])[-48:] if isinstance(event, dict)
+        ],
         "answer_deliveries": [_delivery_summary(d) for d in (answer_deliveries or [])[-8:] if isinstance(d, dict)],
         "equipment_handoffs": [_handoff_summary(h)
             for h in (equipment_handoffs or [])[-8:] if isinstance(h, dict)],

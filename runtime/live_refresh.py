@@ -3,20 +3,35 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import threading
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from io import BytesIO
+from time import perf_counter
 from typing import Any
 
-from ..adapters.text_reader import ObservationSuperseded
+from ..adapters.local_vision import LocalVisionAdapter
+from ..adapters.text_reader import ObservationSuperseded, QueryPreempted
 from ..adapters.text_verification import identity_literal, proof_key
 from ..detectors.exploration import generic_navigation
+from . import vision_scheduler
 from .query_reuse import LIVE_FRAME_MAX_AGE_SECONDS, region_stamp, regions_changed, text_pixel_differences, try_reuse
+from .vision_scheduler import VisionWorkerBusy, vision_turn
+from .vision_scheduler import drain_analysis_worker as drain_analysis_worker
+from .vision_trace import measure, record, record_relic_stage
 
 LIVE_POLL_SECONDS = 0.25
+
+
+def _supports_kwarg(func, name):
+    try:
+        params = inspect.signature(func).parameters
+    except (TypeError, ValueError):
+        return False
+    return name in params or any(param.kind == inspect.Parameter.VAR_KEYWORD for param in params.values())
 
 
 @dataclass(frozen=True)
@@ -95,6 +110,8 @@ async def fetch_recent_frame(owner, *, wait_seconds=2.0):
             since = getattr(latest, "frame_seq", 0)
             trace_refresh(owner, "capture_retry", reason="stale_frame", age_seconds=round(age, 3))
         if time.monotonic() >= deadline or getattr(owner, "_observer_stop_requested", False):
+            if not getattr(owner, "_observer_stop_requested", False):
+                record(owner, "capture_no_fresh_frame", seconds=round(time.monotonic() - (deadline - wait_seconds), 3))
             return None
         await asyncio.sleep(min(.15, max(0, deadline - time.monotonic())))
 
@@ -184,8 +201,10 @@ def stable_screen_content(analysis: dict, original: bytes, latest: bytes, *, ver
             verified = verifier(latest, changed_proofs, cancelled=cancelled)
         except ObservationSuperseded:
             raise
-        except (RuntimeError, ValueError, OSError, ImportError):
-            pass  # A failed reread is unknown, never authorization to keep old text.
+        except (RuntimeError, ValueError, OSError, ImportError) as exc:
+            if trace is not None:
+                trace.append({"stage": "proof_read_failed", "error_type": type(exc).__name__})
+            # A failed reread is unknown, never authorization to keep old text.
 
     if trace is not None:
         trace.append({"stage": "proof_selection", "page_verified": page_verified,
@@ -285,6 +304,15 @@ def frame_changed(previous, current, characters=(), *, ui_only=False) -> bool:
     return False
 
 
+def compare_live_frames(owner, previous, current, characters=(), *, ui_only=False):
+    started = perf_counter()
+    changed = frame_changed(previous, current, characters, ui_only=ui_only)
+    elapsed = perf_counter() - started
+    count, total, maximum = getattr(owner, "_frame_comparison_stats", (0, 0., 0.))
+    owner._frame_comparison_stats = (count + 1, total + elapsed, max(maximum, elapsed))
+    return changed
+
+
 async def invalidate_frame_change(owner: Any, previous, current, controls, reason: str) -> None:
     """Revoke changed content, retain ONLY a revalidated page label.
 
@@ -309,7 +337,7 @@ async def invalidate_frame_change(owner: Any, previous, current, controls, reaso
         return
     retain = bool(previous is not None and current is not None
                   and known.get("fresh") and known.get("scene", {}).get("verified")
-                  and not frame_changed(previous, current, controls, ui_only=True))
+                  and not compare_live_frames(owner, previous, current, controls, ui_only=True))
     from .revocation_trace import cause
     with cause(origin="frame_change", basis="page_control_pixels" if controls else "coarse_pixels_only",
                controls=len(controls or ()), candidate=bool(getattr(owner, "_committed_observation", None))):
@@ -330,7 +358,6 @@ async def invalidate_frame_change(owner: Any, previous, current, controls, reaso
 async def guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict[str, Any] | None:
     """Monitor the live helper while OCR runs; discard superseded work."""
     await wait_delivery_turn(owner)
-    from .vision_scheduler import vision_turn
     async with vision_turn(owner, "producer"):
         return await _guarded_analysis(owner, payload, helper=helper)
 
@@ -347,7 +374,7 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
     from .delivery_scope import coordinates
     native_guard = getattr(owner, "_accepted_frame_delivery_guard", None)
     native_page_guard = bool(controls and native_guard and {coordinates(p) for p in controls} <= {p[0] for p in native_guard[1]})
-    if not native_page_guard and frame_changed(previous, stamp, coarse_regions, ui_only=exploration_ui):
+    if not native_page_guard and compare_live_frames(owner, previous, stamp, coarse_regions, ui_only=exploration_ui):
         await invalidate_frame_change(owner, previous, stamp, controls, "content_or_page_changed")
     epoch = getattr(owner, "_observation_epoch", 0)
     request_generation = getattr(owner, "_query_refresh_generation", 0)
@@ -360,6 +387,11 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
     def on_scene(value):
         if not stop.is_set():
             pass_preview.update(value)
+            owner._page_probe_cache = {
+                "preview": value,
+                "frame_seq": getattr(owner, "_analysis_input_frame_seq", None),
+                "at": time.monotonic(),
+            }
             loop.call_soon_threadsafe(previews.put_nowait, value)
 
     live = getattr(owner._vision, "analyze_live", None)
@@ -380,11 +412,49 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
     monitored_sequence = getattr(owner, "_assistant_frame_seq", 0)
     # Invalid test/failed image bytes are still handled by the OCR error path.
     worker_started = time.monotonic()
+    owner._vision_job_id = getattr(owner, "_vision_job_id", 0) + 1
+    job = {"job_id": owner._vision_job_id, "frame_seq": getattr(owner, "_analysis_input_frame_seq", None),
+           "capture_at": getattr(owner, "_analysis_capture_at", None)}
+
+    relic_requested = False
+
+    def wants_relic(*, claim=False):
+        nonlocal relic_requested
+        from .page_handoff import current_demand
+
+        if not helper or stop.is_set() or epoch != getattr(owner, "_observation_epoch", 0):
+            return False
+        demand = current_demand(owner)
+        if demand is None:
+            return False
+        if getattr(owner, "_visual_query_waiters", 0):
+            plan = (getattr(owner, "_active_refresh_trace", None) or {}).get("plan")
+        else:
+            plan = getattr(getattr(owner, "_pending_answer", None), "plan", None)
+        requested = bool(plan and plan.fields == {"equipment"} and plan.required_equipment_kinds)
+        relic_requested |= requested
+        # A partial priority read must not starve the normal recovery passes.
+        generation = demand[0][1]
+        if not requested or getattr(owner, "_relic_priority_generation", None) == generation:
+            return False
+        if claim:
+            owner._relic_priority_generation = generation
+        return True
+
     trace_refresh(owner, "analysis_started", scope=scope)
+    pass_generation = request_generation
+
+    def yield_requested():
+        return vision_scheduler.query_yield_requested(owner, pass_generation, scope)
+
+    priority = {"wants_relic": wants_relic} if isinstance(owner._vision, LocalVisionAdapter) else {}
+    if callable(live) and _supports_kwarg(live, "yield_requested"):
+        priority["yield_requested"] = yield_requested
     task = asyncio.create_task(asyncio.to_thread(navigation_reader if navigation_only else scene_reader, payload, cancelled=stop.is_set) if scene_only else asyncio.to_thread(
-        live, payload, cancelled=stop.is_set, on_scene=on_scene
+        live, payload, cancelled=stop.is_set, on_scene=on_scene, **priority
     ) if callable(live) else asyncio.to_thread(owner._vision.analyze, payload))
     changed = False
+    page_check_skipped = False
     try:
         while not task.done():
             done, _ = await asyncio.wait({task}, timeout=LIVE_POLL_SECONDS)
@@ -393,7 +463,9 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
                 # validation binds the result to the latest question. A real
                 # page change still stops/discards the old work below.
                 request_generation = getattr(owner, "_query_refresh_generation", 0)
+                wants_relic()
                 trace_refresh(owner, "query_joined_worker", scope=scope,
+                              job_id=job["job_id"], frame_seq=job["frame_seq"],
                               worker_elapsed_seconds=round(time.monotonic() - worker_started, 3))
             latest = None
             healthy_wait = False
@@ -433,7 +505,8 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
                 break
             if latest is not None:
                 latest_stamp = await asyncio.to_thread(frame_stamp, latest.image_bytes)
-                if not scene_only and not controls and frame_changed(stamp, latest_stamp, coarse_regions, ui_only=exploration_ui):
+                if not scene_only and not controls and compare_live_frames(
+                        owner, stamp, latest_stamp, coarse_regions, ui_only=exploration_ui):
                     changed = True
                     stop.set()
                     trace_refresh(owner, "analysis_rejected", reason="page_changed_during_analysis", scope=scope)
@@ -450,11 +523,24 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
                     # Early scenes work on both helper and compatibility paths.
                     epoch = getattr(owner, "_observation_epoch", 0)
                     owner._preview_frame_stamp = stamp
-            if helper and not scene_only and page_check is None and pass_preview and not task.done():
-                from .page_handoff import queue_page_check
-                page_check = queue_page_check(owner, payload, pass_preview, stop, frame_seq=sequence)
-                if page_check is not None:
-                    trace_refresh(owner, "page_check_queued", scope=scope)
+            if helper and not scene_only and page_check is None and pass_preview and not task.done() and not page_check_skipped:
+                preview_page = pass_preview.get("page") or {}
+                preview_controls = (pass_preview.get("recognition") or {}).get("scene_regions") or []
+                if (getattr(owner, "_visual_query_waiters", 0) > 0
+                        and preview_page.get("confidence") == "high"
+                        and (pass_preview.get("scene") or {}).get("verified") and preview_controls):
+                    # A waiting query does not need a second page probe when
+                    # this same frame already has a verified, control-backed
+                    # page preview. The final live-frame check still guards
+                    # the commit; this only removes the duplicate probe.
+                    page_check_skipped = True
+                    trace_refresh(owner, "page_check_result", reason="same_frame_preview", scope=scope,
+                                  page=preview_page.get("page_type"), controls=len(preview_controls))
+                else:
+                    from .page_handoff import queue_page_check
+                    page_check = queue_page_check(owner, payload, pass_preview, stop, frame_seq=sequence)
+                    if page_check is not None:
+                        trace_refresh(owner, "page_check_queued", scope=scope)
             if page_check is not None and page_check.done():
                 try:
                     transition = page_check.result()
@@ -484,16 +570,51 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
                     break
             if done:
                 break
+        if changed and not task.done():
+            # This frame lost ownership. The retained thread still has to
+            # exit before any new OCR work can use its backend.
+            done, _ = await asyncio.wait({task}, timeout=vision_scheduler.OCR_DRAIN_SECONDS)
+            if not done:
+                record(owner, "ocr_drain", outcome="timeout", pending=1,
+                       seconds=vision_scheduler.OCR_DRAIN_SECONDS)
+                if relic_requested:
+                    record(owner, "relic_job_ended", **job, outcome="timeout", reason="obsolete_worker_draining")
+                owner._vision_drain_timed_out = True
+                return None
         try:
             analysis = await asyncio.shield(task)
+        except QueryPreempted:
+            trace_refresh(owner, "producer_yielded", scope=scope)
+            return None
         except ObservationSuperseded:
             trace_refresh(owner, "old_worker_drained", scope=scope)
+            if relic_requested:
+                record(owner, "relic_job_ended", **job, outcome="rejected", reason="analysis_superseded")
             return None
         trace_refresh(owner, "analysis_finished", scope=scope,
                       processing_seconds=(analysis.get("recognition") or {}).get("processing_seconds") if isinstance(analysis, dict) else None,
                       health_polls=health_polls, frame_transfers=frame_transfers)
+        if isinstance(analysis, dict) and ((analysis.get("page") or {}).get("page_type") == "relic_detail" or relic_requested):
+            reader = (analysis.get("recognition") or {}).get("text_reader") or {}
+            ocr = analysis.get("ocr") or {}
+            record_relic_stage(owner, "relic_parsed", analysis, job,
+                               relic_priority=bool(reader.get("relic_priority")),
+                               ocr_lines=ocr.get("line_count"), ocr_failed=bool(ocr.get("error")),
+                               tiles_completed=reader.get("tiles_completed"), tiles_total=reader.get("tiles_total"),
+                               tiles_skipped=reader.get("tiles_skipped"),
+                               priority_tile_count=len(reader.get("priority_tiles") or ()))
+        else:
+            job = {}
         if changed or epoch != getattr(owner, "_observation_epoch", 0):
+            if job:
+                record(owner, "relic_job_ended", **job, outcome="rejected", reason="analysis_superseded")
             trace_refresh(owner, "analysis_discarded", scope=scope, epoch_changed=epoch != getattr(owner, "_observation_epoch", 0))
+            return None
+        if yield_requested():
+            # OCR already finished. A waiting region query can use the native
+            # turn now; skip this pass's broad validation/verification instead
+            # of making the query wait for work it does not need.
+            trace_refresh(owner, "producer_yielded", scope=scope, checkpoint="post_ocr")
             return None
         live_validation = None
         delivery_guard = None
@@ -508,6 +629,10 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
                 trace_refresh(owner, "analysis_rejected", reason="capture_unavailable_after_analysis", scope=scope)
                 await owner._invalidate_current_observation("capture_unavailable_during_analysis")
             else:
+                if job:
+                    job["verification_frame_seq"] = getattr(latest, "frame_seq", None)
+                    job["verification_frame_at"] = datetime.fromtimestamp(latest.timestamp, timezone.utc).isoformat()
+                    record_relic_stage(owner, "relic_verified", analysis, job, outcome="started")
                 if not getattr(owner, "_analysis_game_pid", 0):
                     # Compatibility image callers do not go through the
                     # observer's initial capture hook. Bind their first valid
@@ -515,16 +640,24 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
                     owner._analysis_game_pid = latest.game.get("pid", 0)
                 # This is the SAME producer. Keep the task drainable on cancellation
                 # so a timed-out reread cannot race a second OCR worker.
+                verifier = getattr(owner._vision, "verify_text_regions", None)
+                def verify(*args, **kwargs):
+                    with measure(owner, "producer_verification"):
+                        return verifier(*args, **kwargs)
                 task = asyncio.create_task(asyncio.to_thread(
                     stable_screen_content, analysis, payload, latest.image_bytes,
-                    verifier=getattr(owner._vision, "verify_text_regions", None), cancelled=stop.is_set))
+                    verifier=verify if callable(verifier) else None, cancelled=stop.is_set))
                 try:
                     analysis = await asyncio.shield(task)
                 except ObservationSuperseded:
+                    if job:
+                        record(owner, "relic_job_ended", **job, outcome="rejected", reason="analysis_superseded")
                     return None
                 from .page_control_trace import record_controls
                 record_controls(owner, "validated", analysis=analysis)
                 if epoch != getattr(owner, "_observation_epoch", 0):
+                    record_relic_stage(owner, "relic_verified", analysis, job,
+                                       outcome="rejected", reason="analysis_superseded")
                     return None
                 # Retained fields now have proof on this validation frame. Do not
                 # rebuild their guard from the older, background-mismatched image.
@@ -540,7 +673,7 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
                 delivery_regions = [item for item in delivery_regions if item.get("region")]
                 delivery_guard = (delivery_regions, await asyncio.to_thread(region_stamp, guard_payload, delivery_regions)) if delivery_regions else None
                 current_controls = (analysis.get("recognition") or {}).get("scene_regions") or []
-                changed = frame_changed(stamp, await asyncio.to_thread(frame_stamp, latest.image_bytes),
+                changed = compare_live_frames(owner, stamp, await asyncio.to_thread(frame_stamp, latest.image_bytes),
                                         current_controls if current_controls else analysis.get("characters") or [],
                                         ui_only=scene_only or bool(current_controls) or exploration_ui)
                 if current_controls:
@@ -573,6 +706,10 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
                                        "checked_at": datetime.now(timezone.utc).isoformat(),
                                        "checked_frame_at": latest.timestamp,
                                        "answer_generation": getattr(owner, "_answer_query_generation", 0)}
+        if helper:
+            record_relic_stage(owner, "relic_verified", analysis, job,
+                               outcome="rejected" if changed or epoch != getattr(owner, "_observation_epoch", 0)
+                               else "returned")
         if changed or epoch != getattr(owner, "_observation_epoch", 0):
             trace_refresh(owner, "analysis_discarded", scope=scope, epoch_changed=epoch != getattr(owner, "_observation_epoch", 0))
             return None
@@ -639,6 +776,8 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
             }
         if live_validation is not None:
             analysis["_live_validation"] = live_validation
+        if job:
+            analysis["_relic_job"] = job
         return analysis
     finally:
         stop.set()
@@ -648,17 +787,8 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
             # Cancellation does not terminate to_thread. Retain the worker so
             # lifecycle shutdown can drain it rather than reuse its backend.
             owner._draining_vision_worker = task
-
-
-async def drain_analysis_worker(owner: Any) -> None:
-    worker = getattr(owner, "_draining_vision_worker", None)
-    try:
-        if worker is not None:
-            await asyncio.shield(worker)
-    except ObservationSuperseded:
-        pass  # Expected cooperative shutdown, not a failed plugin stop.
-    finally:
-        owner._draining_vision_worker = None
+        elif not task.cancelled():
+            task.exception()  # Cancellation may race a native error after the last await.
 
 
 async def watch_latest_frame(owner: Any, payload: bytes, *, helper: bool) -> bool:
@@ -674,7 +804,7 @@ async def watch_latest_frame(owner: Any, payload: bytes, *, helper: bool) -> boo
     regions = [*controls, *getattr(owner, "_accepted_frame_characters", ())]
     exploration_ui = (bool(controls) and getattr(owner, "_accepted_frame_page_type", "unknown") != "unknown"
                       or bool(regions) and getattr(owner, "_accepted_frame_page_type", "") == "exploration_hud")
-    if not native_page_guard and frame_changed(
+    if not native_page_guard and compare_live_frames(owner,
         getattr(owner, "_accepted_frame_stamp", None), stamp,
         controls if controls and exploration_ui else regions, ui_only=exploration_ui,
     ):
@@ -768,7 +898,7 @@ async def _validate_before_delivery(owner: Any, *, plan=None, selection=None) ->
     current = await asyncio.to_thread(frame_stamp, latest.image_bytes)
     if revision != (getattr(owner, "_observation_epoch", 0), getattr(owner, "_observation_serial", 0)):
         return False
-    if frame_changed(stamp, current, controls, ui_only=bool(controls)):
+    if compare_live_frames(owner, stamp, current, controls, ui_only=bool(controls)):
         await invalidate_frame_change(owner, stamp, current, controls, "content_or_page_changed_before_delivery")
         return False
     # Early previews lack a complete native candidate guard. They may expose
@@ -782,10 +912,14 @@ async def revalidate_guard_text(owner, latest, coordinates, *, evidence=None, co
         # inference thread; unsupported/finishing producers still return busy.
         return await _revalidate_guard_text(owner, latest, coordinates, evidence=evidence,
                                             controls=controls, reference_guard=reference_guard, cooperative=True)
-    from .vision_scheduler import vision_turn
-    async with vision_turn(owner, "delivery"):
-        return await _revalidate_guard_text(owner, latest, coordinates, evidence=evidence, controls=controls,
-                                            reference_guard=reference_guard)
+    try:
+        async with vision_turn(owner, "delivery"):
+            return await _revalidate_guard_text(owner, latest, coordinates, evidence=evidence, controls=controls,
+                                                reference_guard=reference_guard)
+    except VisionWorkerBusy:
+        trace_refresh(owner, "text_verification", reason="busy", region_count=len(coordinates))
+        owner._last_delivery_verification = {"state": "busy"}
+        return TextVerification("busy")
 
 
 async def _revalidate_guard_text(owner, latest, coordinates, *, evidence=None, controls=(), reference_guard=None,
@@ -952,7 +1086,8 @@ async def _receive_guard_review(owner, job, result, *, expected_proofs):
         if asyncio.current_task().cancelling():
             raise
         return result("busy")  # Producer exited before this queued job started.
-    except (RuntimeError, ValueError, OSError):
+    except (RuntimeError, ValueError, OSError) as exc:
+        record(owner, "delivery_verification", outcome="error", error_type=type(exc).__name__)
         return result("error")
     finally:
         if task.done() and not retain:
@@ -1055,8 +1190,14 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
     if observer is None or observer.done() or not owner._observer_status.get("enabled"):
         return
     owner._last_visual_query_at = time.monotonic()
-    trace = {"started": time.monotonic(), "stages": []}
-    deadline = trace["started"] + timeout
+    trace = {"started": time.monotonic(), "stages": [], "plan": query_plan}
+    if timeout >= 4:
+        deadline = trace["started"] + timeout - .05
+        stale_reserve = min(.8, timeout * .25)
+    else:
+        deadline = trace["started"] + timeout
+        stale_reserve = 0
+    fresh_deadline = max(trace["started"], deadline - stale_reserve)
     owner._active_refresh_trace = trace
     trace_refresh(owner, "query_started", require_characters=require_characters,
                   require_content=require_content, require_navigation=require_navigation)
@@ -1083,7 +1224,7 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
             # Preserve already-ready complete results without queuing native
             # OCR for unrelated text. A miss cannot erase the checked page.
             richer = None
-            if deadline - time.monotonic() > .4:
+            if fresh_deadline - time.monotonic() > .4:
                 try:
                     richer = await asyncio.wait_for(try_reuse(owner, **original_reuse_args, pixel_only=True), timeout=.35)
                 except TimeoutError:
@@ -1104,10 +1245,14 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
             trace_refresh(owner, "answer_incomplete", missing_fields=sorted(query_plan.fields - satisfied_fields(query_plan, value)))
         return enough or has_answerable_content(query_plan, value)
     try:
+        # A cold start must not spend the whole budget waiting for a cache
+        # review that is queued behind the producer. A miss falls through to
+        # the region path and, at the deadline, to the guarded stale reading.
         reused = await asyncio.wait_for(reuse_selected(),
-            timeout=max(.001, deadline - time.monotonic()))
+            timeout=min(1.5, max(.001, fresh_deadline - time.monotonic())))
     except TimeoutError:
         reused = None
+        trace_refresh(owner, "reuse_deferred", reason="initial_budget")
     except asyncio.CancelledError:
         if getattr(owner, "_active_refresh_trace", None) is trace:
             owner._active_refresh_trace = None
@@ -1136,22 +1281,50 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
     # Use the same clock/precision as utc_now_iso, not a freshness tolerance.
     owner._query_refresh_after = datetime.now(timezone.utc).timestamp()
     owner._query_refresh_generation = getattr(owner, "_query_refresh_generation", 0) + 1
-    owner._query_refresh_deadline = deadline  # Checkpoint work shares, never renews, this budget.
+    owner._query_refresh_deadline = fresh_deadline  # Checkpoint work shares, never renews, this budget.
     owner._query_refresh_serial = getattr(owner, "_observation_serial", 0)
+    region_waiter = bool(query_plan is not None and query_plan.fields)
     wake = getattr(owner, "_observer_wake_event", None)
     if wake is not None:
         wake.set()
     if not hasattr(owner, "_visual_update_event"):
         owner._visual_update_event = asyncio.Event()
+
+    async def stale_on_timeout():
+        try:
+            from .query_reuse import try_reuse
+            remaining = max(.001, deadline - time.monotonic())
+            return await asyncio.wait_for(
+                try_reuse(owner, **{**reuse_args, "allow_stale": True}), timeout=remaining)
+        except asyncio.CancelledError:
+            raise
+        except (TimeoutError, Exception):
+            return None
+
     try:
+        if region_waiter:
+            owner._region_query_waiters = getattr(owner, "_region_query_waiters", 0) + 1
+            try:
+                from .region_query import read_query_regions
+                region_visual = await asyncio.wait_for(
+                    read_query_regions(owner, query_plan, fresh_deadline),
+                    timeout=max(.001, fresh_deadline - time.monotonic()))
+            except (TimeoutError, Exception):
+                region_visual = None
+            finally:
+                owner._region_query_waiters -= 1
+            if ready(region_visual):
+                trace_refresh(owner, "region_query_selected", fields=sorted(query_plan.fields))
+                completed = True
+                return region_visual
         owner._push_current_visual_context(await asyncio.wait_for(
-            owner._current_visual_evidence(), timeout=max(.001, deadline - time.monotonic())))
-        while time.monotonic() < deadline:
+            owner._current_visual_evidence(), timeout=max(.001, fresh_deadline - time.monotonic())))
+        while time.monotonic() < fresh_deadline:
             if not owner._observer_status.get("enabled") or getattr(owner, "_observer_stop_requested", False):
                 trace["observer_unavailable"] = True
                 return None
             owner._visual_update_event.clear()
-            evidence = await asyncio.wait_for(owner._current_visual_evidence(), timeout=max(.001, deadline - time.monotonic()))
+            evidence = await asyncio.wait_for(owner._current_visual_evidence(), timeout=max(.001, fresh_deadline - time.monotonic()))
             if not require_characters and not require_content:
                 snapshot = getattr(owner, "_reusable_observations", {}).get("navigation" if require_navigation else "scene")
                 if snapshot is None and require_navigation:
@@ -1167,14 +1340,14 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
                     # A just-finished read can start before the question and
                     # still be current. Validate its live evidence instead of
                     # throwing it away solely because of its capture time.
-                    reused = await asyncio.wait_for(reuse_selected(), timeout=max(.001, deadline - time.monotonic()))
+                    reused = await asyncio.wait_for(reuse_selected(), timeout=max(.001, fresh_deadline - time.monotonic()))
                     if ready(reused):
                         trace_refresh(owner, "completed_read_revalidated", serial=serial)
                         completed = True
                         return reused
                     # try_reuse may revoke the observation while awaiting the
                     # live frame. Never finish with the pre-check evidence.
-                    evidence = await asyncio.wait_for(owner._current_visual_evidence(), timeout=max(.001, deadline - time.monotonic()))
+                    evidence = await asyncio.wait_for(owner._current_visual_evidence(), timeout=max(.001, fresh_deadline - time.monotonic()))
             if require_navigation:
                 # A title preview has not read the task stack yet. A fresh
                 # completed navigation/full pass may return partial/unknown,
@@ -1184,7 +1357,7 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
                     "observed_at": evidence.get("observed_at"),
                 })
                 if not pending_navigation and evidence.get("fresh") and evidence.get("read_scope") in {"navigation", "full"}:
-                    selected = await asyncio.wait_for(validated_delivery(owner, evidence, plan=execution_plan), timeout=max(.001, deadline - time.monotonic()))
+                    selected = await asyncio.wait_for(validated_delivery(owner, evidence, plan=execution_plan), timeout=max(.001, fresh_deadline - time.monotonic()))
                     if ready(selected):
                         completed = True
                         return selected
@@ -1192,12 +1365,12 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
                 "observation_serial": (evidence.get("screen_facts") or {}).get("observation_serial"),
                 "observed_at": evidence.get("observed_at"),
             }) and evidence.get("fresh") and evidence.get("status") not in {"recognizing_characters", "scene_not_recognized"}:
-                selected = await asyncio.wait_for(validated_delivery(owner, evidence, plan=execution_plan), timeout=max(.001, deadline - time.monotonic()))
+                selected = await asyncio.wait_for(validated_delivery(owner, evidence, plan=execution_plan), timeout=max(.001, fresh_deadline - time.monotonic()))
                 if ready(selected):
                     completed = True
                     return selected
             if not require_navigation and not require_characters and (evidence.get("scene") or {}).get("verified"):
-                selected = await asyncio.wait_for(validated_delivery(owner, evidence, plan=execution_plan), timeout=max(.001, deadline - time.monotonic()))
+                selected = await asyncio.wait_for(validated_delivery(owner, evidence, plan=execution_plan), timeout=max(.001, fresh_deadline - time.monotonic()))
                 if ready(selected):
                     completed = True
                     return selected
@@ -1208,7 +1381,7 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
                 pending.add("recognizing_characters")
             if (not require_navigation and (not require_characters or evidence.get("read_scope", "full") == "full")
                     and evidence.get("fresh") and evidence.get("status") not in pending):
-                selected = await asyncio.wait_for(validated_delivery(owner, evidence, plan=execution_plan), timeout=max(.001, deadline - time.monotonic()))
+                selected = await asyncio.wait_for(validated_delivery(owner, evidence, plan=execution_plan), timeout=max(.001, fresh_deadline - time.monotonic()))
                 if ready(selected):
                     completed = True
                     return selected
@@ -1219,16 +1392,33 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
                 # whose capture/verification was transiently unavailable.
                 # Keep recovery within the original deadline and one worker.
                 recovered = await asyncio.wait_for(reuse_selected(),
-                    timeout=max(.001, deadline - time.monotonic()))
+                    timeout=max(.001, fresh_deadline - time.monotonic()))
                 if ready(recovered):
                     trace_refresh(owner, "reuse_recovered")
                     completed = True
                     return recovered
             try:
-                await asyncio.wait_for(owner._visual_update_event.wait(), timeout=min(1.0, deadline - time.monotonic()))
+                await asyncio.wait_for(owner._visual_update_event.wait(), timeout=min(1.0, fresh_deadline - time.monotonic()))
             except TimeoutError:
                 pass
+        if not completed:
+            # The fresh read used the whole budget. A guarded older reading is
+            # still better than a zero-field answer, but it must say its age.
+            stale = await stale_on_timeout()
+            if ready(stale):
+                completion_state = "stale"
+                trace_refresh(owner, "stale_reuse_on_timeout",
+                              age_seconds=(stale or {}).get("age_seconds"))
+                completed = True
+                return stale
     except TimeoutError:
+        stale = await stale_on_timeout()
+        if ready(stale):
+            completion_state = "stale"
+            trace_refresh(owner, "stale_reuse_on_timeout",
+                          age_seconds=(stale or {}).get("age_seconds"))
+            completed = True
+            return stale
         return None
     except asyncio.CancelledError:
         trace["cancelled"] = True

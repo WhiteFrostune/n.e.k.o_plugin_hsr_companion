@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import copy
 import importlib
-import json
 import threading
 from types import SimpleNamespace
 
@@ -17,7 +16,7 @@ import pytest
 from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter, serial_ocr
 from plugin.plugins.hsr_companion.adapters.text_verification import proof_key
 from plugin.plugins.hsr_companion.runtime import followup, live_refresh, manual_refresh
-from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
+from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
 from plugin.plugins.hsr_companion.runtime.observation_store import ObservationSnapshot, ObservationStore
 from plugin.plugins.hsr_companion.runtime.query_coordinator import needs_followup, satisfied_fields
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
@@ -398,6 +397,7 @@ def test_formal_followup_cancels_without_respond_when_activity_channel_fails(tmp
         # test_commit_activity_repair separately exercises the retry branch.
         assert (owner._followup_status["state"], owner._followup_status["reason"]) in {
             ("cancelled", "activity_unavailable_after_retries"),
+            ("expired", "activity_unavailable_after_retries"),
             ("expired", "no_new_verified_facts"),
         }
         assert not [m for m in sent if m.get("ai_behavior") == "respond"]
@@ -412,7 +412,12 @@ def test_pure_guidance_does_not_require_live_pixels_or_claim_account_ownership(t
     async def run():
         before = copy.deepcopy(values["player_context"])
         result = await owner.hsr_companion_prepare(query="绯英没有专武怎么配装")
-        assert result["guidance_answer"]["guides"]
+        selected = result["guidance_answer"]
+        assert selected["assessment"]["subject_ids"] == ["character.evanescia"]
+        assert selected["reply_plan"]["discussion_options"] and selected["sources"]
+        assert selected["player_conditions"]["signature_excluded"]
+        assert not selected["assessment"]["visual_subject_confirmed"]
+        assert "guides" not in selected
         assert not result["query_plan"]["screen"]
         assert result["query_answer"]["state"] == "not_requested"
         assert not result["current_visual_evidence"]["characters"]

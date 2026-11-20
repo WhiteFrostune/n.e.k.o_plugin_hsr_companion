@@ -15,7 +15,7 @@ import time
 import pytest
 from plugin.plugins.hsr_companion.runtime import followup
 from plugin.plugins.hsr_companion.runtime.answer_message import render_followup
-from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
+from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
 from plugin.plugins.hsr_companion.runtime.guidance import build_guidance
 from plugin.plugins.hsr_companion.runtime.observation_store import ObservationSnapshot
 from plugin.plugins.hsr_companion.runtime.query_coordinator import QueryObservation
@@ -89,7 +89,11 @@ def test_brief_complete_relic_projects_explicit_read_status_through_real_bridge(
     data = {"equipment_answer": card, "guidance_answer": guidance}
     text, projection = render_followup(data, plan=chosen.observation_plan(build_query_plan(query)), ready=True)
     assert projection["complete"]
-    assert "主副词条已读全" in text and "只列重点" in text
+    assert guidance["reply_plan"]["equipment_coverage"]["complete"]
+    assert guidance["reply_plan"]["equipment_coverage"]["confirmed_substats"] == 4
+    assert projection["answer_complete"] and projection["service_satisfied"]
+    assert "依据：" + guidance["reply_plan"]["conclusion"] in text
+    assert "缺项未读全" not in text and "攻击力57" not in text
     message = {"parts": [{"type": "text", "text": text}], "ai_behavior": "respond", "visibility": []}
     assert received_text(message) == text
     assert card == equipment_card(value)  # Selecting evidence never changes the full card.
@@ -106,7 +110,10 @@ def test_brief_partial_relic_does_not_claim_summary_rows_are_all_read_rows(book,
     text, projection = render_followup({"equipment_answer": card, "guidance_answer": guidance},
         plan=chosen.observation_plan(build_query_plan(query)), ready=True)
     assert projection["complete"] and not card["complete"]
-    assert "主副词条已读全" not in text and "副词条已确认3/4项" in text
+    assert "主副词条已读全" not in text and "缺项未读全" in text
+    assert not guidance["reply_plan"]["equipment_coverage"]["complete"]
+    assert guidance["reply_plan"]["equipment_coverage"]["confirmed_substats"] == 3
+    assert not projection["answer_complete"]
     assert "攻击力57" not in text
     assert received_text({"parts": [{"type": "text", "text": text}], "ai_behavior": "respond", "visibility": []}) == text
 

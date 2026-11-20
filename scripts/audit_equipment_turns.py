@@ -38,7 +38,7 @@ async def audit(args):
     report = Path(args.report).resolve()
     if not report.is_relative_to(root / "dist") or report.exists():
         raise ValueError("New plugin-owned report required")
-    app = Path("C:/Users/USER/AppData/Local/N.E.K.O")
+    app = Path("C:/Users/cai/AppData/Local/N.E.K.O")
     helper_root = app / "data-packs/hsr_companion/assistant"
     pointer = helper_root / "current.json"
     executable = (helper_root / json.loads(pointer.read_text(encoding="utf-8"))["executable"]).resolve(strict=True)

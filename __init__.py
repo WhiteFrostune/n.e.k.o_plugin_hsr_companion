@@ -45,14 +45,17 @@ from .game_state import (
 )
 from .observer import capture_game_window, find_hsr_window, frame_difference
 from .runtime import CompanionRuntime, build_event_delivery
+from .runtime.build_info import BUILD_COMMIT, PLUGIN_VERSION
 from .runtime.chat_activity import latest_user_activity
-from .runtime.consultation_contract import CONSULTATION_SCHEMA, bound_followup_plan
+from .runtime.consultation_contract import CONSULTATION_SCHEMA, bound_followup_plan, normalize_model_consultation
+from .runtime.data_freshness import data_freshness
 from .runtime.diagnostic_export import export_diagnostic
 from .runtime.diagnostics import build_diagnostic_report
-from .runtime.equipment import equipment_card, record_handoff
+from .runtime.equipment import record_handoff
+from .runtime.equipment_view import equipment_card
 from .runtime.followup import DIRECT_WAIT_SECONDS, arm_followup, cancel_followup
 from .runtime.grounding import build_grounding
-from .runtime.manual_refresh import cancel_manual_refresh, public_manual_refresh, request_manual_refresh
+from .runtime.guidance import build_guidance, load_guidance_catalog, plan_request
 from .runtime.live_refresh import (
     drain_analysis_worker,
     fact_regions,
@@ -62,24 +65,37 @@ from .runtime.live_refresh import (
     validate_before_delivery,
     watch_latest_frame,
 )
+from .runtime.manual_refresh import cancel_manual_refresh, public_manual_refresh, request_manual_refresh
 from .runtime.observation import (
+    VISUAL_TTL_SECONDS,
     public_visual_evidence,
     visual_context_text,
 )
 from .runtime.observation_store import ObservationStore
+from .runtime.player_builds import STORE_KEY as MANUAL_BUILDS_KEY
+from .runtime.player_builds import BuildError, player_build_service
+from .runtime.prepare_trace import prepare_correction, prepare_failure, prepare_stage, read_records, trace_prepare
 from .runtime.progression import plan_progression
-from .runtime.guidance import build_guidance, load_guidance_catalog, plan_guidance
-from .runtime.service_contract import PREPARE_TOOL_DESCRIPTION, clear_discussion, mark_service_request, public_service_request, record_answer_delivery, response_contract
 from .runtime.query_coordinator import answer_status, needs_followup, resolve_query
 from .runtime.query_plan import SCREEN_FIELDS, SEMANTIC_INTENTS, build_query_plan
-from .runtime.prepare_trace import prepare_failure, prepare_stage, read_records, trace_prepare
+from .runtime.service_contract import (
+    PREPARE_TOOL_DESCRIPTION,
+    clear_discussion,
+    mark_service_request,
+    public_service_request,
+    record_answer_delivery,
+    response_contract,
+)
 from .runtime.speech import PendingSpeech, SpeechArbiter
 from .runtime.storage import migrate_legacy_store
 from .runtime.team_overview import team_overview
-from .runtime.uid_import import STORE_KEY as UID_STORE_KEY, profile_with_roster
+from .runtime.uid_import import STORE_KEY as UID_STORE_KEY
+from .runtime.uid_import import profile_with_roster
 from .runtime.uid_service import uid_service
-from .runtime.player_builds import STORE_KEY as MANUAL_BUILDS_KEY, BuildError, player_build_service
-from .runtime.data_freshness import data_freshness
+from .runtime.vision_scheduler import VisionWorkerBusy
+from .runtime.vision_trace import frame_comparison_stats, record_relic_stage
+from .runtime.vision_trace import public_trace as public_vision_trace
+from .runtime.vision_trace import record as record_vision_event
 from .session import (
     DEFAULT_SESSION_TTL_SECONDS,
     build_companion_context,
@@ -166,6 +182,7 @@ class HsrCompanionPlugin(NekoPluginBase):
         self._runtime = CompanionRuntime(confirmation_frames=2)
         self._speech_arbiter = SpeechArbiter()
         self._speech_task: asyncio.Task[None] | None = None
+        self._extended_guidance_enabled = False
         self._max_experiences = 100
         self._event_dedup_limit = 200
         self._session_ttl_seconds = DEFAULT_SESSION_TTL_SECONDS
@@ -181,7 +198,8 @@ class HsrCompanionPlugin(NekoPluginBase):
         self._observation_invalidated = False
         self._observer_status: dict[str, Any] = {
             "enabled": False,
-            "proactive_enabled": True,
+            "proactive_enabled": False,
+            "idle_chatter_enabled": False,
             "state": "stopped",
             "message": "自动观察尚未开启",
         }
@@ -204,13 +222,13 @@ class HsrCompanionPlugin(NekoPluginBase):
             pass
         return ""
 
-    def push_message(self, **kwargs: Any):
+    def push_message(self, *, _message_transport: dict | None = None, **kwargs: Any):
         target = kwargs.get("target_lanlan") or self._target_character()
         if target:
             kwargs["target_lanlan"] = target
         responding = kwargs.get("ai_behavior") == "respond"
         if responding:
-            transport = self._message_path_ready()
+            transport = self._message_path_ready() if _message_transport is None else _message_transport
             if transport.get("available") is False:
                 self._proactive_status.update(
                     state="error", submitted=False, message=transport["message"],
@@ -262,6 +280,9 @@ class HsrCompanionPlugin(NekoPluginBase):
         except (ImportError, ValueError):
             return {"available": None}
 
+    async def _check_message_path(self) -> dict[str, Any]:
+        return await asyncio.to_thread(self._message_path_ready)
+
     def _get_speech_arbiter(self) -> SpeechArbiter:
         # Lazy construction also supports older plugin test/embedding fixtures.
         if not hasattr(self, "_speech_arbiter"):
@@ -303,7 +324,8 @@ class HsrCompanionPlugin(NekoPluginBase):
             scene=str((visual.get("scene") or {}).get("primary_state") or "unknown"),
             page_type=str(visual.get("page_type") or "unknown"),
             available=bool(self._observer_status.get("enabled")
-                           and self._observer_status.get("proactive_enabled", True)
+                           and self._observer_status.get("proactive_enabled") is True
+                           and (cue.event.kind != "exploration_idle" or self._observer_status.get("idle_chatter_enabled") is True)
                            and self._observer_status.get("state") == "observing"
                            and visual.get("fresh") and (visual.get("scene") or {}).get("verified")
                            and not getattr(self, "_observation_invalidated", False)),
@@ -323,6 +345,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             if reason != "ready":
                 arbiter.finish(cue, reason)
                 return
+            transport = await self._check_message_path() if plan.ai_behavior == "respond" else None
             # Read-only current-frame validation, no OCR and no query wait.
             # This task is separate from observation commit / direct answers.
             if not await asyncio.wait_for(validate_before_delivery(self), timeout=2.5):
@@ -340,6 +363,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             # query/invalidation cannot interleave at this last boundary.
             failure_reason = "submission_failed"
             pushed = self.push_message(
+                **({"_message_transport": transport} if transport is not None else {}),
                 visibility=[], ai_behavior=plan.ai_behavior, source="hsr_companion",
                 parts=[{"type": "text", "text": plan.text}], metadata=plan.metadata,
                 priority=plan.priority, coalesce_key=plan.coalesce_key,
@@ -357,6 +381,9 @@ class HsrCompanionPlugin(NekoPluginBase):
                 logger.warning("Automatic speech failed: %s", exc)
 
     def _queue_automatic_speech(self, event: Any, plan: Any, visual: dict) -> dict:
+        if (self._observer_status.get("proactive_enabled") is not True
+                or event.kind == "exploration_idle" and self._observer_status.get("idle_chatter_enabled") is not True):
+            return {"submitted": False, "queued": False, "reason": "experiment_disabled"}
         self._cancel_pending_speech("coalesced_newer")
         arbiter = self._get_speech_arbiter()
         cue = arbiter.offer(
@@ -389,6 +416,8 @@ class HsrCompanionPlugin(NekoPluginBase):
 
     @lifecycle(id="startup")
     async def startup(self, **_):
+        self.logger.info("hsr_companion version=%s commit=%s", PLUGIN_VERSION, BUILD_COMMIT)
+        self._vision_closing = False
         legacy = getattr(self, "_legacy_store", None)
         if legacy is not None:
             try:
@@ -434,17 +463,17 @@ class HsrCompanionPlugin(NekoPluginBase):
             await self._store_value("companion_session", session)
         elif session_is_active(session, ttl_seconds=self._session_ttl_seconds):
             await self._push_companion_context("plugin_startup_restore")
-        observer_settings = unwrap_or(await self._get_store("observer_settings"), {})
-        if not isinstance(observer_settings, dict):
-            observer_settings = {}
-        self._observer_status["proactive_enabled"] = bool(observer_settings.get("proactive_enabled", True))
+        observer_settings = await self._read_observer_settings()
+        self._extended_guidance_enabled = observer_settings["extended_guidance_enabled"]
+        speech_settings = {key: observer_settings[key] for key in ("proactive_enabled", "idle_chatter_enabled")}
+        self._observer_status.update(speech_settings)
         if observer_settings.get("enabled") is True:
             # startup is invoked through a transient asyncio.run() loop.  A
             # task created here would be cancelled as soon as startup returns;
             # restore it on the first panel/tool call instead.
             self._observer_status = {
                 "enabled": True,
-                "proactive_enabled": bool(observer_settings.get("proactive_enabled", True)),
+                **speech_settings,
                 "state": "waiting",
                 "message": "打开插件面板或开始聊天后恢复自动观察",
                 "updated_at": utc_now_iso(),
@@ -472,7 +501,8 @@ class HsrCompanionPlugin(NekoPluginBase):
 
     @lifecycle(id="shutdown")
     async def shutdown(self, **_):
-        await self._cancel_observer_task(update_status=False)
+        self._vision_closing = True
+        drained = await self._cancel_observer_task(update_status=False)
         task = self._data_pack_task
         self._data_pack_task = None
         if task and not task.done():
@@ -481,7 +511,8 @@ class HsrCompanionPlugin(NekoPluginBase):
                 await task
             except asyncio.CancelledError:
                 pass
-        await asyncio.to_thread(self._vision.close)
+        if drained:
+            await asyncio.to_thread(self._vision.close)
         session = await self._read_session()
         if session_is_active(session, ttl_seconds=self._session_ttl_seconds):
             self.push_message(
@@ -506,7 +537,8 @@ class HsrCompanionPlugin(NekoPluginBase):
     def _set_observer_status(self, state: str, message: str, **details: Any) -> None:
         self._observer_status = {
             "enabled": bool(self._observer_status.get("enabled")),
-            "proactive_enabled": bool(self._observer_status.get("proactive_enabled", True)),
+            "proactive_enabled": self._observer_status.get("proactive_enabled") is True,
+            "idle_chatter_enabled": self._observer_status.get("idle_chatter_enabled") is True,
             "state": str(state or "unknown"),
             "message": str(message or ""),
             "updated_at": utc_now_iso(),
@@ -543,6 +575,7 @@ class HsrCompanionPlugin(NekoPluginBase):
         clear_discussion(self)
         cancel_manual_refresh(self)
         cancel_followup(self, "observation_stopped")
+        self._vision_stop_generation = getattr(self, "_vision_stop_generation", 0) + 1
         self._observer_stop_requested = True
         self._observer_status.update(enabled=False, state="stopped", message="自动观察已关闭", updated_at=utc_now_iso())
         self._revoke_current_observation()
@@ -700,6 +733,16 @@ class HsrCompanionPlugin(NekoPluginBase):
         corrections = await self._read_corrections()
         if epoch != getattr(self, "_observation_epoch", 0) or getattr(self, "_observer_stop_requested", False):
             return {"delivery": {"submitted": False, "reason": "observation_revoked"}}
+        recognition = analysis.get("recognition") or {}
+        if (recognition.get("yielded_for_query") is True
+                or (recognition.get("portrait_templates") or {}).get("reason") == "yielded_for_query"):
+            # A query may preempt the producer. The text-only frame is not a
+            # complete observation; keep the previous complete evidence and
+            # let the producer retry after the query.
+            trace_refresh(self, "candidate_retained", reason="yielded_for_query")
+            if hasattr(self, "_visual_update_event"):
+                self._visual_update_event.set()
+            return {"delivery": {"submitted": False, "reason": "analysis_yielded_incomplete"}}
         corrected_characters: list[dict[str, Any]] = []
         for candidate in list(analysis.get("characters") or []):
             if not isinstance(candidate, dict):
@@ -779,7 +822,10 @@ class HsrCompanionPlugin(NekoPluginBase):
             # A query-only capture already passed latest-control validation;
             # do not keep the previous scene's two-full-frame waiting gate.
             self._runtime.invalidate_observation()
-        event, decisions = self._runtime.ingest(analysis)
+        event, decisions = self._runtime.ingest(
+            analysis, proactive_enabled=deliver_event and self._observer_status.get("proactive_enabled") is True,
+            idle_chatter_enabled=self._observer_status.get("idle_chatter_enabled") is True,
+        )
         scene = dict(analysis.get("scene") or {})
         stable_scene = self._runtime.stable_scene
         accepted = bool(stable_scene != "unknown" and stable_scene == scene.get("primary_state"))
@@ -832,11 +878,58 @@ class HsrCompanionPlugin(NekoPluginBase):
             "runtime": self._runtime.snapshot(),
             "decisions": decisions,
         }
+        previous = getattr(self, "_last_full_characters", None) or {}
+        reader = (public_analysis.get("recognition") or {}).get("text_reader") or {}
+        character_context = None
+        if (reader.get("relic_priority") and not public_analysis["characters"]
+                and (public_analysis.get("page") or {}).get("page_type") == "relic_detail"):
+            previous_page = previous.get("page")
+            candidates = previous.get("characters") or []
+            try:
+                observed = datetime.fromisoformat(str(previous.get("observed_at") or "").replace("Z", "+00:00"))
+                if observed.tzinfo is None:
+                    observed = observed.replace(tzinfo=timezone.utc)
+                age = (datetime.now(timezone.utc) - observed).total_seconds()
+            except ValueError:
+                age = -1.0
+            if (previous_page in {"character_detail", "relic_detail"} and candidates
+                    and 0 <= age <= VISUAL_TTL_SECONDS):
+                actor = candidates[0]
+                character_context = {
+                    "entity_id": actor.get("entity_id"),
+                    "name": actor.get("name"),
+                    "identity_scope": actor.get("identity_scope"),
+                    "source": "previous_full_read",
+                    "observed_at": previous.get("observed_at"),
+                    "age_seconds": round(age, 3),
+                    "confirmed_on_current_frame": False,
+                    "same_round": True,
+                }
+        public_analysis["character_context"] = character_context
         await self._store_value("last_local_vision", public_analysis)
         if epoch != getattr(self, "_observation_epoch", 0) or getattr(self, "_observer_stop_requested", False):
             return {"delivery": {"submitted": False, "reason": "observation_revoked"}}
         trace_refresh(self, "observation_committed", serial=public_analysis["observation_serial"])
         ObservationStore(self).commit(public_analysis)
+        confirmed = [
+            item for item in public_analysis["characters"]
+            if isinstance(item, dict) and item.get("entity_id") and item.get("name")
+            and item.get("identity_scope") in {"detail_subject", "screen_label"}
+            and item.get("confidence") in {"high", "mixed"}
+        ]
+        if (confirmed and (public_analysis.get("page") or {}).get("page_type")
+                in {"character_detail", "relic_detail"}):
+            self._last_full_characters = {
+                "page": public_analysis["page"]["page_type"],
+                "characters": [
+                    {key: item.get(key) for key in ("entity_id", "name", "identity_scope", "confidence")}
+                    for item in confirmed[:4]
+                ],
+                "observed_at": public_analysis["observed_at"],
+                "serial": public_analysis["observation_serial"],
+            }
+        record_relic_stage(self, "relic_committed", public_analysis, analysis.get("_relic_job"),
+                           serial=self._observation_serial)
         if public_visual_evidence(public_analysis, {"enabled": True, "state": "observing"})["read_scope"] == "full":
             self._last_full_commit_serial = self._observation_serial
         self._scene_preview = None
@@ -876,11 +969,10 @@ class HsrCompanionPlugin(NekoPluginBase):
         query_busy = (getattr(self, "_visual_query_waiters", 0) > 0 or getattr(self, "_pending_answer", None) is not None
                       or time.monotonic() - getattr(self, "_last_visual_query_at", -1e9) < 15)
         if event is not None and deliver_event and not query_busy:
-            observer_settings = await self._read_observer_settings()
             plan = build_event_delivery(
                 event,
                 catalog_revision=self._catalog.revision,
-                proactive_enabled=bool(observer_settings.get("proactive_enabled", True)),
+                proactive_enabled=self._observer_status.get("proactive_enabled") is True,
             )
             if plan.ai_behavior == "respond":
                 delivery = self._queue_automatic_speech(event, plan, await self._current_visual_evidence())
@@ -921,11 +1013,12 @@ class HsrCompanionPlugin(NekoPluginBase):
         finally:
             wake.clear()
 
-    async def _cancel_observer_task(self, *, update_status: bool = True) -> None:
+    async def _cancel_observer_task(self, *, update_status: bool = True) -> bool:
         cancel_followup(self, "observation_stopped")
         if update_status:
             self._stop_observation_now()
         else:
+            self._vision_stop_generation = getattr(self, "_vision_stop_generation", 0) + 1
             self._revoke_current_observation()
             self._push_current_visual_context(public_visual_evidence(
                 {"invalidated": True, "source": "assistant_local_ocr"}, self._observer_status))
@@ -948,7 +1041,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             except asyncio.CancelledError:
                 pass
         self._speech_task = None
-        await drain_analysis_worker(self)
+        drained = await drain_analysis_worker(self)
         self._observer_last_signature = None
         self._observer_last_push_monotonic = 0.0
         self._assistant_frame_seq = 0
@@ -957,11 +1050,13 @@ class HsrCompanionPlugin(NekoPluginBase):
         if update_status:
             self._observer_status = {
                 "enabled": False,
-                "proactive_enabled": bool(self._observer_status.get("proactive_enabled", True)),
+                "proactive_enabled": self._observer_status.get("proactive_enabled") is True,
+                "idle_chatter_enabled": self._observer_status.get("idle_chatter_enabled") is True,
                 "state": "stopped",
                 "message": "自动观察已关闭",
                 "updated_at": utc_now_iso(),
             }
+        return drained
 
     async def _observer_loop(self) -> None:
         while True:
@@ -993,6 +1088,9 @@ class HsrCompanionPlugin(NekoPluginBase):
                         if key in {"title", "pid", "process_name", "left", "top", "width", "height", "minimized", "foreground"}
                     }
                     if capture.get("state") == "error":
+                        if capture.get("reason") in {"window_capture_no_new_frame", "window_capture_stale_frame"}:
+                            record_vision_event(self, "capture_no_fresh_frame", reason=capture["reason"],
+                                                frame_seq=int(health.get("frame_seq") or 0))
                         await self._invalidate_current_observation("capture_error")
                         self._set_observer_status(
                             "error",
@@ -1045,6 +1143,10 @@ class HsrCompanionPlugin(NekoPluginBase):
                     )
                     if assistant_frame is None:
                         if capture.get("frame_semantics") == "every_capture":
+                            seq = health.get("frame_seq")
+                            if seq != getattr(self, "_last_missing_frame_seq", None):
+                                self._last_missing_frame_seq = seq
+                                record_vision_event(self, "capture_waiting_frame", frame_seq=seq)
                             # Modern helpers already own an independent capture
                             # session. No new sequence is a temporary wait, not
                             # permission to start a competing in-process session.
@@ -1085,6 +1187,7 @@ class HsrCompanionPlugin(NekoPluginBase):
                             await self._wait_observer_tick(1.5)
                             continue
                     else:
+                        self._last_missing_frame_seq = None
                         self._assistant_frame_seq = assistant_frame.frame_seq
                         image_bytes = assistant_frame.image_bytes
                         mime = assistant_frame.mime
@@ -1160,6 +1263,7 @@ class HsrCompanionPlugin(NekoPluginBase):
                         if assistant_frame is not None else utc_now_iso()
                     )
                     self._analysis_capture_at = captured_at
+                    self._analysis_input_frame_seq = assistant_frame.frame_seq if assistant_frame is not None else None
                     self._analysis_game_pid = public_window.get("pid", 0)
                     image_fingerprint = await asyncio.to_thread(visual_fingerprint, image_bytes)
                     await self._store_value(
@@ -1201,6 +1305,9 @@ class HsrCompanionPlugin(NekoPluginBase):
                             and check_window.public().get("pid") == public_window.get("pid")
                         )
                     if not still_current:
+                        if job := analysis.get("_relic_job"):
+                            record_vision_event(self, "relic_job_ended", **job, outcome="rejected",
+                                                reason="capture_changed_during_analysis")
                         await self._invalidate_current_observation("capture_changed_during_analysis")
                         self._set_observer_status("paused", "分析期间游戏窗口不可用或已变化，等待新的游戏画面")
                         await self._wait_observer_tick(1.5)
@@ -1212,6 +1319,9 @@ class HsrCompanionPlugin(NekoPluginBase):
                     if time.monotonic() - capture_started_at > 30:
                         from .runtime.fact_lifecycle import late_read_proved
                         if not late_read_proved(self, analysis):
+                            if job := analysis.get("_relic_job"):
+                                record_vision_event(self, "relic_job_ended", **job, outcome="rejected",
+                                                    reason="candidate_too_old")
                             self._set_observer_status("updating", "本轮识别耗时较长，保留已确认结果并继续核对")
                             await self._wait_observer_tick(1.5)
                             continue
@@ -1249,6 +1359,10 @@ class HsrCompanionPlugin(NekoPluginBase):
                             else "plugin_compatibility_local_ocr"
                         ),
                     )
+                    if (local_result.get("delivery") or {}).get("reason") == "analysis_yielded_incomplete":
+                        self._set_observer_status("updating", "提问优先，保留上一次完整画面，稍后补读")
+                        await asyncio.sleep(.1)
+                        continue
                     trace_refresh(self, "commit_finished")
                     self._observer_last_signature = signature
                     self._observer_last_push_monotonic = time.monotonic()
@@ -1293,6 +1407,9 @@ class HsrCompanionPlugin(NekoPluginBase):
                 await asyncio.sleep(0.25)
             except asyncio.CancelledError:
                 raise
+            except VisionWorkerBusy as exc:
+                self._set_observer_status("updating", str(exc))
+                await self._wait_observer_tick(1)
             except RuntimeError as exc:
                 await self._invalidate_current_observation("capture_error")
                 self._set_observer_status("error", str(exc))
@@ -1341,7 +1458,8 @@ class HsrCompanionPlugin(NekoPluginBase):
         value = unwrap_or(await self._get_store("observer_settings"), {})
         settings = dict(value) if isinstance(value, dict) else {}
         settings["enabled"] = bool(settings.get("enabled", False))
-        settings["proactive_enabled"] = bool(settings.get("proactive_enabled", True))
+        for key in ("proactive_enabled", "idle_chatter_enabled", "extended_guidance_enabled"):
+            settings[key] = settings.get(key) is True
         return settings
 
     async def _read_session(self) -> dict[str, Any]:
@@ -1413,10 +1531,6 @@ class HsrCompanionPlugin(NekoPluginBase):
         if not isinstance(value, list):
             return []
         return [dict(item) for item in value if isinstance(item, dict)]
-
-    async def _read_pending_game_state(self) -> dict[str, Any]:
-        value = unwrap_or(await self._get_store("pending_game_state_candidate"), {})
-        return value if isinstance(value, dict) else {}
 
     async def _touch_session(self, reason: str) -> tuple[dict[str, Any], bool]:
         current = await self._read_session()
@@ -2208,7 +2322,8 @@ class HsrCompanionPlugin(NekoPluginBase):
                         "game_state",
                     ] + sorted(SEMANTIC_INTENTS),
                     "description": "优先传已理解的精确目的：read_screen读取所需字段；explain_page解释页面用途；"
-                                   "assess_relic/assess_cone/assess_panel评价眼前遗器/光锥/面板；"
+                                   "只问眼前遗器词条用read_screen+equipment；要求适配评价才用assess_relic；"
+                                   "assess_cone/assess_panel评价眼前光锥/面板；"
                                    "equipment_guide/build_guide给资料建议；team_guide给角色配队，challenge_guide给本期/眼前关卡配队，不能沿用上一位角色；"
                                    "build_priority/build_explain/build_howto为养成重点/原因/怎么养，stat_threshold/stat_value为属性目标/玩家补数；"
                                    "continue_consultation沿用有效咨询目的但不沿用旧装备事实。其余值仅兼容旧调用。",
@@ -2287,6 +2402,12 @@ class HsrCompanionPlugin(NekoPluginBase):
         asked_at = time.time()
         mark_service_request(self, answer_generation, "started")
         prepare_stage("initialization", completed=True)
+        consultation, corrections = normalize_model_consultation(
+            consultation, intent=intent, screen_fields=screen_fields,
+            previous=getattr(self, "_guidance_context", None))
+        if corrections:
+            prepare_correction(corrections)
+            prepare_stage("consultation_corrected", completed=True)
         try:
             prepare_stage("equipment_reply")
             from .runtime.equipment_reply import try_equipment_reply
@@ -2304,23 +2425,24 @@ class HsrCompanionPlugin(NekoPluginBase):
                 self._guidance_book = book = load_guidance_catalog(Path(__file__).parent / "resources/guidance.cn-4.6.json")
             prepare_stage("guidance_catalog", completed=True)
             prepare_stage("guidance_plan")
-            guidance_plan = plan_guidance(query, query_plan, catalog=self._catalog, book=book,
-                                          previous=getattr(self, "_guidance_context", None),
-                                          explicit_fields=bool(screen_fields), discussion_character=discussion_character,
-                                          consultation=consultation)
-            query_plan = guidance_plan.observation_plan(query_plan)
-            knowledge_guidance = guidance_plan.requested and not query_plan.screen
+            query_plan, guidance_plan = plan_request(
+                query_plan, catalog=self._catalog, book=book, previous=getattr(self, "_guidance_context", None),
+                explicit_fields=bool(screen_fields), discussion_character=discussion_character,
+                consultation=consultation,
+            )
+            if guidance_plan.experimental and not getattr(self, "_extended_guidance_enabled", False):
+                return self._disabled_guidance(answer_generation)
             if not guidance_plan.requested and not query_plan.screen:
                 clear_discussion(self)
             mark_service_request(self, answer_generation, "planned")
             prepare_stage("guidance_plan", completed=True)
             prepare_stage("data_pack")
-            if not knowledge_guidance and not self._catalog.status().get("installed"):
+            if not query_plan.archived_guidance and not self._catalog.status().get("installed"):
                 await self._wait_for_data_pack()
             prepare_stage("data_pack", completed=True)
             prepare_stage("session")
             session, started = await self._touch_session(f"prepare:{intent}")
-            if started and not knowledge_guidance:
+            if started and not query_plan.archived_guidance:
                 await self._push_companion_context(f"auto_start:prepare:{intent}")
                 session = await self._read_session()
             prepare_stage("session", completed=True)
@@ -2340,11 +2462,10 @@ class HsrCompanionPlugin(NekoPluginBase):
             prepare_stage("player_context", completed=True)
             prepare_stage("observation")
             query_observation = await resolve_query(self, query_plan, refresh=refresh_for_query,
-                                                    timeout=DIRECT_WAIT_SECONDS, generation=answer_generation,
-                                                    read_unrequested=not knowledge_guidance)
+                                                    timeout=DIRECT_WAIT_SECONDS, generation=answer_generation)
             prepare_stage("observation", completed=True)
             prepare_stage("fact_projection")
-            game_state = public_game_state({} if knowledge_guidance else await self._read_game_state())
+            game_state = public_game_state({} if query_plan.archived_guidance else await self._read_game_state())
             current_visual = query_observation.snapshot.evidence()
             prepare_stage("fact_projection", snapshot=query_observation.snapshot, visual=current_visual)
             visual_epoch = getattr(self, "_observation_epoch", 0)
@@ -2478,6 +2599,8 @@ class HsrCompanionPlugin(NekoPluginBase):
                 )
             prepare_stage("delivery_boundary", completed=True, snapshot=query_observation.snapshot, visual=current_visual)
             prepare_stage("evaluation")
+            if guidance_plan.experimental and not getattr(self, "_extended_guidance_enabled", False):
+                return self._disabled_guidance(answer_generation)
             guidance = build_guidance(guidance_plan, query, book=book, catalog=self._catalog,
                                       profile=profile, visual=current_visual)
             resolved_guidance_plan = bound_followup_plan(guidance_plan, guidance)
@@ -2492,7 +2615,7 @@ class HsrCompanionPlugin(NekoPluginBase):
                 authoritative_context += "\n[本次攻略服务]\n" + (
                     "本题按guidance_answer.reply_plan回答；完整事实卡只供核对，资料候选不是当前穿戴。"
                     if (guidance.get("reply_plan") or {}).get("enabled") else guidance["instruction"])
-                if knowledge_guidance:
+                if query_plan.archived_guidance:
                     authoritative_context += "\n本次没有请求观察画面；画面未知不影响带来源攻略，勿回答成识别失败。"
             prepare_stage("evaluation", completed=True)
             prepare_stage("request_completion")
@@ -2520,8 +2643,24 @@ class HsrCompanionPlugin(NekoPluginBase):
             mark_service_request(self, answer_generation, "completed")
             prepare_stage("payload")
             equipment_answer = equipment_card(current_visual) if "equipment" in query_plan.fields else {"state": "not_requested"}
+            equipment_notice = ""
+            verification_notice = ""
             if "equipment" in query_plan.fields:
                 record_handoff(self, equipment_answer, channel="direct")
+                if equipment_answer.get("complete") is False and equipment_answer.get("sub_stats_complete") is False:
+                    observed = int(equipment_answer.get("observed_sub_stat_count") or 0)
+                    expected = int(equipment_answer.get("expected_sub_stat_count") or 4)
+                    equipment_notice = (
+                        f"副词条只读到 {observed}/{expected} 条，缺项未读全，不补。"
+                        if observed < expected
+                        else "本次词条完整性未确认，缺项未读全，不补。"
+                    )
+                boundary = final_visual.get("delivery_boundary") or {}
+                stages = (query_observation.refresh or {}).get("stages") or []
+                if ("equipment" in (boundary.get("withheld_fields") or ())
+                        or any(stage.get("stage") == "text_verification"
+                               and stage.get("reason") == "unconfirmed" for stage in stages)):
+                    verification_notice = "主/副词条本次未通过核对，没读到，不要当成完整读数。"
             from .runtime.consultation import model_guidance
             payload = {
                 "response_contract": response_contract(self, answer_generation, channel="direct"),
@@ -2567,7 +2706,10 @@ class HsrCompanionPlugin(NekoPluginBase):
                     "visible_text": current_visual["screen_facts"].get("visible_text", []) if not current_visual["scene"].get("verified") else [],
                     "instruction": "优先回答 locations 中明确的 current_location；任务目的地或地图选中地区不能当作所在地。"
                                    "其次回答已确认的页面，未知部分分开说明；无需等待角色名单。页面未知时可转述 visible_text，不能猜页面。"
+                                   "页面未知且没有可用旧读数时，用 page_unknown_reply 问玩家想看哪一块；不要猜页面类型。"
                                    "是否补答只看 followup.pending；没有登记就不得承诺。",
+                    "page_unknown_reply": ("这个界面我还看不太懂，你想问哪一块？"
+                                           if current_visual.get("page_type") == "unknown" else ""),
                 },
                 "query_timing": {"refresh_wait_seconds": query_observation.wait_seconds,
                                  "refresh": query_observation.refresh},
@@ -2576,7 +2718,13 @@ class HsrCompanionPlugin(NekoPluginBase):
                     "allowed": bool(answer_characters),
                     "scope": "controlled_character" if controlled_request else "visible_identity",
                     "names": [item["name"] for item in answer_characters],
-                    "instruction": current_visual["instruction"],
+                    "instruction": current_visual.get("instruction") or (
+                        "只引用本次 characters 中已确认的姓名；名单可能不完整，"
+                        "不得补出未识别队员或断言空位。"),
+                    "page_unknown_reply": ("这个界面我还看不太懂，你想问哪一块？"
+                                           if current_visual.get("page_type") == "unknown" else ""),
+                    "characters_complete": current_visual.get("characters_complete"),
+                    "team_roster_known": current_visual.get("team_roster_known"),
                     "unavailable_reply": ("目前尚未确认你正在操控哪一位角色。" if controlled_request else "目前无法确认画面中的角色。") if not answer_characters and not scene_only_request else "",
                 },
                 "answer_policy": {
@@ -2605,6 +2753,11 @@ class HsrCompanionPlugin(NekoPluginBase):
                     ) if scene_only_request or navigation_request else "",
                 },
             }
+            if equipment_notice or verification_notice:
+                notice = " ".join(item for item in (equipment_notice, verification_notice) if item)
+                answer = payload["query_answer"]
+                answer["instruction"] = (str(answer.get("instruction") or "") + " " + notice).strip()
+                payload["delivery_notice"] = notice
             from .runtime.equipment_reply import offer_equipment_reply
             payload["player_reply_contract"] = offer_equipment_reply(
                 self, current_visual, character_ids=resolved_guidance_plan.character_ids,
@@ -2628,8 +2781,16 @@ class HsrCompanionPlugin(NekoPluginBase):
         except (ValueError, RuntimeError) as exc:
             prepare_failure(exc)
             mark_service_request(self, answer_generation, "failed")
+            instruction = (
+                "本轮没有读取当前画面；不能沿用上一次的名单、属性或队伍作为当前画面回答。"
+                "请直接告诉玩家这次没读到，并询问是否再试。"
+            )
             return {
-                "output": {"reason": str(exc)},
+                "output": {
+                    "reason": str(exc),
+                    "screen_read": False,
+                    "instruction": instruction,
+                },
                 "is_error": True,
                 "error": "HSR_PREPARE_FAILED",
             }
@@ -2661,7 +2822,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             settings = await self._read_observer_settings()
             settings["enabled"] = True
             await self._store_value("observer_settings", settings)
-            self._observer_status["proactive_enabled"] = bool(settings.get("proactive_enabled", True))
+            self._observer_status.update({key: settings[key] for key in ("proactive_enabled", "idle_chatter_enabled")})
             self._start_observer_task()
             context = await self._start_companion_session("auto_observation_started")
             await self._set_user_operation(
@@ -2870,6 +3031,57 @@ class HsrCompanionPlugin(NekoPluginBase):
         except RuntimeError as exc:
             return Err(SdkError(str(exc)))
 
+    def _disabled_guidance(self, generation: int) -> dict:
+        mark_service_request(self, generation, "completed")
+        return {
+            "response_contract": response_contract(self, generation, channel="direct"),
+            "query_answer": {"state": "not_requested", "missing_fields": []},
+            "guidance_answer": {
+                "requested": True, "state": "experiment_disabled",
+                "instruction": "专项攻略未开启。请在插件面板的实验功能中开启后再问。",
+            },
+            "request_completion": {"state": "experiment_disabled", "service_ready": False},
+            "followup": {"pending": False, "reason": "experiment_disabled"},
+        }
+
+    @ui.action(id="set_experimental_features", label="设置星铁实验功能", refresh_context=True)
+    @plugin_entry(
+        id="set_experimental_features",
+        name="设置星铁实验功能",
+        description="设置探索闲聊和专项攻略的独立开关。探索闲聊还需要开启主动搭话。",
+        input_schema={
+            "type": "object",
+            "properties": {"idle_chatter_enabled": {"type": "boolean"},
+                           "extended_guidance_enabled": {"type": "boolean"}},
+            "additionalProperties": False,
+        },
+        llm_result_fields=["experimental_features"],
+    )
+    async def set_experimental_features(self, *, idle_chatter_enabled: bool | None = None,
+                                        extended_guidance_enabled: bool | None = None, **_):
+        try:
+            settings = await self._read_observer_settings()
+            if idle_chatter_enabled is not None:
+                settings["idle_chatter_enabled"] = idle_chatter_enabled
+            if extended_guidance_enabled is not None:
+                settings["extended_guidance_enabled"] = extended_guidance_enabled
+            await self._store_value("observer_settings", settings)
+            if idle_chatter_enabled is not None:
+                self._observer_status["idle_chatter_enabled"] = idle_chatter_enabled
+            if extended_guidance_enabled is not None:
+                self._extended_guidance_enabled = extended_guidance_enabled
+            cue = self._get_speech_arbiter().pending
+            if not settings["idle_chatter_enabled"] and cue is not None and cue.event.kind == "exploration_idle":
+                self._cancel_pending_speech("idle_chatter_disabled")
+            if extended_guidance_enabled is False:
+                pending_plan = getattr(getattr(self, "_pending_answer", None), "guidance_plan", None)
+                if getattr(pending_plan, "experimental", False):
+                    cancel_followup(self, "experiment_disabled")
+            return Ok({"experimental_features": {key: settings[key] for key in
+                       ("idle_chatter_enabled", "extended_guidance_enabled")}})
+        except RuntimeError as exc:
+            return Err(SdkError(str(exc)))
+
     @ui.action(
         id="prepare_data_pack",
         label="准备资料组件",
@@ -2921,13 +3133,14 @@ class HsrCompanionPlugin(NekoPluginBase):
             configure_delivery_trace(self, seconds=delivery_trace_seconds)
 
         assistant, audit, evidence, incomplete = await diagnostic_inputs(self)
+        message_path = await self._check_message_path()
         from .runtime.review_policy import review_status
         report = build_diagnostic_report(
             observer=dict(self._observer_status), assistant=assistant,
             evidence=evidence,
             data_pack=self._public_data_pack_status(), avatar_pack=self._avatars.status(),
             last_tool=audit[-1] if audit else {},
-            speech=self._get_speech_arbiter().snapshot(), message_path=self._message_path_ready(),
+            speech=self._get_speech_arbiter().snapshot(), message_path=message_path,
             incomplete_sources=incomplete,
             service_request=getattr(self, "_service_request", None),
             equipment_handoffs=getattr(self, "_equipment_handoffs", []),
@@ -2936,6 +3149,8 @@ class HsrCompanionPlugin(NekoPluginBase):
             review_state=review_status(self),
             page_control_trace=getattr(self, "_page_control_trace", []),
             revocation_trace=getattr(self, "_revocation_trace", []),
+            vision_trace=public_vision_trace(self),
+            frame_comparisons=frame_comparison_stats(self),
             prepare_calls=await read_records(self),
         )
         trace = delivery_value_trace(self)
@@ -3076,7 +3291,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             self._guidance_book = book = load_guidance_catalog(Path(__file__).parent / "resources/guidance.cn-4.6.json")
         return {
             "status": "ready",
-            "version": "0.9.6",
+            "version": "0.9.7",
             "catalog": self._catalog.meta,
             "record_count": self._catalog.record_count,
             "database_coverage": self._catalog.coverage,
@@ -3101,17 +3316,19 @@ class HsrCompanionPlugin(NekoPluginBase):
             "observer": {**self._observer_status, "assistant": assistant_status},
             "vision_assistant": assistant_status,
             "proactive_companionship": {
-                "enabled": bool(observer_settings.get("proactive_enabled", True)),
+                "enabled": observer_settings["proactive_enabled"],
                 **self._proactive_status,
                 "mode": "event_gated",
                 "idle_scene": "exploration",
                 "idle_interval_seconds": self._runtime.idle_chatter_seconds,
             },
+            "experimental_features": {key: observer_settings[key] for key in
+                                      ("idle_chatter_enabled", "extended_guidance_enabled")},
             "local_vision": local_vision,
             "current_visual_evidence": observation_display["current"],
             "observation_display": observation_display,
             "manual_refresh": public_manual_refresh(self),
-            "vision_backend": self._vision.status(),
+            "vision_backend": await asyncio.to_thread(self._vision.status),
             "runtime": self._runtime.snapshot(),
             "speech_arbitration": self._get_speech_arbiter().snapshot(),
             "query_followup": dict(getattr(self, "_followup_status", {"state": "idle"})),
@@ -3149,11 +3366,16 @@ class HsrCompanionPlugin(NekoPluginBase):
         llm_result_fields=["proactive_companionship", "last_operation"],
     )
     async def test_proactive_message(self, **_):
-        if self._observer_status.get("proactive_enabled") is False:
+        if self._observer_status.get("proactive_enabled") is not True:
             operation = await self._set_user_operation("proactive_test", "info", "主动搭话已关闭，请先开启后再测试。")
             return Ok({"last_operation": operation, "proactive_companionship": self._proactive_status})
         try:
+            transport = await self._check_message_path()
+            if self._observer_status.get("proactive_enabled") is not True:
+                operation = await self._set_user_operation("proactive_test", "info", "主动搭话已关闭，请先开启后再测试。")
+                return Ok({"last_operation": operation, "proactive_companionship": self._proactive_status})
             result = self.push_message(
+                _message_transport=transport,
                 visibility=[], ai_behavior="respond", source="hsr_companion", priority=5,
                 parts=[{"type": "text", "text": "[星铁陪玩连接测试] 玩家点击了测试搭话。请以你的人格自然回复一句‘我在陪你’，不要说明自己识别到了任何游戏角色或画面。不需要开启语音或视频通话，至少应显示文字回复。"}],
                 metadata={"kind": "connection_test", "proactive_requested": True},
@@ -3202,6 +3424,7 @@ class HsrCompanionPlugin(NekoPluginBase):
                 },
             )
             from .runtime.vision_scheduler import analyze_image
+            transport = await self._check_message_path()
             analysis = await analyze_image(self, image_bytes)
             local_result = await self._apply_local_analysis(
                 analysis,
@@ -3223,6 +3446,7 @@ class HsrCompanionPlugin(NekoPluginBase):
                 "请直接转述插件结果；unknown 就说明无法确认。禁止补猜未返回实体 ID 的角色。"
             )
             push_result = self.push_message(
+                _message_transport=transport,
                 visibility=[],
                 ai_behavior="respond",
                 parts=[
@@ -3313,6 +3537,7 @@ class HsrCompanionPlugin(NekoPluginBase):
                 },
             )
             from .runtime.vision_scheduler import analyze_image
+            transport = await self._check_message_path()
             analysis = await analyze_image(self, image_bytes)
             local_result = await self._apply_local_analysis(
                 analysis,
@@ -3346,6 +3571,7 @@ class HsrCompanionPlugin(NekoPluginBase):
                 )
             )
             push_result = self.push_message(
+                _message_transport=transport,
                 visibility=[],
                 ai_behavior="respond",
                 parts=[
@@ -3825,7 +4051,8 @@ class HsrCompanionPlugin(NekoPluginBase):
 
     @llm_tool(
         name="hsr_get_player_context",
-        description="读取玩家星铁档案及手动/UID合并配装；手动字段优先，不查询网络、不证明当前画面。指定character_names可读取完整已有遗器和行迹；手动套装不等于单件词条。",
+        description="查询玩家已保存的角色和配装字段。养成或阵容推荐请直接用hsr_companion_prepare（普通档案配队用team_guide）；"
+                    "这里只返回档案。手动字段优先，不联网；指定character_names可查完整已有遗器和行迹。",
         parameters={"type": "object", "properties": {"character_names": {"type": "array", "items": {"type": "string"}, "maxItems": 12}}},
     )
     async def hsr_get_player_context(self, character_names: list[str] | None = None, **_):
@@ -3849,6 +4076,7 @@ class HsrCompanionPlugin(NekoPluginBase):
                 "policy": "历史纠错不会自动作为当前角色返回。",
             },
             "memory_boundary": "插件结构化档案；不等同于 N.E.K.O 长期情感记忆。",
+            "instruction": "这是档案查询结果。若原问题要求推荐一队，请继续调用hsr_companion_prepare，原话作query、intent=team_guide，参考其候选及缺项。",
         }
 
     async def _analysis_payload(self, members: list[str], goal: str = ""):
@@ -4080,6 +4308,16 @@ class HsrCompanionPlugin(NekoPluginBase):
         )
         if not decision["accepted"] or dry_run:
             return Ok({**decision, "submitted": False, "dry_run": bool(dry_run)})
+        transport = await self._check_message_path() if request_response else None
+        if transport is not None:
+            # The asynchronous probe can overlap an earlier delivery or the
+            # expiry of this event. Re-read and decide immediately before send.
+            seen = unwrap_or(await self._get_store("seen_event_ids"), [])
+            seen = seen if isinstance(seen, list) else []
+            decision = evaluate_event(event_id=event_id, occurred_at=occurred_at,
+                                      expires_in_seconds=expires_in_seconds, seen_event_ids=seen)
+            if not decision["accepted"]:
+                return Ok({**decision, "submitted": False, "dry_run": False})
 
         message = (
             "[星铁陪玩事件]\n"
@@ -4088,6 +4326,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             "请结合你自己的人格、当前对话和玩家语境，自行决定如何自然回应；不要把事件扩写成未发生的事实。"
         )
         push_result = self.push_message(
+            **({"_message_transport": transport} if transport is not None else {}),
             visibility=[],
             ai_behavior="respond" if request_response else "read",
             parts=[{"type": "text", "text": message}],

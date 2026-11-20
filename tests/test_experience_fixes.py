@@ -222,28 +222,29 @@ def test_unknown_frames_break_consecutive_character_confirmation():
 
 def test_deferred_character_cue_is_retried_after_scene_cooldown():
     runtime = CompanionRuntime(global_rate_seconds=18)
-    runtime.ingest(scene(), now=10)
-    runtime.ingest(scene(roles=[ROLE]), now=20)
-    selected, decisions = runtime.ingest(scene(roles=[ROLE]), now=21)
+    runtime.ingest(scene(), now=10, proactive_enabled=True)
+    runtime.ingest(scene(roles=[ROLE]), now=20, proactive_enabled=True)
+    selected, decisions = runtime.ingest(scene(roles=[ROLE]), now=21, proactive_enabled=True)
     assert selected is None
     assert any(item["reason"] == "global_rate" for item in decisions)
-    selected, _ = runtime.ingest(scene(roles=[ROLE]), now=29)
+    selected, _ = runtime.ingest(scene(roles=[ROLE]), now=29, proactive_enabled=True)
     assert selected.kind == "characters_identified"
 
 
 def test_deferred_character_cue_is_discarded_when_character_disappears():
     runtime = CompanionRuntime(global_rate_seconds=18)
-    runtime.ingest(scene(), now=10)
-    runtime.ingest(scene(roles=[ROLE]), now=20)
-    runtime.ingest(scene(roles=[ROLE]), now=21)
-    selected, _ = runtime.ingest(scene(), now=29)
+    runtime.ingest(scene(), now=10, proactive_enabled=True)
+    runtime.ingest(scene(roles=[ROLE]), now=20, proactive_enabled=True)
+    runtime.ingest(scene(roles=[ROLE]), now=21, proactive_enabled=True)
+    selected, _ = runtime.ingest(scene(), now=29, proactive_enabled=True)
     assert selected is None
 
 
 def test_old_exploration_cannot_trigger_chatter_on_unknown_screen():
     runtime = CompanionRuntime(idle_chatter_seconds=30)
-    runtime.ingest(scene("exploration"), now=10)
-    selected, _ = runtime.ingest(scene("unknown", verified=False), now=50)
+    runtime.ingest(scene("exploration"), now=10, proactive_enabled=True, idle_chatter_enabled=True)
+    selected, _ = runtime.ingest(scene("unknown", verified=False), now=50,
+                                 proactive_enabled=True, idle_chatter_enabled=True)
     assert selected is None
 
 
@@ -260,7 +261,7 @@ def test_natural_question_contains_character_skill_and_rank_details(tmp_path):
     status = db.install_pinned(
         json_fetcher=lambda url: tables[url.rsplit("/", 1)[-1][:-5]], text_fetcher=lambda url: "AGPL test license"
     )
-    assert status["meta"]["game_version"] == "4.6.0"
+    assert status["meta"]["game_version"] == "4.7.0"
     result = db.search("爻光的战技到底是什么机制？", limit=1)
     assert result[0]["name"] == "爻光"
     assert result[0]["forms"][0]["skills"][0]["name"] == "测试战技"

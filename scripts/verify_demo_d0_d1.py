@@ -16,8 +16,8 @@ async def run():
     from plugin.plugins.hsr_companion.data import ExternalKnowledgeCatalog
     from plugin.plugins.hsr_companion.runtime import service_contract
     from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
-    from plugin.plugins.hsr_companion.runtime.observation_store import ObservationSnapshot
     from plugin.plugins.hsr_companion.runtime.observation import public_visual_evidence
+    from plugin.plugins.hsr_companion.runtime.observation_store import ObservationSnapshot
     from plugin.plugins.hsr_companion.runtime.query_coordinator import QueryObservation
     from plugin.plugins.hsr_companion.tests.test_current_observation import plugin_fixture
     from plugin.plugins.hsr_companion.tests.test_stage1_repairs import fact, visual

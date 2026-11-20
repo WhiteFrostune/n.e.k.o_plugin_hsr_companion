@@ -9,7 +9,7 @@ import pytest
 from PIL import Image, ImageDraw
 from plugin.plugins.hsr_companion.runtime import answer_message
 from plugin.plugins.hsr_companion.runtime.consultation import for_followup
-from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
+from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.runtime.query_reuse import try_reuse
 from plugin.plugins.hsr_companion.tests import test_guidance as fixtures

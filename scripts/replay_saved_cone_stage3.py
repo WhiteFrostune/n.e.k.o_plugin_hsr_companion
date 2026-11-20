@@ -18,7 +18,7 @@ async def replay():
     from plugin.plugins.hsr_companion.tests.test_current_observation import plugin_fixture
 
     root = Path(__file__).resolve().parents[1]
-    database = Path("C:/Users/USER/AppData/Local/N.E.K.O/data-packs/hsr_companion/player-state/store.db")
+    database = Path("C:/Users/cai/AppData/Local/N.E.K.O/data-packs/hsr_companion/player-state/store.db")
     with sqlite3.connect(database.as_uri() + "?mode=ro", uri=True) as connection:
         rows = {key: value for key, value in connection.execute(
             "SELECT key,value FROM kv_store WHERE key IN (?,?)", ("manual_player_builds", "uid_import_state"))}

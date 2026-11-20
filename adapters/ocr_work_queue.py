@@ -3,8 +3,8 @@
 No worker threads, model instances or images are created/retained here. The
 caller owns cancellation, capture selection, evidence and delivery policy.
 """
-from concurrent.futures import Future
 import threading
+from concurrent.futures import Future
 
 
 class OCRWorkQueue:

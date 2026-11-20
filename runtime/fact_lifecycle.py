@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import math
 import time
+from collections import Counter
 from datetime import datetime, timezone
 
+from .contracts import FRESH_LIVE_AGE_SECONDS, STALE_MAX_AGE_SECONDS
 from .observation import VISUAL_TTL_SECONDS, public_visual_evidence
 
 
@@ -45,8 +47,18 @@ def candidate_evidence(raw):
     current_tick = observation_tick(time.time())
     if captured is None or captured > current_tick:
         return public_visual_evidence({}, {"enabled": True, "state": "observing"})
-    return public_visual_evidence(raw, {"enabled": True, "state": "observing"},
-                                  now=datetime.fromtimestamp(captured, timezone.utc))
+    value = public_visual_evidence(raw, {"enabled": True, "state": "observing"},
+                                   now=datetime.fromtimestamp(captured, timezone.utc))
+    # The shape is intentionally unexpired for review; its AGE must still be
+    # honest to a caller that reads it as current evidence.
+    age = max(0.0, current_tick - captured)
+    value["age_seconds"] = round(age, 1)
+    value["freshness"] = "stale" if age > FRESH_LIVE_AGE_SECONDS else "fresh"
+    if value["freshness"] == "stale":
+        value["age_label"] = f"这是 {max(1, int(round(age)))} 秒前的画面，现在可能变了"
+        if not str(value.get("message") or "").startswith(value["age_label"]):
+            value["message"] = value["age_label"] + "：" + str(value.get("message") or "")
+    return value
 
 
 def late_read_proved(owner, analysis):
@@ -85,17 +97,21 @@ def incomplete_same_page_read(owner, analysis):
             or (old.get("page") or {}).get("page_type") in {None, "unknown"}
             or (old.get("page") or {}).get("page_type") != (analysis.get("page") or {}).get("page_type")):
         return False
+    from .delivery_boundary import semantic_key
+
     def facts(value):
-        return {(f.get("scope"), f.get("kind"), f.get("label")): str(f.get("value") or "")
-                for f in (value.get("screen_facts") or {}).get("facts", [])
-                if f.get("kind") not in {"unreadable_stat", "equipment_binding_missing"}}
+        # Use the SAME fact identity as delivery revocation. A flat and a
+        # percentage substat may have the same label; a dict keyed by label
+        # silently discarded one and could hide real progress/replacement.
+        return Counter(semantic_key(f) for f in (value.get("screen_facts") or {}).get("facts", [])
+                       if f.get("kind") not in {"unreadable_stat", "equipment_binding_missing"})
     previous, incoming = facts(old), facts(analysis)
-    if any(k not in previous or previous[k] != v for k, v in incoming.items()):
+    if incoming - previous:
         return False
     from .delivery_scope import identity_key
     old_actors = {identity_key(a) for a in old.get("characters", [])}
     new_actors = {identity_key(a) for a in analysis.get("characters", [])}
-    return bool(new_actors <= old_actors and (set(incoming) < set(previous) or new_actors < old_actors))
+    return bool(new_actors <= old_actors and (incoming < previous or new_actors < old_actors))
 
 
 def record_verified_regions(owner, coordinates, checked_at, *, serial=None):
@@ -122,6 +138,11 @@ def current_evidence(owner, raw, observer):
     """
     lease = getattr(owner, "_live_field_verification", None)
     identity = (getattr(owner, "_observation_epoch", 0), getattr(owner, "_observation_serial", 0), raw.get("observed_at"))
+    captured = timestamp(raw.get("observed_at"))
+    if captured is None or observation_tick(time.time()) - captured > STALE_MAX_AGE_SECONDS:
+        # Delivery, not review: past the hard cap the current view is
+        # unavailable, never a stale one-name or zero-name roster.
+        return public_visual_evidence(raw, observer)
     if (not lease or lease["identity"] != identity
             or not observer.get("enabled") or observer.get("state") not in {"observing", "updating"}
             or getattr(owner, "_observation_invalidated", False)

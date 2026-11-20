@@ -11,7 +11,7 @@ import time
 from types import SimpleNamespace
 
 import pytest
-from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
+from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
 from plugin.plugins.hsr_companion.runtime.guidance import build_guidance, plan_guidance
 from plugin.plugins.hsr_companion.runtime.observation_store import ObservationSnapshot
 from plugin.plugins.hsr_companion.runtime.query_coordinator import QueryObservation
@@ -295,7 +295,7 @@ def test_structured_schema_is_exposed_on_the_existing_tool(tmp_path):
     owner, _, _ = plugin_fixture(tmp_path)
     meta = next(meta for meta, _ in collect_llm_tool_methods(owner) if meta.name == "hsr_companion_prepare")
     declared = meta.parameters["properties"]["consultation"]
-    assert set(declared["properties"]["subject_state"]["enum"]) == {"inherit", "specified", "unresolved"}
+    assert set(declared["properties"]["subject_state"]["enum"]) == {"inherit", "specified", "unresolved", "current"}
     assert declared["additionalProperties"] is False
 
 

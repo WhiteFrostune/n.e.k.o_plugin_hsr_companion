@@ -11,15 +11,18 @@ import time
 from types import SimpleNamespace
 
 import pytest
-
 from plugin.plugins.hsr_companion.runtime import followup
-from plugin.plugins.hsr_companion.runtime.equipment import equipment_card
+from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
 from plugin.plugins.hsr_companion.runtime.guidance import build_guidance
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
-from plugin.plugins.hsr_companion.tests.test_guidance import book, catalog, plan
-from plugin.plugins.hsr_companion.tests.test_stage2_assessment import assess, relic
-from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner
+from plugin.plugins.hsr_companion.tests import test_guidance as guidance_cases
 from plugin.plugins.hsr_companion.tests.test_d1_closeout import panel
+from plugin.plugins.hsr_companion.tests.test_guidance import plan
+from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner
+from plugin.plugins.hsr_companion.tests.test_stage2_assessment import assess, relic
+
+book = guidance_cases.book
+catalog = guidance_cases.catalog
 
 
 def shoe():
@@ -246,6 +249,7 @@ def test_new_request_during_formatter_is_not_cancelled_by_old_worker(monkeypatch
 
 def test_absent_host_formatter_fails_closed_without_new_dependency(monkeypatch):
     import sys
+
     from plugin.plugins.hsr_companion.runtime.answer_message import render_followup
     monkeypatch.setitem(sys.modules, "utils.result_parser", None)
     selected = build_query_plan("这件遗器完整主副词条是什么")

@@ -106,7 +106,7 @@ def build_grounding(query: str, visual: dict, catalog, *, category: str = "", pl
                     if r.get("entity_type") == "character_skill" and r.get("id") in targets]
     if ambiguous:
         explanations = []
-    from .equipment import equipment_card
+    from .equipment_view import equipment_card
     return {
         "requested": current_request, "observed_at": visual.get("observed_at") or "",
         "equipment_answer": equipment_card(visual) if "equipment" in topics else {"state": "not_requested"},

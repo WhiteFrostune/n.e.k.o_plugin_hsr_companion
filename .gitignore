@@ -1,6 +1,7 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.pytest_tmp*/
 .mypy_cache/
 .ruff_cache/
 .venv/
@@ -10,7 +11,10 @@ dist/
 build/
 *.egg-info/
 store.db
+*.db
+logs/
+*.log
+plugin/
 .env
 .DS_Store
-.pytest_tmp*/
 README_v0.9.6_PREVIEW.md

@@ -94,12 +94,16 @@ def test_followup_activity_budget_is_separate_and_within_original_deadline(monke
         calls.append(kwargs)
         return "available", None
     monkeypatch.setattr(followup, "latest_user_activity", available)
-    req = replace(request(), expires_at=time.monotonic() + .6)
+    req = replace(request(), expires_at=1000.6)
+    # A fixed clock makes the budget/deadline contract deterministic. One ULP
+    # of subtraction is not a production timeout extension (nor a real delay).
+    monkeypatch.setattr(followup, "time", SimpleNamespace(monotonic=lambda: 1000.))
     owner._pending_answer = req
     before = req.expires_at
     assert asyncio.run(followup.checked_activity(owner, req, owner.bus)) == ("available", None)
-    assert .25 < calls[0]["transport_timeout"] <= .6
-    assert calls[0]["wait_timeout"] <= .6
+    assert calls[0]["transport_timeout"] == pytest.approx(.6, rel=0, abs=1e-9)
+    assert calls[0]["wait_timeout"] == pytest.approx(.6, rel=0, abs=1e-9)
+    assert calls[0]["transport_timeout"] == calls[0]["wait_timeout"] == req.expires_at - 1000.
     assert req.expires_at == before
 
 

@@ -9,12 +9,10 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-
 from plugin.plugins.hsr_companion.data import ExternalKnowledgeCatalog
-from plugin.plugins.hsr_companion.runtime.guidance import plan_guidance
-from plugin.plugins.hsr_companion.runtime.guidance import build_guidance
-from plugin.plugins.hsr_companion.runtime.cone_message import summarize_cone_fit
 from plugin.plugins.hsr_companion.runtime.answer_message import bridge_preview
+from plugin.plugins.hsr_companion.runtime.cone_message import summarize_cone_fit
+from plugin.plugins.hsr_companion.runtime.guidance import build_guidance, plan_guidance
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.tests import test_guidance as cases
 from plugin.plugins.hsr_companion.tests.test_d1_handoff_closeout import delivered, received_text
@@ -91,7 +89,8 @@ def test_summary_never_bypasses_completeness_object_or_body_checks(book, cone_ca
     elif case == "oversized_condition":
         data["guidance_answer"]["assessment"]["evaluation"]["conditions"] = ["长条件不可截断。" * 200]
     else:
-        preview = lambda text: text[:10]
+        def preview(text):
+            return text[:10]
     before = copy.deepcopy(data)
     assert summarize_cone_fit(data, plan=plan, preview=preview) is None
     assert data == before

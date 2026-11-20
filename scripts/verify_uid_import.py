@@ -10,12 +10,11 @@ import json
 from copy import deepcopy
 from pathlib import Path
 
+from plugin.plugins.hsr_companion import HsrCompanionPlugin
 from plugin.plugins.hsr_companion.core import CharacterRegistry
 from plugin.plugins.hsr_companion.data import ExternalKnowledgeCatalog
 from plugin.plugins.hsr_companion.runtime.uid_import import STORE_KEY, utcnow
 from plugin.sdk.plugin import Ok, unwrap_or
-
-from plugin.plugins.hsr_companion import HsrCompanionPlugin
 
 
 async def verify(uid, *, use_system_proxy=False, seed_snapshot=None):
