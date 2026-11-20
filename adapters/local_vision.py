@@ -520,6 +520,8 @@ class LocalVisionAdapter:
                 portrait_status["conflicting_slots"] = conflicts
             elif yielding:
                 portrait_status = {"available": False, "reason": "yielded_for_query"}
+                if self.avatar_pack is not None and not text_details.get("relic_priority"):
+                    layout["recognition"]["yielded_for_query"] = True
             portrait_seconds = time.monotonic() - portrait_started
             if page_type in {"unknown", "exploration_hud", "map_or_quest"}:
                 rows = rows or infer_complete_team_rows(layout["characters"], height=image.height)

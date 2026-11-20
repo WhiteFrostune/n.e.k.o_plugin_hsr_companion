@@ -8,7 +8,8 @@ import time
 from dataclasses import replace
 
 CURRENT_SCOPES = {"current_relic", "current_cone", "current_panel"}
-CORRECTION_REASONS = {"read_screen_current_scope_dropped", "current_screen_subject_inferred"}
+CORRECTION_REASONS = {"read_screen_current_scope_dropped", "current_screen_subject_inferred",
+                      "stale_reference_build_for_team_dropped"}
 
 CONSULTATION_SCHEMA = {
     "type": "object", "additionalProperties": False,
@@ -104,6 +105,16 @@ def normalize_model_consultation(value, *, intent, screen_fields=(), previous=No
     scope = value.get("scope")
     state = value.get("subject_state")
     character = str(value.get("character") or "").strip()
+    if intent in {"team_guide", "challenge_guide"} and scope == "reference_build":
+        # A team question may inherit a stale reference-build declaration from
+        # the previous relic/cone turn. It cannot describe this service, so
+        # drop it instead of failing the whole prepare before any screen read.
+        return None, [{
+            "reason": "stale_reference_build_for_team_dropped",
+            "original_scope": scope,
+            "original_subject_state": state,
+            "intent": intent,
+        }]
     if scope not in CURRENT_SCOPES or character:
         return value, []
     if intent == "read_screen":
