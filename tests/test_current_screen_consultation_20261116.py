@@ -28,9 +28,6 @@ CASES = [
 ]
 
 BOUNDARY = [
-    ("explicit_subject", "这件遗器的主词条和副词条分别是什么？", "read_screen", ["equipment"], "full",
-     {"scope": "current_relic", "subject_state": "specified", "character": "真珠",
-      "topics": ["relic"], "answer_parts": ["rows"]}),
     ("reference_build", "给真珠配装", "build_guide", None, None,
      {"scope": "reference_build", "subject_state": "specified"}),
     ("saved_cone", "我存的光锥", "assess_cone", None, None,
@@ -69,7 +66,7 @@ def test_current_screen_model_args_are_corrected(
 
 
 @pytest.mark.parametrize("name,query,intent,fields,detail,consultation", BOUNDARY)
-def test_explicit_subject_and_non_current_scopes_still_fail(
+def test_non_read_screen_boundaries_still_fail(
         tmp_path, monkeypatch, name, query, intent, fields, detail, consultation):
     owner, values, sent = plugin_fixture(tmp_path)
     result = prepare(owner, monkeypatch, query, intent, fields, detail, consultation)
@@ -78,3 +75,17 @@ def test_explicit_subject_and_non_current_scopes_still_fail(
     assert record["outcome"] == "failed" and record["error_code"] in {
         "invalid_consultation_subject", "scope_intent_conflict"}
     assert not record.get("corrections"), record
+
+
+def test_read_screen_drops_explicit_character_declaration(tmp_path, monkeypatch):
+    owner, values, sent = plugin_fixture(tmp_path)
+    result = prepare(
+        owner, monkeypatch, "遗器数值是多少", "read_screen", ["equipment"], None,
+        {"scope": "current_relic", "subject_state": "specified", "character": "爻光",
+         "topics": ["relic"], "answer_parts": ["rows"]})
+    record = last(owner)
+    assert not result.get("is_error"), result
+    assert record["outcome"] != "failed" and record["error_code"] is None
+    assert "read_screen_declaration_dropped" in {
+        item.get("reason") for item in record.get("corrections") or []}
+    assert not sent

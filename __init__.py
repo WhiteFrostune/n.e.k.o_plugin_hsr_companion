@@ -2644,6 +2644,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             prepare_stage("payload")
             equipment_answer = equipment_card(current_visual) if "equipment" in query_plan.fields else {"state": "not_requested"}
             equipment_notice = ""
+            verification_notice = ""
             if "equipment" in query_plan.fields:
                 record_handoff(self, equipment_answer, channel="direct")
                 if equipment_answer.get("complete") is False and equipment_answer.get("sub_stats_complete") is False:
@@ -2654,6 +2655,12 @@ class HsrCompanionPlugin(NekoPluginBase):
                         if observed < expected
                         else "本次词条完整性未确认，缺项未读全，不补。"
                     )
+                boundary = final_visual.get("delivery_boundary") or {}
+                stages = (query_observation.refresh or {}).get("stages") or []
+                if ("equipment" in (boundary.get("withheld_fields") or ())
+                        or any(stage.get("stage") == "text_verification"
+                               and stage.get("reason") == "unconfirmed" for stage in stages)):
+                    verification_notice = "主/副词条本次未通过核对，没读到，不要当成完整读数。"
             from .runtime.consultation import model_guidance
             payload = {
                 "response_contract": response_contract(self, answer_generation, channel="direct"),
@@ -2746,10 +2753,11 @@ class HsrCompanionPlugin(NekoPluginBase):
                     ) if scene_only_request or navigation_request else "",
                 },
             }
-            if equipment_notice:
+            if equipment_notice or verification_notice:
+                notice = " ".join(item for item in (equipment_notice, verification_notice) if item)
                 answer = payload["query_answer"]
-                answer["instruction"] = (str(answer.get("instruction") or "") + " " + equipment_notice).strip()
-                payload["delivery_notice"] = equipment_notice
+                answer["instruction"] = (str(answer.get("instruction") or "") + " " + notice).strip()
+                payload["delivery_notice"] = notice
             from .runtime.equipment_reply import offer_equipment_reply
             payload["player_reply_contract"] = offer_equipment_reply(
                 self, current_visual, character_ids=resolved_guidance_plan.character_ids,

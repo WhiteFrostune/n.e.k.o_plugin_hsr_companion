@@ -8,8 +8,8 @@ import time
 from dataclasses import replace
 
 CURRENT_SCOPES = {"current_relic", "current_cone", "current_panel"}
-CORRECTION_REASONS = {"read_screen_current_scope_dropped", "current_screen_subject_inferred",
-                      "stale_reference_build_for_team_dropped"}
+CORRECTION_REASONS = {"read_screen_current_scope_dropped", "read_screen_declaration_dropped",
+                      "current_screen_subject_inferred", "stale_reference_build_for_team_dropped"}
 
 CONSULTATION_SCHEMA = {
     "type": "object", "additionalProperties": False,
@@ -95,16 +95,32 @@ def _valid_previous(previous):
 def normalize_model_consultation(value, *, intent, screen_fields=(), previous=None):
     """Correct current-screen model overfills before the strict D1 contract.
 
-    Only current_* scopes with no named character are rewritten. A pure
-    read_screen drops the evaluation declaration; a current evaluation with
-    no character is marked current. Explicit characters and non-current
-    scopes keep their existing strict behavior.
+    A pure read_screen drops any evaluation declaration; a current evaluation
+    with no character is marked current. Other intents keep their existing
+    strict behavior.
     """
     if not isinstance(value, dict):
         return value, []
     scope = value.get("scope")
     state = value.get("subject_state")
     character = str(value.get("character") or "").strip()
+    if intent == "read_screen":
+        # A pure screen read has no evaluation subject. Any model-supplied
+        # declaration is stale routing metadata and must not block the read,
+        # whether or not it names a character.
+        if scope in CURRENT_SCOPES and not character:
+            return None, [{
+                "reason": "read_screen_current_scope_dropped",
+                "original_scope": scope,
+                "original_subject_state": state,
+                "intent": intent,
+            }]
+        return None, [{
+            "reason": "read_screen_declaration_dropped",
+            "original_scope": scope,
+            "original_subject_state": state,
+            "intent": intent,
+        }]
     if intent in {"team_guide", "challenge_guide"} and scope == "reference_build":
         # A team question may inherit a stale reference-build declaration from
         # the previous relic/cone turn. It cannot describe this service, so
@@ -117,13 +133,6 @@ def normalize_model_consultation(value, *, intent, screen_fields=(), previous=No
         }]
     if scope not in CURRENT_SCOPES or character:
         return value, []
-    if intent == "read_screen":
-        return None, [{
-            "reason": "read_screen_current_scope_dropped",
-            "original_scope": scope,
-            "original_subject_state": state,
-            "intent": intent,
-        }]
     expected = {"current_relic": "assess_relic", "current_cone": "assess_cone",
                 "current_panel": "assess_panel"}[scope]
     if intent != expected:
