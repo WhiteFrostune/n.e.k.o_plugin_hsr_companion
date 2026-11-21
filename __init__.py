@@ -56,6 +56,7 @@ from .runtime.diagnostics import build_diagnostic_report
 from .runtime.equipment import record_handoff
 from .runtime.equipment_view import equipment_card
 from .runtime.followup import DIRECT_WAIT_SECONDS, arm_followup, cancel_followup
+from .runtime.followup_read import reader as followup_reader
 from .runtime.grounding import build_grounding
 from .runtime.guidance import build_guidance, load_guidance_catalog, plan_request
 from .runtime.live_refresh import (
@@ -2636,7 +2637,7 @@ class HsrCompanionPlugin(NekoPluginBase):
                                         content=screen_content_request, controlled=controlled_request, plan=query_plan,
                                         guidance_plan=resolved_guidance_plan if guidance_plan.requested else None,
                                         guidance_profile=profile if guidance_plan.requested else None,
-                                        guidance_answer=guidance if guidance_plan.requested else None)
+                                        guidance_answer=guidance if guidance_plan.requested else None, reader=followup_reader)
             prepare_stage("followup_registration", completed=True)
             mark_service_request(self, answer_generation, "completed")
             prepare_stage("payload")

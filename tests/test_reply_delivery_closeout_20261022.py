@@ -183,7 +183,7 @@ def test_model_view_uses_selection_without_destroying_full_facts(book, catalog):
 
 
 def test_real_pending_loop_ignores_unspoken_update_and_sends_final_once(book, catalog, monkeypatch):
-    from plugin.plugins.hsr_companion.runtime import followup
+    from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
     from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner
     q = "这件遗器适合绯英吗？"
     first = relic(subs=[("暴击率", "8.7%"), ("防御力", "15.1%"), ("生命值", "80")])

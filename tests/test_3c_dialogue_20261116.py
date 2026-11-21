@@ -14,7 +14,7 @@ from pathlib import Path
 
 from plugin.plugins.hsr_companion.data import ExternalKnowledgeCatalog
 from plugin.plugins.hsr_companion.runtime.answer_message import render_followup
-from plugin.plugins.hsr_companion.runtime.followup import FOLLOWUP_SECONDS
+from plugin.plugins.hsr_companion.runtime.followup_delivery import FOLLOWUP_SECONDS
 from plugin.plugins.hsr_companion.runtime.guidance import GuidanceCatalog, build_guidance, plan_guidance
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.tests.test_experience_fixes import box

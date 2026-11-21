@@ -76,6 +76,28 @@ LEGACY_EXPORTS = [
     ("runtime.query_coordinator", "resolve_query", "runtime.query_observation"),
     ("runtime.query_coordinator", "answer_status", "runtime.query_status"),
     ("runtime.query_coordinator", "needs_followup", "runtime.query_status"),
+    # P8: the compatibility entrypoint retains delivery and read-side API objects.
+    ("runtime.followup", "AnswerRequest", "runtime.followup_delivery"),
+    ("runtime.followup", "request_plan", "runtime.followup_delivery"),
+    ("runtime.followup", "answer_ready", "runtime.followup_delivery"),
+    ("runtime.followup", "request_completion", "runtime.followup_delivery"),
+    ("runtime.followup", "reply_data", "runtime.followup_delivery"),
+    ("runtime.followup", "cancel_followup", "runtime.followup_delivery"),
+    ("runtime.followup", "_cancel_current", "runtime.followup_delivery"),
+    ("runtime.followup", "_can_observe", "runtime.followup_delivery"),
+    ("runtime.followup", "checked_activity", "runtime.followup_delivery"),
+    ("runtime.followup", "retry_activity_within_request", "runtime.followup_delivery"),
+    ("runtime.followup", "wait_message_relation", "runtime.followup_delivery"),
+    ("runtime.followup", "_wait_for_update", "runtime.followup_delivery"),
+    ("runtime.followup", "arm_followup", "runtime.followup_delivery"),
+    ("runtime.followup", "deliver_followup", "runtime.followup_delivery"),
+    ("runtime.followup", "DIRECT_WAIT_SECONDS", "runtime.followup_delivery"),
+    ("runtime.followup", "FOLLOWUP_SECONDS", "runtime.followup_delivery"),
+    ("runtime.followup", "FOLLOWUP_GRACE_SECONDS", "runtime.followup_delivery"),
+    ("runtime.followup", "ACTIVITY_ATTEMPTS", "runtime.followup_delivery"),
+    ("runtime.followup", "ACTIVITY_TRANSPORT_SECONDS", "runtime.followup_delivery"),
+    ("runtime.followup", "validated_delivery", "runtime.followup_read"),
+    ("runtime.followup", "ObservationSnapshot", "runtime.followup_read"),
 ]
 
 

@@ -51,7 +51,7 @@ def test_role_clarification_preserves_equipment_demand(book, catalog):
 
 def test_exact_item_card_is_same_for_panel_grounding_and_followup(catalog):
     from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
-    from plugin.plugins.hsr_companion.runtime.followup import AnswerRequest, reply_data
+    from plugin.plugins.hsr_companion.runtime.followup_delivery import AnswerRequest, reply_data
     from plugin.plugins.hsr_companion.runtime.grounding import build_grounding
     from plugin.plugins.hsr_companion.runtime.screen_facts import public_screen_facts
 
@@ -290,7 +290,7 @@ def test_ready_followup_payload_preserves_card_and_sourced_evaluation(book, cata
     import asyncio
     import time
 
-    from plugin.plugins.hsr_companion.runtime import followup
+    from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
     from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner
 
     current = relic()
@@ -324,7 +324,7 @@ def test_busy_control_followup_recovers_same_commit_after_verifier_frees(tmp_pat
 
     from PIL import Image, ImageDraw
     from plugin.plugins.hsr_companion.adapters.text_verification import proof_key
-    from plugin.plugins.hsr_companion.runtime import followup
+    from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
     from plugin.plugins.hsr_companion.runtime.observation_store import ObservationStore
     from plugin.plugins.hsr_companion.tests.test_current_observation import plugin_fixture
     from plugin.plugins.hsr_companion.tests.test_delivery_fix_20261012 import CONTROL, frame, picture

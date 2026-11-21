@@ -10,6 +10,7 @@ import time
 from dataclasses import replace
 
 import pytest
+from plugin.plugins.hsr_companion.runtime import followup_read
 from plugin.plugins.hsr_companion.runtime.observation_store import ObservationSnapshot, ObservationStore
 from plugin.plugins.hsr_companion.tests.test_chain_audit_20261017 import (
     audit_owner,
@@ -194,7 +195,8 @@ def test_weak_same_item_reread_does_not_erase_complete_candidate(tmp_path):
 
 @pytest.mark.parametrize("changed_number", [False, True])
 def test_followup_formatter_update_keeps_identical_item_but_reselects_changed_item(tmp_path, monkeypatch, changed_number):
-    from plugin.plugins.hsr_companion.runtime import answer_message, followup
+    from plugin.plugins.hsr_companion.runtime import answer_message
+    from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
     from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
     from plugin.plugins.hsr_companion.tests.test_page_followup import request
 
@@ -211,7 +213,7 @@ def test_followup_formatter_update_keeps_identical_item_but_reselects_changed_it
 
     monkeypatch.setattr(followup, "FOLLOWUP_GRACE_SECONDS", 0)
     monkeypatch.setattr(followup, "latest_user_activity", activity)
-    monkeypatch.setattr(followup, "validated_delivery", validated)
+    monkeypatch.setattr(followup_read, "validated_delivery", validated)
 
     async def run():
         nonlocal render_count

@@ -12,7 +12,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
-from plugin.plugins.hsr_companion.runtime import followup
+from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
 from plugin.plugins.hsr_companion.runtime.chat_activity import latest_user_activity
 from plugin.plugins.hsr_companion.tests.test_diagnostics import inputs
 from plugin.plugins.hsr_companion.tests.test_experience_fixes import box

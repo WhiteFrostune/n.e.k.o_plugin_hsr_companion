@@ -9,7 +9,8 @@ from types import SimpleNamespace
 
 import pytest
 from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter
-from plugin.plugins.hsr_companion.runtime import answer_message, followup, live_refresh, vision_scheduler
+from plugin.plugins.hsr_companion.runtime import answer_message, live_refresh, vision_scheduler
+from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
 from plugin.plugins.hsr_companion.runtime.diagnostics import build_diagnostic_report
 from plugin.plugins.hsr_companion.runtime.guidance import plan_guidance
 from plugin.plugins.hsr_companion.runtime.observation import public_visual_evidence

@@ -14,7 +14,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from plugin.plugins.hsr_companion.runtime import answer_message, followup, query_reuse
+from plugin.plugins.hsr_companion.runtime import answer_message, followup_read, query_reuse
+from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
 from plugin.plugins.hsr_companion.runtime.guidance import build_guidance, plan_guidance
 from plugin.plugins.hsr_companion.runtime.query_coordinator import needs_followup
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
@@ -470,7 +471,7 @@ def test_busy_validation_does_not_terminally_close_an_otherwise_ready_service(re
         calls.append(1)
         return value if len(calls) > 1 else None
 
-    monkeypatch.setattr(followup, "validated_delivery", validate)
+    monkeypatch.setattr(followup_read, "validated_delivery", validate)
 
     async def run():
         pending = request(book, catalog)

@@ -177,7 +177,7 @@ def test_changed_equipment_value_preserves_page_not_old_stat(tmp_path, path):
 def test_followup_consumes_actual_producer_admitted_name(tmp_path, monkeypatch):
     import time
 
-    from plugin.plugins.hsr_companion.runtime import followup
+    from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
     owner, _, sent, _ = dynamic_owner(tmp_path)
     owner._target_character = lambda: "test-cat-never-sent-to-host"
     async def available(*a, **kw):

@@ -280,7 +280,7 @@ def test_normal_query_clears_service_context(tmp_path):
 
 
 def test_visual_result_followup_includes_strategy_for_original_demand(book, catalog, monkeypatch):
-    from plugin.plugins.hsr_companion.runtime import followup
+    from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
     from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner, visual
 
     query = "这期试炼怎么配队"

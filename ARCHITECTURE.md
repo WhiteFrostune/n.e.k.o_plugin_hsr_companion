@@ -241,6 +241,15 @@ flowchart TB
 
 `QueryObservation` 搬 contracts，构造字段、顺序及默认值不变；快照仅用 `Any` 作类型标注，避免契约反向 import L2b。`fields_for_page` 按原页面映射构造完全等价的结构化计划，手动刷新不再伪造自然语言问题。旧 API 加入对象身份兼容表；等待、锁、取消、快照与完成判断保持原逻辑。仅删七条白名单（10→3），P3 的六项混合职责仍后置。
 
+
+### 3.7.6 0.9.8 P8 补答读取接口与兼容装配（2026-11-21）
+
+`runtime/followup_read.py`（L2b）只封装原 `try_reuse`、`validated_delivery`、`ObservationSnapshot.select`；传递同一参数、结果与异常，不管理等待和取消。`AnswerRequest` 末尾增加默认 `None` 的 `reader`，正式入口显式装配同一无状态读取器。
+
+沿用 P4 兼容门面方案：旧 `followup.py` 归入口，只重导出原对象并装配旧构造的默认读取器；原循环、期限、epoch 比较、覆盖率比较与发言条件整体留在 L5 `followup_delivery.py`。旧名称（含核验函数、快照类型）进入兼容表。旧测试仅迁移 import 和核验替身的目标路径，断言原样保留。
+
+仅删除剩余三条白名单（3→0）。清零仅指静态 import 图；owner 私有访问、混合职责、历史稳定性缺陷和 O1/O2 均未处理。无实机测试或安装，不据自动回归宣称稳定性修复。
+
 ### 3.8 入口 / 装配 `entrypoints/`
 
 - **职责：** 注册 NEKO 工具和面板入口、生命周期、依赖装配、**提问流水线**（第 4 节）。

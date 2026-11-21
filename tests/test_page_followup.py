@@ -19,7 +19,8 @@ import pytest
 from PIL import Image, ImageDraw
 from plugin.plugins.hsr_companion.detectors.layout import classify_supported_page, scene_control_regions
 from plugin.plugins.hsr_companion.detectors.scene_preview import scene_preview
-from plugin.plugins.hsr_companion.runtime import followup
+from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
+from plugin.plugins.hsr_companion.runtime import followup_read
 from plugin.plugins.hsr_companion.runtime.chat_activity import latest_user_activity
 from plugin.plugins.hsr_companion.runtime.live_refresh import (
     fact_regions,
@@ -161,7 +162,7 @@ def followup_owner(monkeypatch, *, value=None):
     owner._current_visual_evidence = current
     monkeypatch.setattr(followup, "FOLLOWUP_GRACE_SECONDS", 0)
     monkeypatch.setattr(followup, "latest_user_activity", activity)
-    monkeypatch.setattr(followup, "validated_delivery", validated)
+    monkeypatch.setattr(followup_read, "validated_delivery", validated)
     return owner, sent
 
 
@@ -203,7 +204,7 @@ def test_cancelled_followup_never_submits(monkeypatch, tmp_path, change):
                 owner._observation_epoch += 1
                 followup.cancel_followup(owner, "invalidated")
                 return evidence
-            monkeypatch.setattr(followup, "validated_delivery", invalidate)
+            monkeypatch.setattr(followup_read, "validated_delivery", invalidate)
         await followup.deliver_followup(owner, req)
     asyncio.run(run())
     assert not sent
@@ -303,7 +304,7 @@ def test_obsolete_worker_cannot_cancel_replacement_request(monkeypatch, at):
         return evidence
 
     monkeypatch.setattr(followup, "latest_user_activity", activity)
-    monkeypatch.setattr(followup, "validated_delivery", validate)
+    monkeypatch.setattr(followup_read, "validated_delivery", validate)
     owner._pending_answer = first
     asyncio.run(followup.deliver_followup(owner, first))
     assert owner._pending_answer is second and not sent

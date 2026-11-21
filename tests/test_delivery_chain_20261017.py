@@ -9,7 +9,8 @@ from types import SimpleNamespace
 
 from plugin.plugins.hsr_companion.adapters.text_reader import ObservationSuperseded
 from plugin.plugins.hsr_companion.adapters.text_verification import proof_key
-from plugin.plugins.hsr_companion.runtime import followup, live_refresh, manual_refresh
+from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
+from plugin.plugins.hsr_companion.runtime import live_refresh, manual_refresh
 from plugin.plugins.hsr_companion.runtime.query_coordinator import satisfied_fields
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.runtime.query_reuse import try_reuse

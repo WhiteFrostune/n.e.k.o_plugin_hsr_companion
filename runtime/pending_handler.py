@@ -9,7 +9,7 @@ from .pending_contract import UserActivity, message_digest
 
 async def handle_pending_reply(owner, payload):
     from .chat_activity import latest_user_activity
-    from .followup import cancel_followup
+    from .followup_delivery import cancel_followup
 
     rejected = {"accepted": False, "instruction": "未绑定当前待办，不确认已继续或取消；有新问题请正常调用统一入口。"}
     if not isinstance(payload, dict):

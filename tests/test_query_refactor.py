@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 from plugin.plugins.hsr_companion.runtime.diagnostics import build_diagnostic_report
-from plugin.plugins.hsr_companion.runtime.followup import AnswerRequest, answer_ready, reply_data
+from plugin.plugins.hsr_companion.runtime.followup_delivery import AnswerRequest, answer_ready, reply_data
 from plugin.plugins.hsr_companion.runtime.grounding import build_grounding
 from plugin.plugins.hsr_companion.runtime.observation_store import ObservationSnapshot, ObservationStore
 from plugin.plugins.hsr_companion.runtime.query_coordinator import answer_status, resolve_query, satisfied_fields

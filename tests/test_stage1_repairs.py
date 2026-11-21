@@ -162,7 +162,7 @@ def test_page_or_resource_question_does_not_resume_equipment_assessment(book, ca
 
 
 def test_followup_waits_for_stats_and_sends_same_demand_once(book, catalog, monkeypatch):
-    from plugin.plugins.hsr_companion.runtime import followup
+    from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
     from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner
 
     query = "这个遗器的词条适合真珠吗"
@@ -201,7 +201,7 @@ def test_followup_waits_for_stats_and_sends_same_demand_once(book, catalog, monk
 
 
 def test_followup_cancel_does_not_restore_assessment_context(book, catalog, monkeypatch):
-    from plugin.plugins.hsr_companion.runtime import followup
+    from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
     from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner
 
     query = "这个遗器适合真珠吗"

@@ -7,7 +7,8 @@ Passing samples do not erase the original combined-run failure.
 import json
 
 import pytest
-from plugin.plugins.hsr_companion.runtime import followup, request_completion
+from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
+from plugin.plugins.hsr_companion.runtime import request_completion
 from plugin.plugins.hsr_companion.tests import test_bounded_page_handoff_20261021 as original
 
 offline = original.offline
