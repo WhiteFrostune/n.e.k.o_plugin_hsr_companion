@@ -13,7 +13,6 @@ from dataclasses import replace
 from .consultation import STAT_PROPERTIES
 from .equipment import assess_relic
 from .equipment_view import equipment_card, equipment_digest, equipment_object, property_name
-from .observation import public_visual_evidence
 from .query_coordinator import answer_status
 from .query_plan import build_query_plan
 from .service_contract import mark_service_request, record_answer_delivery, response_contract
@@ -93,7 +92,7 @@ def _parse(text, expected):
             "origin": "player_statement", "visually_confirmed": False}
 
 
-async def try_equipment_reply(owner, query, *, player_reply=None, generation):
+async def try_equipment_reply(owner, query, *, player_reply=None, generation, make_evidence):
     """A typed answer is not a request to independently prove its pixels.
 
     An explicit original reply can accompany a model-rephrased query. It never
@@ -144,7 +143,7 @@ async def try_equipment_reply(owner, query, *, player_reply=None, generation):
                                         if step.get("kind") != "missing_rows"]
     plan = replace(build_query_plan(query), screen=False, identity=False, content=False, scene_only=False,
                    navigation=False, controlled=False, topics=frozenset(), fields=frozenset())
-    visual = public_visual_evidence({}, owner._observer_status)
+    visual = make_evidence({}, owner._observer_status)
     next_step = next((r.get("check", "") for r in evaluation.get("sub_stats", [])
                       if row and r["property"] == row["property"]), "")
     reply_plan = {"enabled": True, "mode": "brief", "goal": "acknowledge_player_equipment_value",

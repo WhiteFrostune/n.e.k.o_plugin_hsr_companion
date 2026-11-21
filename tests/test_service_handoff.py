@@ -6,11 +6,11 @@ import copy
 import time
 
 import pytest
+from plugin.plugins.hsr_companion.runtime.context_text import SERVICE_ROUTING_RULE
 from plugin.plugins.hsr_companion.runtime.guidance import build_guidance, plan_guidance
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.runtime.service_contract import (
     PREPARE_TOOL_DESCRIPTION,
-    SERVICE_ROUTING_RULE,
     mark_service_request,
     public_service_request,
 )
@@ -207,7 +207,7 @@ def test_old_request_completion_cannot_replace_latest_entry_status():
 
 
 def test_tool_discovery_and_passive_context_share_followup_routing():
-    from plugin.plugins.hsr_companion.runtime.observation import visual_context_text
+    from plugin.plugins.hsr_companion.runtime.context_text import visual_context_text
     for text in (PREPARE_TOOL_DESCRIPTION, SERVICE_ROUTING_RULE):
         assert "discussion_character" in text and "光锥" in text
     assert len(PREPARE_TOOL_DESCRIPTION) < 500

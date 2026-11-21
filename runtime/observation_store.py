@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from plugin.sdk.plugin import unwrap_or
 
 from .contracts import STALE_MAX_AGE_SECONDS
-from .observation import public_visual_evidence
+from .observation_evidence import public_visual_evidence
 
 
 def richer_last_successful(latest, previous, *, now=None):

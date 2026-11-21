@@ -28,6 +28,13 @@ LEGACY_EXPORTS = [
     ("runtime.pending_reply", "message_allows", "runtime.pending_contract"),
     ("runtime.pending_reply", "relation_contract", "runtime.pending_contract"),
     ("runtime.pending_reply", "handle_pending_reply", "runtime.pending_handler"),
+    # P5: observation facade and routing-rule compatibility paths.
+    ("runtime.observation", "public_visual_evidence", "runtime.observation_evidence"),
+    ("runtime.observation", "VISUAL_TTL_SECONDS", "runtime.observation_evidence"),
+    ("runtime.observation", "_UNAVAILABLE", "runtime.observation_evidence"),
+    ("runtime.observation", "visual_context_text", "runtime.context_text"),
+    ("runtime.observation", "_SCOPE_LABELS", "runtime.context_text"),
+    ("runtime.service_contract", "SERVICE_ROUTING_RULE", "runtime.context_text"),
 ]
 
 

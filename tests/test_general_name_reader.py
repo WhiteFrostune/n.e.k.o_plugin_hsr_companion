@@ -121,7 +121,7 @@ def test_replacement_team_drops_prior_names_independently(tmp_path):
 
 
 def test_passive_context_preserves_scope_even_when_page_is_unknown():
-    from plugin.plugins.hsr_companion.runtime.observation import visual_context_text
+    from plugin.plugins.hsr_companion.runtime.context_text import visual_context_text
 
     text = visual_context_text({"characters": [{"name": "姬子", "identity_scope": "screen_label"}]})
     assert "姬子（仅界面文字）" in text
