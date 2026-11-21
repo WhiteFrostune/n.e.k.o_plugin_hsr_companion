@@ -7,6 +7,7 @@ It does not classify the player's words, guess aliases or certify pixels.
 import time
 from dataclasses import replace
 
+from .contracts import CORRECTION_REASONS as CORRECTION_REASONS
 from .contracts import CURRENT_SCOPES
 
 CONSULTATION_SCHEMA = {
