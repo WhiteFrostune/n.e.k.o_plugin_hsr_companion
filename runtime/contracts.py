@@ -203,3 +203,11 @@ def visual_fingerprints_match(left: object, right: object, *, max_distance: int 
             return False
         return distance <= max(0, min(int(max_distance), 16))
     return first == second
+
+
+@dataclass(frozen=True)
+class QueryObservation:
+    snapshot: Any
+    refresh: dict
+    wait_seconds: float
+    generation: int

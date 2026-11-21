@@ -17,8 +17,9 @@ from .live_refresh import validated_delivery
 from .navigation import navigation_answer
 from .observation_store import ObservationSnapshot
 from .pending_contract import message_allows, relation_contract
-from .query_coordinator import answer_status, has_answerable_content, satisfied_fields
 from .query_plan import QueryPlan, build_query_plan
+from .query_status import answer_status
+from .readiness import has_answerable_content, satisfied_fields
 from .request_completion import evaluate_request
 from .service_contract import record_answer_delivery, response_contract
 
@@ -368,7 +369,7 @@ async def deliver_followup(owner, request: AnswerRequest) -> None:
                 except TimeoutError:
                     recovered = None
                 if recovered is not None:
-                    from .query_coordinator import answer_coverage
+                    from .readiness import answer_coverage
                     # A degraded recovery must not replace a richer candidate.
                     # Keeping current is NOT admission: validated_delivery below
                     # still checks that whole packet's own page/object proofs.

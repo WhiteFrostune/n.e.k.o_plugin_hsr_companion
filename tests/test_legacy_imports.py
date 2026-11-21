@@ -65,6 +65,17 @@ LEGACY_EXPORTS = [
     ("session", "SESSION_SCHEMA_VERSION", "session_state"),
     ("session", "DEFAULT_SESSION_TTL_SECONDS", "session_state"),
     ("session", "VALID_MODALITIES", "session_state"),
+    # P7: pure readiness, request status, and observation coordination.
+    ("runtime.query_coordinator", "FieldReadiness", "runtime.readiness"),
+    ("runtime.query_coordinator", "navigation_applicable", "runtime.readiness"),
+    ("runtime.query_coordinator", "evaluate_readiness", "runtime.readiness"),
+    ("runtime.query_coordinator", "satisfied_fields", "runtime.readiness"),
+    ("runtime.query_coordinator", "has_answerable_content", "runtime.readiness"),
+    ("runtime.query_coordinator", "answer_coverage", "runtime.readiness"),
+    ("runtime.query_coordinator", "QueryObservation", "runtime.contracts"),
+    ("runtime.query_coordinator", "resolve_query", "runtime.query_observation"),
+    ("runtime.query_coordinator", "answer_status", "runtime.query_status"),
+    ("runtime.query_coordinator", "needs_followup", "runtime.query_status"),
 ]
 
 

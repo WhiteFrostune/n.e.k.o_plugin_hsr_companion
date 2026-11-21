@@ -572,7 +572,7 @@ def build_guidance(plan, query, *, book, catalog, profile, visual=None, now=None
     if assessment["requested"]:
         observed = plan.observation_plan(build_query_plan(query))
         assessment["facts"] = observed.relevant_facts((visual.get("screen_facts") or {}).get("facts") or []) if visual.get("fresh") else []
-        from .query_coordinator import satisfied_fields
+        from .readiness import satisfied_fields
         assessment["state"] = "evidence_available" if plan.request_focus in satisfied_fields(observed, visual) else "partial" if assessment["facts"] else "unconfirmed"
         assessment["scope"] = "sourced_field_fit_not_damage_score_or_graduation_threshold"
         if assessment["state"] != "evidence_available":
