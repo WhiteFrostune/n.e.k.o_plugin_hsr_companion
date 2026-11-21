@@ -190,6 +190,27 @@ flowchart TB
 | `session.build_companion_context` | L5 |
 | `observation.py` 里 187–205 的 instruction 文案 | → `l5/prompts/` |
 
+### 3.7.1 0.9.8 P3 临时归属与待拆分欠账（2026-11-21）
+
+`runtime/guidance.py` 与 `runtime/semantic_guidance.py` 当前同时承担 L3 需求理解、L4 建议构建和 L5 交付组织。P3 在 `layers.toml` 中将两文件暂归 L5，以容纳它们对 L3、L4 的现有依赖；职责拆分仍待完成，第 3.5、3.6 节的分工继续作为目标。
+
+以下六条依赖从 import 越界白名单移出后，在本节继续按架构欠账跟踪。
+
+| 待拆分模块 | 当前依赖的 L4 模块 |
+| --- | --- |
+| `runtime/guidance.py` | `runtime/challenge.py` |
+| `runtime/guidance.py` | `runtime/data_freshness.py` |
+| `runtime/guidance.py` | `runtime/equipment.py` |
+| `runtime/guidance.py` | `runtime/mechanics.py` |
+| `runtime/guidance.py` | `runtime/saved_cone.py` |
+| `runtime/semantic_guidance.py` | `runtime/challenge.py` |
+
+**退出计划**
+
+- 在第 10 节迁移步骤 5 合并规划器时，按 `plan_guidance`、`build_guidance` 和 `team_options` 的实际职责拆分。需求理解归 L3，机制分析与建议归 L4，回答组织归 L5，由入口组合各层结果。
+- 拆分覆盖函数内部依赖。`plan_guidance` 内部已有 `challenge_scope` 调用，处理时需要一起划清规划与分析的边界。
+- 完成拆分、核对六条依赖各自的归属，并通过分层门及既有咨询、配队回归后，逐条销账。当前 import 基线减少六条，职责混合的欠账继续保留在此。
+
 ### 3.8 入口 / 装配 `entrypoints/`
 
 - **职责：** 注册 NEKO 工具和面板入口、生命周期、依赖装配、**提问流水线**（第 4 节）。
