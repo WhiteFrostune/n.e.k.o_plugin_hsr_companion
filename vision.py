@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+from hashlib import sha256
 from io import BytesIO
 
 SUPPORTED_IMAGE_MIMES = {"image/jpeg", "image/png", "image/webp"}
@@ -108,3 +109,27 @@ __all__ = [
     "normalize_image_for_vision",
     "prepare_image_for_vision",
 ]
+
+
+def visual_fingerprint(image_bytes: bytes) -> str:
+    """Return a non-reversible perceptual identifier without storing the image.
+
+    Decodable screenshots use a 64-bit difference hash so a correction survives
+    harmless recompression and tiny frame changes.  Invalid/test bytes retain a
+    cryptographic fallback for backward compatibility.
+    """
+
+    try:
+        from PIL import Image, ImageOps
+
+        with Image.open(BytesIO(image_bytes)) as opened:
+            image = ImageOps.exif_transpose(opened).convert("L").resize((9, 8))
+        pixels = list(image.getdata())
+        value = 0
+        for row in range(8):
+            offset = row * 9
+            for column in range(8):
+                value = (value << 1) | int(pixels[offset + column] > pixels[offset + column + 1])
+        return f"dhash:{value:016x}"
+    except Exception:
+        return "sha256:" + sha256(image_bytes).hexdigest()[:24]

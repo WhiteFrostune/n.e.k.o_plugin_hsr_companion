@@ -16,9 +16,10 @@ from ..detectors.scene_preview import scene_preview
 from ..detectors.team import assign_team_slots, infer_complete_team_rows, locate_team_rows, slot_card_states
 from ..runtime.screen_facts import extract_screen_facts, safe_text
 from ..runtime.vision_trace import measure, record
-from ..session import visual_fingerprint
-from .text_reader import ObservationSuperseded, check_current, read_native_text
-from .text_reader import read_region as read_text_region
+from ..vision import visual_fingerprint
+from .native_text import ObservationSuperseded, check_current, read_native_text
+from .native_text import read_region as read_text_region
+from .text_policy import text_reading_callbacks
 
 
 def serial_ocr(method=None, *, cooperative=False):
@@ -224,7 +225,7 @@ class LocalVisionAdapter:
         calls = [{"stage": "scene_query", "size": list(probe.size),
                   "backend_call_seconds": round(backend_seconds, 3)}]
         check_current(cancelled)
-        from .text_reader import _box_value
+        from .native_text import _box_value
 
         boxes = []
         sx, sy = image.width / probe.width, image.height / probe.height
@@ -451,11 +452,13 @@ class LocalVisionAdapter:
                 header = list(dict.fromkeys(header))
                 return [*header, *(index for _, index in ranked if index not in set(header))] or None
 
+            name_labels, skip_name_reread, name_verifier = text_reading_callbacks(self.catalog)
             try:
                 text, boxes, text_details = read_native_text(
                     self._get_backend(), image, catalog=self.catalog, cancelled=cancelled,
                     on_progress=progress if on_scene is not None else None,
                     verify_names=True,
+                    name_labels=name_labels, skip_name_reread=skip_name_reread, name_verifier=name_verifier,
                     yield_requested=yield_requested,
                     **({"accept_native_relic": accept_native_relic, "relic_tiles": relic_tiles}
                        if wants_relic is not None else {}),

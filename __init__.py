@@ -49,6 +49,7 @@ from .runtime.build_info import BUILD_COMMIT, PLUGIN_VERSION
 from .runtime.chat_activity import latest_user_activity
 from .runtime.consultation_contract import CONSULTATION_SCHEMA, bound_followup_plan, normalize_model_consultation
 from .runtime.context_text import visual_context_text
+from .runtime.contracts import visual_fingerprints_match
 from .runtime.data_freshness import data_freshness
 from .runtime.diagnostic_export import export_diagnostic
 from .runtime.diagnostics import build_diagnostic_report
@@ -93,7 +94,7 @@ from .runtime.vision_scheduler import VisionWorkerBusy
 from .runtime.vision_trace import frame_comparison_stats, record_relic_stage
 from .runtime.vision_trace import public_trace as public_vision_trace
 from .runtime.vision_trace import record as record_vision_event
-from .session import (
+from .session_state import (
     DEFAULT_SESSION_TTL_SECONDS,
     build_companion_context,
     normalize_observed_name,
@@ -105,10 +106,8 @@ from .session import (
     start_session,
     stop_session,
     utc_now_iso,
-    visual_fingerprint,
-    visual_fingerprints_match,
 )
-from .vision import prepare_image_for_vision
+from .vision import prepare_image_for_vision, visual_fingerprint
 
 PROFILE_PROPERTIES = {
     "owned_characters": {"type": "array", "items": {"type": "string"}},

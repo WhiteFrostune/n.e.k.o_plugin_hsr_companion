@@ -16,7 +16,7 @@ from ..runtime.screen_facts import (
     relic_stat_text,
     safe_text,
 )
-from .text_reader import _box_value, check_current
+from .native_text import _box_value, check_current
 
 NUMBER = re.compile(r"\+?\d[\d,]*(?:\.\d+)?%?")
 

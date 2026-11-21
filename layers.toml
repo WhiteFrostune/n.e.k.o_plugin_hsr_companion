@@ -17,11 +17,13 @@ L1 = [
   "observer.py",
   "vision.py",
   "assistant_runtime/**/*.py",
-  "adapters/text_reader.py",
+  "adapters/native_text.py",
   "adapters/upright_ocr.py",
   "adapters/ocr_work_queue.py",
 ]
 L2a = [
+  "adapters/text_reader.py",
+  "adapters/text_policy.py",
   "detectors/**/*.py",
   "adapters/__init__.py",
   "adapters/local_vision.py",
@@ -70,7 +72,7 @@ L4 = [
   "adapters/showcase.py",
 ]
 L5 = [
-  "session.py",
+  "session_state.py",
   "runtime/__init__.py",
   "runtime/answer_message.py",
   "runtime/page_message.py",
@@ -112,6 +114,7 @@ trace = [
 
 [entrypoints]
 paths = [
+  "session.py",
   "__init__.py",
   "runtime/diagnostics.py",
   "runtime/observation.py",

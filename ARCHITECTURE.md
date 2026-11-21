@@ -227,6 +227,13 @@ flowchart TB
 
 `equipment_reply.try_equipment_reply` 显式接收 `make_evidence`，由入口传入原证据函数，沿用原调用参数。六个迁移名称登记到兼容表，验证对象身份一致；仅删除 P5 对应两条白名单，预计 15→13。
 
+
+### 3.7.4 0.9.8 P6 OCR 与会话兼容门面（2026-11-21）
+
+`adapters/native_text.py` 保留原通用扫描和取消原语（L1）；领域名称重读策略在 `adapters/text_policy.py`（L2a），原名称复核函数搬入 `adapters/text_verification.py`。底层有 catalog 时要求三个回调齐备，`local_vision` 显式装配；旧 `text_reader` 改为 L2a 兼容门面，其 `read_native_text` 包装器保持原签名并自动装配同一策略。
+
+图像指纹搬 `vision.py`（L1），纯字符串指纹比较搬 `runtime/contracts.py`。其余会话函数保持原体，搬 `session_state.py`（L5）；旧 `session.py` 归入口，只导出原对象，避免为旧路径制造 L5→L1 越界。未更改预算、核验阈值、任务调度及返回结构；仅删三条白名单（13→10）。这些门面可在旧调用方迁移后清理，不处理 owner 私有状态访问与 O1/O2。
+
 ### 3.8 入口 / 装配 `entrypoints/`
 
 - **职责：** 注册 NEKO 工具和面板入口、生命周期、依赖装配、**提问流水线**（第 4 节）。

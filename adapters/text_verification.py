@@ -7,13 +7,14 @@ from __future__ import annotations
 
 import math
 import re
+import time
 import unicodedata
 from io import BytesIO
 
 from ..detectors.exploration import generic_navigation
 from ..detectors.relic_geometry import boundary_label
 from ..detectors.relic_labels import label_key
-from .text_reader import _box_value, check_current
+from .native_text import ObservationSuperseded, _box_value, check_current
 
 NUMBER_LITERAL = re.compile(r"\+?\d[\d,]*(?:\.\d+)?%?")
 
@@ -141,3 +142,92 @@ def verify_text_regions(backend, payload, proofs, *, cancelled=None, trace=None)
                           "reason": "exact_twice" if matches == 2 and not contradicted else
                                     "high_confidence_contradiction" if contradicted else "insufficient_exact_matches"})
     return confirmed
+
+
+def verify_name_regions(backend, image, boxes, catalog, *, cancelled=None, read=None):
+    """Re-read canonical label pixels, not a second expensive full screenshot.
+
+    Both reads must agree on a complete canonical name at high confidence.
+    This validates printed text only, not 3D identity or scene continuity;
+    live_refresh still checks a later independent capture before handoff.
+    Merged rows, aliases, prose and uncertain readings keep the multi-frame gate.
+    """
+    from PIL import Image
+
+    from ..data import normalize_lookup_text
+    from ..detectors.names import label_fields_only, read_name_label
+
+    candidates = []
+    for box in boxes:
+        records, _ = read_name_label(str(box.get("text") or ""), catalog)
+        record = records[0] if len(records) == 1 else None
+        if (record and float(box.get("score") or 0) >= .90
+                and normalize_lookup_text(record["name"]) in normalize_lookup_text(box["text"])):
+            left, top = max(0, math.floor(box["left"] - 8)), max(0, math.floor(box["top"] - 6))
+            right, bottom = min(image.width, math.ceil(box["right"] + 8)), min(image.height, math.ceil(box["bottom"] + 6))
+            if right > left and bottom > top:
+                candidates.append((box, record, (left, top, right, bottom)))
+    stats = {"attempted": len(candidates), "confirmed": 0, "batches": 0, "seconds": 0.0,
+             "rejected": 0}
+    if not candidates:
+        return boxes, stats
+    started = time.monotonic()
+    # Bounded atlases retain native pixels or enlarge them, including English
+    # collab names. A long label must never trigger the backend's downsampling.
+    pending = list(candidates[:32])
+    while pending:
+        check_current(cancelled)
+        batch, y = [], 24
+        while pending:
+            candidate = pending[0]
+            left, top, right, bottom = candidate[2]
+            scale = min(2.0, 1400 / (right - left))
+            if scale < 1:
+                pending.pop(0)
+                continue
+            h = math.ceil((bottom - top) * scale)
+            if batch and y + h + 24 > 1500:
+                break
+            pending.pop(0)
+            batch.append((*candidate, scale, y, h))
+            y += h + 24
+        if not batch:
+            break
+        atlas = Image.new("RGB", (max(math.ceil((b[2][2] - b[2][0]) * b[3]) for b in batch) + 48, y), "black")
+        for _, _, bounds, scale, atlas_y, h in batch:
+            crop = image.crop(bounds)
+            atlas.paste(crop.resize((math.ceil(crop.width * scale), h), Image.Resampling.LANCZOS), (24, atlas_y))
+        try:
+            _, values = read(atlas, "name_verification") if read else backend.extract_text_with_boxes(atlas)
+            check_current(cancelled)
+        except ObservationSuperseded:
+            raise
+        except Exception:
+            continue  # No corroboration: ordinary multi-frame confirmation.
+        stats["batches"] += 1
+        for original, record, _, _, atlas_y, h in batch:
+            lines = [_box_value(value) for value in values
+                     if atlas_y <= (float(_box_value(value).get("top") or 0) + float(_box_value(value).get("bottom") or 0)) / 2 < atlas_y + h]
+            # One complete name can be accompanied by a separate level/path
+            # line. Never join split fragments to manufacture a name.
+            lines = [line for line in lines if str(line.get("text") or "").strip()]
+            name_lines = []
+            fields_valid = True
+            for line in lines:
+                reread, _ = read_name_label(str(line.get("text") or ""), catalog)
+                if (len(reread) == 1 and reread[0]["id"] == record["id"]
+                        and float(line.get("score") or 0) >= .90
+                        and normalize_lookup_text(record["name"]) in normalize_lookup_text(line["text"])):
+                    name_lines.append(line)
+                elif not label_fields_only(line["text"]):
+                    fields_valid = False
+            if len(name_lines) == 1 and fields_valid:
+                original["name_validation"] = {
+                    "entity_id": record["id"], "method": "native_and_enlarged_label_agree",
+                    "scores": [float(original["score"]), float(name_lines[0]["score"])],
+                }
+                stats["confirmed"] += 1
+            else:
+                stats["rejected"] += 1
+    stats["seconds"] = round(time.monotonic() - started, 3)
+    return boxes, stats

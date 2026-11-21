@@ -10,7 +10,7 @@ import asyncio
 import time
 from contextlib import asynccontextmanager
 
-from ..adapters.text_reader import ObservationSuperseded
+from ..adapters.native_text import ObservationSuperseded
 from .vision_trace import record
 
 OCR_DRAIN_SECONDS = 1.0

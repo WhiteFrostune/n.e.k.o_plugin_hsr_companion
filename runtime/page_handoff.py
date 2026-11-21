@@ -144,7 +144,7 @@ def queue_page_check(owner, original, preview, stop, *, frame_seq=None):
         budget['attempts'] += 1  # Only an ACTUAL native page read spends this cap.
         budget['native_calls'] += 1
         native_started = time.monotonic()
-        from ..adapters.text_reader import ObservationSuperseded
+        from ..adapters.native_text import ObservationSuperseded
         failure = None
         try:
             candidate = reader(first.image_bytes, cancelled=obsolete)
