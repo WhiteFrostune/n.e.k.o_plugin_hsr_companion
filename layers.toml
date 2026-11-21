@@ -55,7 +55,6 @@ L3 = [
   "runtime/query_coordinator.py",
   "runtime/pending_reply.py",
   "runtime/request_completion.py",
-  "runtime/navigation.py",
 ]
 L4 = [
   "core.py",
@@ -94,6 +93,7 @@ contracts = [
   "runtime/contracts.py",
   "runtime/build_info.py",
   "runtime/equipment_view.py",
+  "runtime/navigation.py",
 ]
 knowledge = [
   "data/**/*.py",
@@ -101,7 +101,6 @@ knowledge = [
 trace = [
   "runtime/diagnostic_export.py",
   "runtime/diagnostic_reader.py",
-  "runtime/diagnostics.py",
   "runtime/page_control_trace.py",
   "runtime/prepare_trace.py",
   "runtime/revocation_trace.py",
@@ -111,4 +110,5 @@ trace = [
 [entrypoints]
 paths = [
   "__init__.py",
+  "runtime/diagnostics.py",
 ]
