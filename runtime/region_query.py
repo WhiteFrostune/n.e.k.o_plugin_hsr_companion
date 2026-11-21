@@ -16,6 +16,7 @@ from .live_refresh import fetch_recent_frame, trace_refresh
 from .regions import cached_region_plan, region_plan, remember_region_plan
 from .screen_facts import extract_screen_facts
 from .vision_scheduler import vision_turn
+from .vision_trace import traced_operation
 
 
 def _named_boxes(boxes, width, height, catalog):
@@ -50,6 +51,7 @@ def _known_page(visual):
     return (visual.get("page") or {}).get("page_type") or visual.get("page_type")
 
 
+@traced_operation("region_read")
 async def read_query_regions(owner, plan, deadline):
     if plan is None or not getattr(plan, "fields", None):
         trace_refresh(owner, "region_skip", reason="no_fields")

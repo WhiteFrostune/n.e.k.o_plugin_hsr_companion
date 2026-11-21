@@ -13,6 +13,7 @@ from .equipment_view import equipment_card, handoff_receipt
 from .navigation import navigation_answer
 from .query_plan import SCREEN_FIELDS
 from .service_contract import public_service_request
+from .vision_trace import public_correlation
 
 
 def _number(value: Any) -> float | None:
@@ -215,6 +216,9 @@ def build_diagnostic_report(*, observer: dict, assistant: dict, evidence: dict,
         "page_first_scheduled", "native_review_deferred",
         "page_check_result", "page_check_stopped",
         "reuse_postreview_selected",
+        "region_skip", "region_plan_missing", "region_query_ready", "region_relook", "region_relook_cached",
+        "region_query_selected", "region_read_unavailable", "team_roster_incomplete", "team_roster_unknown",
+        "team_roster_short",
     }
     allowed_reasons = {
         "no_valid_snapshot", "pixels_changed", "capture_unavailable_during_analysis", "capture_unavailable_after_analysis",
@@ -233,14 +237,19 @@ def build_diagnostic_report(*, observer: dict, assistant: dict, evidence: dict,
         "page_first",
         "attempt_limit", "request_obsolete", "same_frame", "controls_unchanged", "unknown_page", "same_page",
         "controls_changed", "confirmed_transition", "probe_failed",
+        "stale_expired", "no_commit", "no_fields", "no_reader", "empty_regions", "no_frame", "no_boxes",
+        "deadline", "empty", "initial_budget", "same_frame_preview",
     }
     for item in (refresh.get("stages") or [])[-48:]:
         if not isinstance(item, dict):
             continue
         stage = {"stage": _code(item.get("stage"), allowed_stages), "after_seconds": _number(item.get("after_seconds"))}
+        stage.update(public_correlation(item))
+        if re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]{0,63}", str(item.get("error_type") or "")):
+            stage["error_type"] = item["error_type"]
         for key in ("processing_seconds", "age_seconds", "original_age_seconds", "worker_elapsed_seconds", "health_polls", "frame_transfers", "serial", "current_serial", "region_count", "queue_seconds", "job_id", "frame_seq",
                     "observed", "confirmed", "pixels_unchanged", "text_revalidated", "withheld", "attempt", "probe_seconds",
-                    "native_calls", "native_seconds", "before_rows", "after_rows"):
+                    "native_calls", "native_seconds", "before_rows", "after_rows", "fact_count"):
             if key in item:
                 stage[key] = _number(item[key])
         if "baseline_updated" in item:
@@ -250,7 +259,7 @@ def build_diagnostic_report(*, observer: dict, assistant: dict, evidence: dict,
         if "reason" in item:
             stage["reason"] = _code(item["reason"], allowed_reasons)
         if "role" in item:
-            stage["role"] = _code(item["role"], {"producer", "delivery", "manual"})
+            stage["role"] = _code(item["role"], {"producer", "delivery", "manual", "query"})
         if "missing_fields" in item and isinstance(item["missing_fields"], list):
             stage["missing_fields"] = sorted({f for f in item["missing_fields"] if isinstance(f, str) and f in SCREEN_FIELDS})
         stages.append(stage)
@@ -312,20 +321,25 @@ def build_diagnostic_report(*, observer: dict, assistant: dict, evidence: dict,
         "frame_comparisons": {key: _number((frame_comparisons or {}).get(key, 0))
                               for key in ("calls", "total_seconds", "max_seconds")},
         "vision_trace": [
-            {**{key: _number(event[key]) for key in ("age_seconds", "seconds", "pending", "frame_seq",
+            {**public_correlation(event),
+             **{key: _number(event[key]) for key in ("age_seconds", "seconds", "pending", "frame_seq",
                 "job_id", "verification_frame_seq", "main_stats", "sub_stats", "ocr_lines", "tiles_completed", "tiles_total",
-                "tiles_skipped", "priority_tile_count", "serial") if key in event},
+                "tiles_skipped", "priority_tile_count", "serial", "baseline_serial", "fact_count", "character_count", "stat_count", "after_seconds", "queue_seconds") if key in event},
              **{key: _timestamp(event[key]) for key in ("capture_at", "verification_frame_at") if key in event},
              **({"relic_priority": event["relic_priority"] is True} if "relic_priority" in event else {}),
              **({"ocr_failed": event["ocr_failed"] is True} if "ocr_failed" in event else {}),
              "stage": _code(event.get("stage"), {"ocr_admission", "ocr_drain", "ocr_drain_error", "ocr_backend_setup",
                  "ocr_backend_fallback", "ocr_call", "ocr_verification", "producer_verification",
                  "delivery_verification", "capture_no_fresh_frame", "capture_waiting_frame",
-                 "relic_parsed", "relic_verified", "relic_committed", "relic_job_ended"}),
-             **({"outcome": _code(event["outcome"], {"started", "returned", "error", "timeout", "rejected"})} if "outcome" in event else {}),
-             **({"role": _code(event["role"], {"producer", "delivery", "manual"})} if "role" in event else {}),
+                 "relic_parsed", "relic_verified", "relic_committed", "relic_job_ended",
+                 "query_observation", "query_lock", "query_settings", "query_wait", "analysis_worker",
+                 "region_read", "cache_review", "manual_refresh_wait", "manual_evidence_read",
+                 "candidate_parsed", "candidate_verified", "candidate_committed",
+                 "manual_refresh_error", "manual_refresh_finished"} | allowed_stages),
+             **({"outcome": _code(event["outcome"], {"started", "returned", "error", "timeout", "rejected", "completed", "partial", "unavailable", "cancelled", "failed"})} if "outcome" in event else {}),
+             **({"role": _code(event["role"], {"producer", "delivery", "manual", "query"})} if "role" in event else {}),
              **({"reason": _code(event["reason"], {"window_capture_no_new_frame", "window_capture_stale_frame",
-                 "obsolete_worker_draining", "analysis_superseded", "capture_changed_during_analysis", "candidate_too_old"})}
+                 "obsolete_worker_draining", "analysis_superseded", "capture_changed_during_analysis", "candidate_too_old"} | allowed_reasons)}
                 if "reason" in event else {}),
              **({"error_type": event["error_type"]} if re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]{0,63}",
                 str(event.get("error_type") or "")) else {})}

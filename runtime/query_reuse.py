@@ -15,6 +15,7 @@ from io import BytesIO
 
 from .contracts import FRESH_LIVE_AGE_SECONDS, LIVE_PAGE_TYPES, STALE_MAX_AGE_SECONDS
 from .navigation import navigation_answer
+from .vision_trace import traced_operation
 
 # Recognition age does not decide live-candidate admission. Fresh capture and
 # scoped literal/control proof do; persisted history never enters this cache.
@@ -358,6 +359,7 @@ async def _try_reuse_once(owner, *, navigation: bool, full: bool, require_charac
                                  allow_stale=allow_stale)
 
 
+@traced_operation("cache_review")
 async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=None, allow_partial=True, pixel_only=False, allow_stale=False):
     """The live admission policy shared by cache, direct and follow-up reads.
 

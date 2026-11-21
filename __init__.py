@@ -93,7 +93,7 @@ from .runtime.uid_import import STORE_KEY as UID_STORE_KEY
 from .runtime.uid_import import profile_with_roster
 from .runtime.uid_service import uid_service
 from .runtime.vision_scheduler import VisionWorkerBusy
-from .runtime.vision_trace import frame_comparison_stats, record_relic_stage
+from .runtime.vision_trace import frame_comparison_stats, record_candidate, record_relic_stage
 from .runtime.vision_trace import public_trace as public_vision_trace
 from .runtime.vision_trace import record as record_vision_event
 from .session_state import (
@@ -909,6 +909,11 @@ class HsrCompanionPlugin(NekoPluginBase):
             return {"delivery": {"submitted": False, "reason": "observation_revoked"}}
         trace_refresh(self, "observation_committed", serial=public_analysis["observation_serial"])
         ObservationStore(self).commit(public_analysis)
+        record_candidate(self, "candidate_committed", public_analysis,
+                         serial=public_analysis["observation_serial"],
+                         **({"job_id": getattr(self, "_vision_job_id", 0),
+                             "frame_seq": getattr(self, "_analysis_input_frame_seq", None)}
+                            if source == "assistant_local_ocr" else {}))
         confirmed = [
             item for item in public_analysis["characters"]
             if isinstance(item, dict) and item.get("entity_id") and item.get("name")
@@ -1346,7 +1351,8 @@ class HsrCompanionPlugin(NekoPluginBase):
                             ],
                         },
                     )
-                    trace_refresh(self, "commit_started")
+                    trace_refresh(self, "commit_started", job_id=getattr(self, "_vision_job_id", 0),
+                                  frame_seq=self._analysis_input_frame_seq)
                     local_result = await self._apply_local_analysis(
                         analysis,
                         image_fingerprint=image_fingerprint,
@@ -1361,7 +1367,9 @@ class HsrCompanionPlugin(NekoPluginBase):
                         self._set_observer_status("updating", "提问优先，保留上一次完整画面，稍后补读")
                         await asyncio.sleep(.1)
                         continue
-                    trace_refresh(self, "commit_finished")
+                    trace_refresh(self, "commit_finished", job_id=getattr(self, "_vision_job_id", 0),
+                                  frame_seq=self._analysis_input_frame_seq)
+
                     self._observer_last_signature = signature
                     self._observer_last_push_monotonic = time.monotonic()
                     scene_key = str((analysis.get("scene") or {}).get("primary_state") or "unknown")
