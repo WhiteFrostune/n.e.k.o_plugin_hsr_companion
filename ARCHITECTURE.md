@@ -156,7 +156,7 @@ flowchart TB
 
 | 现有文件 | 去向 |
 | --- | --- |
-| `query_plan`（只留 semantic）、`consultation_contract`、`semantic_guidance`、`pending_reply`、`request_completion` | L3 |
+| `query_plan`（只留 semantic）、`consultation_contract`、`semantic_guidance`、`pending_contract`、`request_completion` | L3 |
 | `guidance.plan_guidance`（258–452，约 200 行关键词） | L3，词表外移；`build_guidance` / `team_options` 拆给 L4 |
 | `query_coordinator` 的 `evaluate_readiness` / `answer_status` / `needs_followup` | L3 |
 | `consultation` 的 `consultation_action` / `stated_equipment` / `condition_reply` | L3；`build_reply_plan` → L5 |
@@ -184,6 +184,7 @@ flowchart TB
 | 现有文件 | 去向 |
 | --- | --- |
 | `answer_message`、`page_message`、`cone_message`、`service_contract`、`chat_activity` | L5 |
+| `pending_reply`（兼容门面）、`pending_handler`（待办接话处理） | L5；数据类型与辅助函数放 L3 的 `pending_contract` |
 | `consultation.build_reply_plan`、`equipment_reply` 的评价 + 回复包部分 | L5 |
 | `followup.py`（537 行） | ⚠ 要拆：补答的等待循环 + 主动读取恢复整体删除（见 4.5）；仍被其它路径用到的消息渲染与推送留 L5 |
 | 主动搭话子系统：`engine`、`arbiter`、`speech`、`delivery`、`contracts`（独立管线：稳定事件→仲裁→发声） | L5 子包 `proactive/`，输入改为 L2b 发布的"稳定事件" |
@@ -210,6 +211,12 @@ flowchart TB
 - 在第 10 节迁移步骤 5 合并规划器时，按 `plan_guidance`、`build_guidance` 和 `team_options` 的实际职责拆分。需求理解归 L3，机制分析与建议归 L4，回答组织归 L5，由入口组合各层结果。
 - 拆分覆盖函数内部依赖。`plan_guidance` 内部已有 `challenge_scope` 调用，处理时需要一起划清规划与分析的边界。
 - 完成拆分、核对六条依赖各自的归属，并通过分层门及既有咨询、配队回归后，逐条销账。当前 import 基线减少六条，职责混合的欠账继续保留在此。
+
+### 3.7.2 0.9.8 P4 兼容门面调整（2026-11-21）
+
+为保留旧导入路径，`runtime/pending_reply.py` 归 L5，仅 re-export 六个旧名称。`handle_pending_reply` 的实现整体搬到 L5 的 `runtime/pending_handler.py`；`UserActivity`、`message_digest`、`activity_stamp`、`message_allows`、`relation_contract` 整体搬到 L3 的 `runtime/pending_contract.py`，内部调用按职责引用新文件。
+
+原方案让旧文件留在 L3，若同时转接 L5 的处理函数，会新增 L3→L5 越界。因此采用兼容门面，六个旧名称与新路径保持同一对象，统一登记到 `tests/test_legacy_imports.py`。本次只删除原两条 import 白名单，预计 17→15，函数判断、截止时间和待办状态处理沿用原实现。
 
 ### 3.8 入口 / 装配 `entrypoints/`
 

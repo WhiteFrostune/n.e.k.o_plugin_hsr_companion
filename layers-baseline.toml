@@ -11,8 +11,6 @@ violations = [
   "runtime/manual_refresh.py -> runtime/query_coordinator.py",
   "runtime/manual_refresh.py -> runtime/query_plan.py",
   "runtime/observation.py -> runtime/service_contract.py",
-  "runtime/pending_reply.py -> runtime/chat_activity.py",
-  "runtime/pending_reply.py -> runtime/followup.py",
   "runtime/query_coordinator.py -> runtime/observation.py",
   "runtime/query_coordinator.py -> runtime/observation_store.py",
   "runtime/query_coordinator.py -> runtime/review_policy.py",

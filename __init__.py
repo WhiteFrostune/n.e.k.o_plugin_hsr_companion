@@ -2391,7 +2391,7 @@ class HsrCompanionPlugin(NekoPluginBase):
     ):
         if pending_reply is not None:
             prepare_stage("pending_reply")
-            from .runtime.pending_reply import handle_pending_reply
+            from .runtime.pending_handler import handle_pending_reply
             handled = await handle_pending_reply(self, pending_reply)
             prepare_stage("pending_reply", completed=True)
             return {"pending_reply": handled}

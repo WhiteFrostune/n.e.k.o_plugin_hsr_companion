@@ -315,7 +315,7 @@ def test_resident_formal_swap_confirm_and_fit_followup_share_the_same_subject(tm
     transport and model choice are isolated fixtures, not a live cat result.
     """
     from plugin.plugins.hsr_companion.runtime import followup
-    from plugin.plugins.hsr_companion.runtime.pending_reply import handle_pending_reply
+    from plugin.plugins.hsr_companion.runtime.pending_handler import handle_pending_reply
     from plugin.plugins.hsr_companion.tests.test_d1_fit_repair import label_only
     owner, values, sent, holder = formal_fixture(tmp_path, monkeypatch, catalog, item())
     owner._target_character = lambda: "isolated-d1-test-no-host"

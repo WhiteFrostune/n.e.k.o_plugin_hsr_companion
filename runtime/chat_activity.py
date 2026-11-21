@@ -110,7 +110,7 @@ async def latest_user_activity(bus, *, target: str, now: float | None = None, li
         if isinstance(records, Mapping):
             records = records.get("history", [])
         records = list(records)
-        from .pending_reply import UserActivity, message_digest
+        from .pending_contract import UserActivity, message_digest
         stamps = [(stamp, user_record(record)) for record in records
                   if (stamp := user_timestamp(record, target=target, now=time.time() if now is None else now)) is not None]
         if not stamps:

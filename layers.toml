@@ -51,7 +51,7 @@ L3 = [
   "runtime/consultation.py",
   "runtime/consultation_contract.py",
   "runtime/query_coordinator.py",
-  "runtime/pending_reply.py",
+  "runtime/pending_contract.py",
   "runtime/request_completion.py",
 ]
 L4 = [
@@ -78,6 +78,8 @@ L5 = [
   "runtime/service_contract.py",
   "runtime/followup.py",
   "runtime/chat_activity.py",
+  "runtime/pending_reply.py",
+  "runtime/pending_handler.py",
   "runtime/equipment_reply.py",
   "runtime/guidance.py",
   "runtime/semantic_guidance.py",
