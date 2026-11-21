@@ -7,7 +7,7 @@ from dataclasses import replace
 from typing import Any
 
 from .arbiter import EventArbiter
-from .contracts import CompanionEvent
+from .contracts import CompanionEvent, native_name_confirmed
 
 
 class CompanionRuntime:
@@ -153,15 +153,7 @@ class CompanionRuntime:
                 key = f"{scope}:{item.get('slot') or entity_id}"
                 previous_id, count = self._identity_counts.get(key, ("", 0))
                 count = count + 1 if previous_id == entity_id else 1
-                validation = item.get("name_validation") or {}
-                scores = validation.get("scores") or []
-                if (
-                    validation.get("entity_id") == entity_id
-                    and validation.get("method") == "native_and_enlarged_label_agree"
-                    and len(scores) == 2 and all(float(score) >= .90 for score in scores)
-                    and item.get("region_precision") == "label"
-                    and item.get("evidence") != "player_visual_region_correction"
-                ):
+                if native_name_confirmed(item):
                     count = max(count, self.confirmation_frames)
                 next_counts[key] = (entity_id, count)
             # Each position is independent. An intermittently readable fourth

@@ -168,7 +168,8 @@ def update_checked_patches(owner, patches, *, selected_snapshot=None):
         return (guard[0], tuple(mapped.get(p[0], p) for p in guard[1])) if guard else guard
 
     selected_serial = (((selected_snapshot or {}).get("evidence") or {}).get("screen_facts") or {}).get("observation_serial")
-    owns_current = (selected_snapshot is None or selected_snapshot.get("epoch") == getattr(owner, "_observation_epoch", 0)
+    owns_current = (selected_snapshot is None or not selected_snapshot.get("detached_region")
+                    and selected_snapshot.get("epoch") == getattr(owner, "_observation_epoch", 0)
                     and selected_serial == getattr(owner, "_observation_serial", 0))
     if owns_current:
         owner._accepted_frame_delivery_guard = update(getattr(owner, "_accepted_frame_delivery_guard", None))
