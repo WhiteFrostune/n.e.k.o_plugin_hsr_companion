@@ -7,11 +7,12 @@ release a still-running native thread into a second inference call.
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 from contextlib import asynccontextmanager
 
 from ..adapters.native_text import ObservationSuperseded
-from .vision_trace import record
+from .vision_trace import bind_trace, measure, record
 
 OCR_DRAIN_SECONDS = 1.0
 _RETAINED_WORKERS = ("_draining_vision_worker", "_content_revalidation_worker")
@@ -42,14 +43,14 @@ def query_yield_requested(owner, request_generation, scope):
     """
     if getattr(owner, "_visual_query_waiters", 0) <= 0:
         return False
-    if getattr(owner, "_query_refresh_generation", 0) <= request_generation:
-        return False
     if getattr(owner, "_query_refresh_deadline", 0) <= time.monotonic():
         return False
     if getattr(owner, "_region_query_waiters", 0) > 0:
         # A region query reads one small block and returns it; it does not
         # restart the full pass, so even a full producer yields here.
         return True
+    if getattr(owner, "_query_refresh_generation", 0) <= request_generation:
+        return False
     if scope == "full":
         return False
     if scope == "scene":
@@ -132,6 +133,36 @@ async def analyze_image(owner, payload):
             check_current()
             return result
         finally:
+            if worker.done() and getattr(owner, "_draining_vision_worker", None) is worker:
+                owner._draining_vision_worker = None
+                if not worker.cancelled():
+                    worker.exception()
+
+
+async def run_query_worker(owner, function, *args, deadline, **kwargs):
+    """A cancelled waiter never releases or forgets native work still running."""
+    stop = threading.Event()
+    generation = getattr(owner, "_answer_query_generation", 0)
+    epoch = getattr(owner, "_observation_epoch", 0)
+    def cancelled():
+        return (stop.is_set() or time.monotonic() >= deadline
+                or getattr(owner, "_observer_stop_requested", False)
+                or generation != getattr(owner, "_answer_query_generation", 0)
+                or epoch != getattr(owner, "_observation_epoch", 0))
+    async with vision_turn(owner, "query"):
+        if cancelled():
+            raise ObservationSuperseded()
+        owner._vision_job_id = getattr(owner, "_vision_job_id", 0) + 1
+        bind_trace(job_id=owner._vision_job_id)
+        def read():
+            with measure(owner, "region_ocr"):
+                return function(*args, cancelled=cancelled, **kwargs)
+        worker = asyncio.create_task(asyncio.to_thread(read))
+        owner._draining_vision_worker = worker
+        try:
+            return await asyncio.shield(worker)
+        finally:
+            stop.set()
             if worker.done() and getattr(owner, "_draining_vision_worker", None) is worker:
                 owner._draining_vision_worker = None
                 if not worker.cancelled():

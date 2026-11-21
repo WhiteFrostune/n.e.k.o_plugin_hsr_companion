@@ -398,7 +398,8 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
         evidence, guard = selected
     epoch = getattr(owner, "_observation_epoch", 0)
     serial = getattr(owner, "_observation_serial", 0)
-    owns_current = (snapshot["evidence"].get("screen_facts") or {}).get("observation_serial", serial) == serial
+    owns_current = (not snapshot.get("detached_region")
+                    and (snapshot["evidence"].get("screen_facts") or {}).get("observation_serial", serial) == serial)
     generation = getattr(owner, "_answer_query_generation", 0)
 
     def still_current():
@@ -622,7 +623,7 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
         # the global full result; its other actors/text were NOT revalidated.
         owner._observer_status.update(state="observing", message="正在核对当前界面信息")
     result = copy.deepcopy(evidence)
-    result["read_scope"] = "full" if full else "navigation" if navigation else "scene"
+    result["read_scope"] = "region" if evidence.get("read_scope") == "region" else "full" if full else "navigation" if navigation else "scene"
     pending_character = bool(result.get("equipment_complete") and not result.get("characters")
                              and not result.get("page_characters"))
     result.update(status="confirmed", failure_reason="character_pending" if pending_character else "",
@@ -657,8 +658,13 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
                            page_control_coordinates=[list(c) for c in sorted(control_coordinates)],
                            challenge_revision=getattr(owner, "_review_challenge_serial", 0),
                            capture_failure_revision=getattr(owner, "_capture_failure_revision", 0))
-    from .delivery_boundary import fact_packet_digest
+    from ..adapters.text_verification import identity_literal
+    from .delivery_boundary import fact_packet_digest, identity_packet_digest
     result["reuse"]["fact_packet_digest"] = fact_packet_digest(result)
+    result["reuse"]["identity_packet_digest"] = identity_packet_digest(result)
+    result["reuse"]["identity_coordinates"] = [list(region_key(identity_literal(a) or a))
+        for a in snapshot.get("identity_proofs") or [] if a.get("region")]
+
     if owns_current:
         from .fact_lifecycle import record_verified_regions
         record_verified_regions(owner, {p[0] for p in patches}, latest.timestamp, serial=serial)

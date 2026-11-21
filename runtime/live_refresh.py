@@ -1334,6 +1334,11 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
                 trace_refresh(owner, "region_query_selected", fields=sorted(query_plan.fields))
                 completed = True
                 return region_visual
+            if region_visual is not None and region_visual.get("read_scope") == "region":
+                trace_refresh(owner, "region_query_incomplete", fields=sorted(query_plan.fields))
+                completed = True
+                completion_state = "partial"
+                return region_visual  # Honest missing fields; do not wait for an unrelated full pass.
         owner._push_current_visual_context(await asyncio.wait_for(
             owner._current_visual_evidence(), timeout=max(.001, fresh_deadline - time.monotonic())))
         while time.monotonic() < fresh_deadline:

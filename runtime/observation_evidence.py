@@ -208,7 +208,8 @@ def public_visual_evidence(
         "freshness": freshness,
         "age_seconds": age_seconds,
         "age_label": age_label,
-        "read_scope": ("navigation" if recognition.get("navigation_only_query") else
+        "read_scope": ("region" if recognition.get("region_query") else
+                       "navigation" if recognition.get("navigation_only_query") else
                        "scene" if recognition.get("scene_only_query") or recognition.get("phase") == "scene_only" else "full"),
         "observed_at": timestamp,
         "valid_for_seconds": VISUAL_TTL_SECONDS,

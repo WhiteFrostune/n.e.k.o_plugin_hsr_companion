@@ -631,7 +631,8 @@ class HsrCompanionPlugin(NekoPluginBase):
         # A title preview is not a replacement for a full same-page read.
         # Query freshness remains controlled by validation, not empty previews.
         if (
-            not latest.get("invalidated") and previous_page == next_page
+            not getattr(self, "_observation_invalidated", False)
+            and not latest.get("invalidated") and previous_page == next_page
             and (latest.get("screen_facts", {}).get("facts") or latest.get("characters"))
         ):
             return

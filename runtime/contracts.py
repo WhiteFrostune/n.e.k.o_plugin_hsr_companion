@@ -211,3 +211,15 @@ class QueryObservation:
     refresh: dict
     wait_seconds: float
     generation: int
+
+
+def native_name_confirmed(item):
+    """Existing same-frame native/enlarged agreement gate, shared unchanged."""
+    entity_id = str(item.get("entity_id") or "")
+    validation = item.get("name_validation") or {}
+    scores = validation.get("scores") or []
+    return bool(validation.get("entity_id") == entity_id
+        and validation.get("method") == "native_and_enlarged_label_agree"
+        and len(scores) == 2 and all(float(score) >= .90 for score in scores)
+        and item.get("region_precision") == "label"
+        and item.get("evidence") != "player_visual_region_correction")

@@ -35,6 +35,7 @@ L2a = [
   "game_state.py",
 ]
 L2b = [
+  "runtime/current_regions.py",
   "runtime/followup_read.py",
   "runtime/query_observation.py",
   "runtime/observation_evidence.py",

@@ -25,6 +25,13 @@ def fact_packet_digest(value):
     return hashlib.sha256(json.dumps(sorted(semantic_key(f) for f in facts)).encode()).hexdigest()
 
 
+def identity_packet_digest(value):
+    """Bind an admitted identity packet, not merely its coordinates."""
+    fields = ("entity_id", "name", "identity_scope", "slot")
+    return hashlib.sha256(json.dumps(sorted(json.dumps({k: a.get(k) for k in fields}, sort_keys=True)
+        for a in value.get("characters") or []), ensure_ascii=True).encode()).hexdigest()
+
+
 def equipment_key(value):
     facts = (value.get("screen_facts") or {}).get("facts") or []
     return tuple(sorted(semantic_key(f) for f in facts if f.get("scope") == "equipment"))
@@ -181,7 +188,16 @@ def review(snapshot, owner, *, generation=None):
                 rows.append(row)
         screen["visible_text"] = rows
         actors = {identity_key(a) for a in current.get("characters") or []}
-        value["characters"] = [a for a in value.get("characters") or [] if identity_key(a) in actors]
+        reviewed_identity = (same_reviewed_revision
+            and bool(reviewed_fields & {"characters", "attributes"})
+            and reuse.get("identity_packet_digest") == identity_packet_digest(selected)
+            and bool(reuse.get("identity_coordinates"))
+            and {tuple(p) for p in reuse["identity_coordinates"]} <= reviewed_regions)
+        value["characters"] = [a for a in value.get("characters") or []
+                               if identity_key(a) in actors or reviewed_identity]
+        if reuse.get("identity_packet_digest") is not None:
+            kept = {identity_key(a) for a in value["characters"]}
+            value["page_characters"] = [a for a in value.get("page_characters") or [] if identity_key(a) in kept]
         if identity_key(value.get("controlled_character") or {}) != identity_key(current.get("controlled_character") or {}):
             value["controlled_character"] = None
 
