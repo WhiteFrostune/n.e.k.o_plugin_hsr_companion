@@ -7,11 +7,6 @@ violations = [
   "runtime/followup.py -> runtime/live_refresh.py",
   "runtime/followup.py -> runtime/observation_store.py",
   "runtime/followup.py -> runtime/query_reuse.py",
-  "runtime/guidance.py -> runtime/challenge.py",
-  "runtime/guidance.py -> runtime/data_freshness.py",
-  "runtime/guidance.py -> runtime/equipment.py",
-  "runtime/guidance.py -> runtime/mechanics.py",
-  "runtime/guidance.py -> runtime/saved_cone.py",
   "runtime/live_refresh.py -> runtime/query_coordinator.py",
   "runtime/manual_refresh.py -> runtime/query_coordinator.py",
   "runtime/manual_refresh.py -> runtime/query_plan.py",
@@ -22,5 +17,4 @@ violations = [
   "runtime/query_coordinator.py -> runtime/observation_store.py",
   "runtime/query_coordinator.py -> runtime/review_policy.py",
   "runtime/query_reuse.py -> runtime/query_coordinator.py",
-  "runtime/semantic_guidance.py -> runtime/challenge.py",
 ]
