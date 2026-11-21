@@ -21,6 +21,13 @@ LEGACY_EXPORTS = [
     ("runtime.query_plan", "QueryPlan", "runtime.contracts"),
     ("runtime.consultation_contract", "CURRENT_SCOPES", "runtime.contracts"),
     ("runtime.consultation_contract", "CORRECTION_REASONS", "runtime.contracts"),
+    # P4: the delivery facade preserves every pending-reply API name.
+    ("runtime.pending_reply", "UserActivity", "runtime.pending_contract"),
+    ("runtime.pending_reply", "message_digest", "runtime.pending_contract"),
+    ("runtime.pending_reply", "activity_stamp", "runtime.pending_contract"),
+    ("runtime.pending_reply", "message_allows", "runtime.pending_contract"),
+    ("runtime.pending_reply", "relation_contract", "runtime.pending_contract"),
+    ("runtime.pending_reply", "handle_pending_reply", "runtime.pending_handler"),
 ]
 
 

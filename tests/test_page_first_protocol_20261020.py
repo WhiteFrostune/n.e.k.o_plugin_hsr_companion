@@ -53,7 +53,8 @@ def test_coarse_invalidation_has_causal_receipt_not_a_guess(tmp_path):
 
 def test_confirm_message_keeps_original_request_and_deadline(monkeypatch):
     from plugin.plugins.hsr_companion.runtime import followup
-    from plugin.plugins.hsr_companion.runtime.pending_reply import handle_pending_reply, message_allows
+    from plugin.plugins.hsr_companion.runtime.pending_contract import message_allows
+    from plugin.plugins.hsr_companion.runtime.pending_handler import handle_pending_reply
     from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner, request
     owner, _ = followup_owner(monkeypatch)
     # The confirming event must be newer than the question but already in
@@ -81,7 +82,7 @@ def test_confirm_message_keeps_original_request_and_deadline(monkeypatch):
 
 @pytest.mark.parametrize("relation", ["cancel", "new_request"])
 def test_semantic_end_prevents_old_followup(monkeypatch, relation):
-    from plugin.plugins.hsr_companion.runtime.pending_reply import handle_pending_reply
+    from plugin.plugins.hsr_companion.runtime.pending_handler import handle_pending_reply
     from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner, request
     owner, sent = followup_owner(monkeypatch)
     req = replace(request(), asked_at=time.time() - .01)
@@ -95,7 +96,7 @@ def test_semantic_end_prevents_old_followup(monkeypatch, relation):
 
 
 def test_unbound_or_stale_semantic_reply_cannot_authorize(monkeypatch):
-    from plugin.plugins.hsr_companion.runtime.pending_reply import handle_pending_reply
+    from plugin.plugins.hsr_companion.runtime.pending_handler import handle_pending_reply
     from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner, request
     owner, _ = followup_owner(monkeypatch)
     req = request()
@@ -250,7 +251,7 @@ def test_formal_new_question_or_cancel_ends_old_obligation(tmp_path, monkeypatch
 
 def test_confirmation_does_not_mistake_own_activity_guard_for_message_mismatch(monkeypatch):
     from plugin.plugins.hsr_companion.runtime.chat_activity import latest_user_activity
-    from plugin.plugins.hsr_companion.runtime.pending_reply import handle_pending_reply
+    from plugin.plugins.hsr_companion.runtime.pending_handler import handle_pending_reply
     from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner, request
     owner, _ = followup_owner(monkeypatch)
     req = request()

@@ -16,7 +16,7 @@ from .chat_activity import latest_user_activity
 from .live_refresh import validated_delivery
 from .navigation import navigation_answer
 from .observation_store import ObservationSnapshot
-from .pending_reply import message_allows, relation_contract
+from .pending_contract import message_allows, relation_contract
 from .query_coordinator import answer_status, has_answerable_content, satisfied_fields
 from .query_plan import QueryPlan, build_query_plan
 from .request_completion import evaluate_request

@@ -337,7 +337,7 @@ def test_terminal_missing_information_does_not_arm_pixel_wait(retained, book, ca
 
 
 def test_confirmation_of_cached_panel_preserves_original_deadline_and_request(retained, book, catalog, monkeypatch):
-    from plugin.plugins.hsr_companion.runtime.pending_reply import handle_pending_reply
+    from plugin.plugins.hsr_companion.runtime.pending_handler import handle_pending_reply
 
     value, final = panel(retained), panel(retained, subject="character.pearl")
     owner, sent = owner_for(monkeypatch, value, book, catalog)
