@@ -1,0 +1,465 @@
+{
+  "schema_version": 1,
+  "baseline_commit": "00a7be4c731992d4012c0994b11e0f1366ad5677",
+  "purpose": "Historical observations, not required future behavior or live acceptance",
+  "sanitized": "Only the generic reproduction prompt is retained; request IDs replaced. No player names, UID, full chat, game text, images, absolute paths, tokens or raw exception messages.",
+  "cases": [
+    {
+      "case": "old097-expired",
+      "version": "0.9.7",
+      "request_id": "11111111111111111111111111111111",
+      "condition": "expired",
+      "condition_valid": true,
+      "formal_tool_invoked": true,
+      "args": {
+        "query": "你看到的是谁哇",
+        "intent": "read_screen",
+        "screen_fields": [
+          "characters"
+        ],
+        "modality": "chat"
+      },
+      "source_record_sha256": "eb889ec06fe27e629f2ff26a09203b0e6aca7b45f74f010727d2404f949b9245",
+      "wait_seconds": 7.156,
+      "outcome": "timeout",
+      "delivered_character_count": 0,
+      "stages": [
+        {
+          "stage": "query_started",
+          "after_seconds": 0.0,
+          "require_characters": true,
+          "require_content": false,
+          "require_navigation": false
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 0.0,
+          "reason": "stale_expired",
+          "age_seconds": 169.6
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 0.0,
+          "reason": "stale_expired",
+          "age_seconds": 169.6
+        },
+        {
+          "stage": "region_plan_missing",
+          "after_seconds": 0.015,
+          "page": "character_detail",
+          "fields": [
+            "characters"
+          ],
+          "fact_count": 9,
+          "fact_kinds": [
+            "entity_label",
+            "level",
+            "stat"
+          ]
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 0.015,
+          "reason": "stale_expired",
+          "age_seconds": 169.6
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 0.015,
+          "reason": "stale_expired",
+          "age_seconds": 169.6
+        },
+        {
+          "stage": "query_joined_worker",
+          "after_seconds": 0.265,
+          "scope": "full",
+          "job_id": 144,
+          "frame_seq": 2560,
+          "worker_elapsed_seconds": 0.265
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 1.0,
+          "reason": "stale_expired",
+          "age_seconds": 170.6
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 1.0,
+          "reason": "stale_expired",
+          "age_seconds": 170.6
+        },
+        {
+          "stage": "page_check_result",
+          "after_seconds": 1.594,
+          "reason": "same_frame_preview",
+          "scope": "full",
+          "page": "character_detail",
+          "controls": 6
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 2.015,
+          "reason": "stale_expired",
+          "age_seconds": 171.6
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 2.015,
+          "reason": "stale_expired",
+          "age_seconds": 171.6
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 3.031,
+          "reason": "stale_expired",
+          "age_seconds": 172.6
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 3.031,
+          "reason": "stale_expired",
+          "age_seconds": 172.6
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 4.062,
+          "reason": "stale_expired",
+          "age_seconds": 173.7
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 4.078,
+          "reason": "stale_expired",
+          "age_seconds": 173.7
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 5.078,
+          "reason": "stale_expired",
+          "age_seconds": 174.7
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 5.094,
+          "reason": "stale_expired",
+          "age_seconds": 174.7
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 6.125,
+          "reason": "stale_expired",
+          "age_seconds": 175.7
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 6.14,
+          "reason": "stale_expired",
+          "age_seconds": 175.7
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 7.156,
+          "reason": "stale_expired",
+          "age_seconds": 176.8
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 7.156,
+          "reason": "stale_expired",
+          "age_seconds": 176.8
+        },
+        {
+          "stage": "query_finished",
+          "after_seconds": 7.156,
+          "outcome": "timeout"
+        }
+      ],
+      "followup": {
+        "state": "cancelled",
+        "reason": "activity_unavailable_after_retries",
+        "result_ready": false
+      },
+      "rpc_timeout_count": 2
+    },
+    {
+      "case": "old097-unexpired",
+      "version": "0.9.7",
+      "request_id": "22222222222222222222222222222222",
+      "condition": "unexpired",
+      "condition_valid": false,
+      "formal_tool_invoked": false,
+      "args": {
+        "query": "你看到的是谁哇",
+        "intent": "read_screen",
+        "screen_fields": [
+          "characters"
+        ],
+        "modality": "chat"
+      },
+      "source_record_sha256": "eb889ec06fe27e629f2ff26a09203b0e6aca7b45f74f010727d2404f949b9245",
+      "outcome": "precondition_not_observed",
+      "wait_bound_seconds": 240
+    },
+    {
+      "case": "p8-expired",
+      "version": "0.9.8-p8",
+      "request_id": "33333333333333333333333333333333",
+      "condition": "expired",
+      "condition_valid": true,
+      "formal_tool_invoked": true,
+      "args": {
+        "query": "你看到的是谁哇",
+        "intent": "read_screen",
+        "screen_fields": [
+          "characters"
+        ],
+        "modality": "chat"
+      },
+      "source_record_sha256": "eb889ec06fe27e629f2ff26a09203b0e6aca7b45f74f010727d2404f949b9245",
+      "wait_seconds": 7.141,
+      "outcome": "timeout",
+      "delivered_character_count": 0,
+      "stages": [
+        {
+          "stage": "query_started",
+          "after_seconds": 0.0,
+          "require_characters": true,
+          "require_content": false,
+          "require_navigation": false
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 0.0,
+          "reason": "no_answerable_fields"
+        },
+        {
+          "stage": "region_plan_missing",
+          "after_seconds": 0.016,
+          "page": "character_detail",
+          "fields": [
+            "characters"
+          ],
+          "fact_count": 9,
+          "fact_kinds": [
+            "entity_label",
+            "level",
+            "stat"
+          ]
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 0.016,
+          "reason": "no_answerable_fields"
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 0.5,
+          "reason": "stale_expired",
+          "age_seconds": 67.7
+        },
+        {
+          "stage": "regions_deferred",
+          "after_seconds": 0.5,
+          "region_count": 16
+        },
+        {
+          "stage": "capture_selected",
+          "after_seconds": 0.5,
+          "age_seconds": 1.55
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 0.5,
+          "reason": "no_answerable_fields"
+        },
+        {
+          "stage": "vision_turn_acquired",
+          "after_seconds": 0.531,
+          "queue_seconds": 0.0
+        },
+        {
+          "stage": "analysis_started",
+          "after_seconds": 0.547,
+          "scope": "full"
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 1.516,
+          "reason": "no_answerable_fields"
+        },
+        {
+          "stage": "page_check_result",
+          "after_seconds": 2.156,
+          "reason": "same_frame_preview",
+          "scope": "full",
+          "page": "character_detail",
+          "controls": 6
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 2.531,
+          "reason": "no_answerable_fields"
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 3.547,
+          "reason": "no_answerable_fields"
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 4.547,
+          "reason": "no_answerable_fields"
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 5.562,
+          "reason": "no_answerable_fields"
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 6.578,
+          "reason": "no_answerable_fields"
+        },
+        {
+          "stage": "reuse_miss",
+          "after_seconds": 7.141,
+          "reason": "no_answerable_fields"
+        },
+        {
+          "stage": "query_finished",
+          "after_seconds": 7.141,
+          "outcome": "timeout"
+        }
+      ],
+      "followup": {
+        "state": "expired",
+        "reason": "no_new_verified_facts",
+        "result_ready": false
+      },
+      "rpc_timeout_count": 0
+    },
+    {
+      "case": "p8-unexpired",
+      "version": "0.9.8-p8",
+      "request_id": "44444444444444444444444444444444",
+      "condition": "unexpired",
+      "condition_valid": true,
+      "formal_tool_invoked": true,
+      "args": {
+        "query": "你看到的是谁哇",
+        "intent": "read_screen",
+        "screen_fields": [
+          "characters"
+        ],
+        "modality": "chat"
+      },
+      "source_record_sha256": "eb889ec06fe27e629f2ff26a09203b0e6aca7b45f74f010727d2404f949b9245",
+      "wait_seconds": 1.11,
+      "outcome": "reused",
+      "delivered_character_count": 1,
+      "stages": [
+        {
+          "stage": "query_started",
+          "after_seconds": 0.0,
+          "require_characters": true,
+          "require_content": false,
+          "require_navigation": false
+        },
+        {
+          "stage": "verification_queued",
+          "after_seconds": 0.25,
+          "region_count": 3
+        },
+        {
+          "stage": "checkpoint_proofs_selected",
+          "after_seconds": 1.016
+        },
+        {
+          "stage": "text_verification",
+          "after_seconds": 1.016,
+          "reason": "confirmed",
+          "region_count": 3
+        },
+        {
+          "stage": "reuse_text_revalidated",
+          "after_seconds": 1.11
+        },
+        {
+          "stage": "reuse_validated",
+          "after_seconds": 1.11,
+          "original_age_seconds": 18.976,
+          "stale": true,
+          "age_seconds": 20.1
+        },
+        {
+          "stage": "query_finished",
+          "after_seconds": 1.11,
+          "outcome": "reused"
+        }
+      ],
+      "followup": {
+        "state": "not_armed",
+        "reason": "answer_available"
+      },
+      "rpc_timeout_count": 0
+    },
+    {
+      "case": "p8-manual",
+      "kind": "manual_refresh",
+      "version": "0.9.8",
+      "state": "timeout",
+      "elapsed_seconds": 19.997,
+      "source_record_sha256": "eb889ec06fe27e629f2ff26a09203b0e6aca7b45f74f010727d2404f949b9245"
+    },
+    {
+      "case": "old_097-manual",
+      "kind": "manual_refresh",
+      "version": "0.9.7",
+      "state": "timeout",
+      "elapsed_seconds": 20.005,
+      "source_record_sha256": "eb889ec06fe27e629f2ff26a09203b0e6aca7b45f74f010727d2404f949b9245"
+    },
+    {
+      "case": "p8-earlier-coarse-revocations",
+      "kind": "revocations",
+      "source_record_sha256": "758abef64ce82c6cc6a86a6ccdb925997f00733f63ed507589517e0374b27c73",
+      "events": [
+        {
+          "from_epoch": 329,
+          "to_epoch": 330,
+          "serial": 3,
+          "control_count": 0,
+          "reason": "page_changed_during_analysis",
+          "origin": "frame_change",
+          "basis": "coarse_pixels_only",
+          "scope": "observation",
+          "candidate_present": false
+        },
+        {
+          "from_epoch": 330,
+          "to_epoch": 331,
+          "serial": 4,
+          "control_count": 0,
+          "reason": "page_changed_during_analysis",
+          "origin": "frame_change",
+          "basis": "coarse_pixels_only",
+          "scope": "observation",
+          "candidate_present": true
+        },
+        {
+          "from_epoch": 332,
+          "to_epoch": 333,
+          "serial": 7,
+          "control_count": 0,
+          "reason": "page_changed_during_analysis",
+          "origin": "frame_change",
+          "basis": "coarse_pixels_only",
+          "scope": "observation",
+          "candidate_present": false
+        }
+      ],
+      "causal_scope": "earlier than role query; repeated revocation is observed, animation cause not established"
+    }
+  ]
+}

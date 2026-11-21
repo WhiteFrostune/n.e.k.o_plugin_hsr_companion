@@ -7,8 +7,10 @@ import time
 
 from .contracts import QueryObservation, QueryPlan
 from .observation_store import ObservationSnapshot
+from .vision_trace import measure, traced_operation
 
 
+@traced_operation("query_observation")
 async def resolve_query(owner, plan: QueryPlan, *, refresh, timeout: float, generation: int | None = None) -> QueryObservation:
     """Bound coordination and copy its trace before another request can mutate it."""
     started = time.monotonic()
@@ -33,10 +35,12 @@ async def resolve_query(owner, plan: QueryPlan, *, refresh, timeout: float, gene
         acquired = False
         refresh_task = None
         try:
-            await asyncio.wait_for(lock.acquire(), timeout=timeout)
+            with measure(owner, "query_lock"):
+                await asyncio.wait_for(lock.acquire(), timeout=timeout)
             acquired = True
             if generation == getattr(owner, "_answer_query_generation", 0):
-                settings = await asyncio.wait_for(owner._read_observer_settings(), timeout=max(.001, deadline - time.monotonic()))
+                with measure(owner, "query_settings"):
+                    settings = await asyncio.wait_for(owner._read_observer_settings(), timeout=max(.001, deadline - time.monotonic()))
                 task = getattr(owner, "_observer_task", None)
                 if settings.get("enabled") and (task is None or task.done()):
                     owner._start_observer_task(restored=True)
@@ -45,7 +49,8 @@ async def resolve_query(owner, plan: QueryPlan, *, refresh, timeout: float, gene
                     owner._last_refresh_diagnostics = {"outcome": "observer_unavailable", "stages": []}
                     refresh_task = asyncio.create_task(refresh(owner, timeout=remaining, query_plan=plan, **plan.refresh_args()))
                     owner._active_coordinated_refresh = (generation, refresh_task)
-                    selected = await asyncio.wait_for(refresh_task, timeout=remaining)
+                    with measure(owner, "query_wait"):
+                        selected = await asyncio.wait_for(refresh_task, timeout=remaining)
                     diagnostics = copy.deepcopy(getattr(owner, "_last_refresh_diagnostics", {}))
                 else:
                     diagnostics = {"outcome": "timeout", "stages": []}

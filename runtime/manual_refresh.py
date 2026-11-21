@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from .observation_store import ObservationSnapshot
 from .readiness import fields_for_page, satisfied_fields
+from .vision_trace import measure, record, traced_operation
 
 MANUAL_TIMEOUT_SECONDS = 20.0
 
@@ -57,6 +58,7 @@ def cancel_manual_refresh(owner):
         task.cancel()
 
 
+@traced_operation("manual_refresh_wait")
 async def wait_for_observation(owner, baseline):
     deadline = time.monotonic() + MANUAL_TIMEOUT_SECONDS
     status = owner._manual_refresh_status
@@ -66,7 +68,8 @@ async def wait_for_observation(owner, baseline):
                 status.update(state="unavailable", finished_at=datetime.now(timezone.utc).isoformat())
                 return
             try:
-                current = await asyncio.wait_for(owner._current_visual_evidence(), timeout=min(2.0, max(.001, deadline - time.monotonic())))
+                with measure(owner, "manual_evidence_read"):
+                    current = await asyncio.wait_for(owner._current_visual_evidence(), timeout=min(2.0, max(.001, deadline - time.monotonic())))
             except TimeoutError:
                 continue
             snapshot = ObservationSnapshot.select(owner, current)
@@ -94,6 +97,11 @@ async def wait_for_observation(owner, baseline):
         if owner._manual_refresh_status is status and status.get("state") == "running":
             status.update(state="cancelled", finished_at=datetime.now(timezone.utc).isoformat())
         raise
-    except Exception:
+    except Exception as exc:
+        record(owner, "manual_refresh_error", error_type=type(exc).__name__)
         if owner._manual_refresh_status is status:
             status.update(state="failed", finished_at=datetime.now(timezone.utc).isoformat())
+    finally:
+        record(owner, "manual_refresh_finished", outcome=status.get("state"),
+               baseline_serial=baseline, serial=getattr(owner, "_last_full_commit_serial", 0),
+               seconds=round(time.monotonic() - (deadline - MANUAL_TIMEOUT_SECONDS), 3))

@@ -21,7 +21,15 @@ from . import vision_scheduler
 from .query_reuse import LIVE_FRAME_MAX_AGE_SECONDS, region_stamp, regions_changed, text_pixel_differences, try_reuse
 from .vision_scheduler import VisionWorkerBusy, vision_turn
 from .vision_scheduler import drain_analysis_worker as drain_analysis_worker
-from .vision_trace import measure, record, record_relic_stage
+from .vision_trace import (
+    bind_trace,
+    correlation,
+    measure,
+    record,
+    record_candidate,
+    record_relic_stage,
+    traced_operation,
+)
 
 LIVE_POLL_SECONDS = 0.25
 
@@ -119,6 +127,8 @@ async def fetch_recent_frame(owner, *, wait_seconds=2.0):
 def trace_refresh(owner: Any, stage: str, **details: Any) -> None:
     """Bounded per-query timings only; never log game text or image bytes."""
     trace = getattr(owner, "_active_refresh_trace", None)
+    details = {**correlation(), **(trace.get("correlation", {}) if trace is not None else {}), **details}
+    record(owner, stage, **details)
     if trace is not None and len(trace["stages"]) < 48:
         trace["stages"].append({"stage": stage, "after_seconds": round(time.monotonic() - trace["started"], 3), **details})
 
@@ -355,6 +365,7 @@ async def invalidate_frame_change(owner: Any, previous, current, controls, reaso
                      "recognition": {"phase": "scene_only", "scene_regions": list(controls)}})
 
 
+@traced_operation("analysis_worker")
 async def guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict[str, Any] | None:
     """Monitor the live helper while OCR runs; discard superseded work."""
     await wait_delivery_turn(owner)
@@ -415,6 +426,7 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
     owner._vision_job_id = getattr(owner, "_vision_job_id", 0) + 1
     job = {"job_id": owner._vision_job_id, "frame_seq": getattr(owner, "_analysis_input_frame_seq", None),
            "capture_at": getattr(owner, "_analysis_capture_at", None)}
+    bind_trace(**job)
 
     relic_requested = False
 
@@ -594,6 +606,7 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
         trace_refresh(owner, "analysis_finished", scope=scope,
                       processing_seconds=(analysis.get("recognition") or {}).get("processing_seconds") if isinstance(analysis, dict) else None,
                       health_polls=health_polls, frame_transfers=frame_transfers)
+        record_candidate(owner, "candidate_parsed", analysis, **job)
         if isinstance(analysis, dict) and ((analysis.get("page") or {}).get("page_type") == "relic_detail" or relic_requested):
             reader = (analysis.get("recognition") or {}).get("text_reader") or {}
             ocr = analysis.get("ocr") or {}
@@ -629,6 +642,7 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
                 trace_refresh(owner, "analysis_rejected", reason="capture_unavailable_after_analysis", scope=scope)
                 await owner._invalidate_current_observation("capture_unavailable_during_analysis")
             else:
+                bind_trace(verification_frame_seq=getattr(latest, "frame_seq", None))
                 if job:
                     job["verification_frame_seq"] = getattr(latest, "frame_seq", None)
                     job["verification_frame_at"] = datetime.fromtimestamp(latest.timestamp, timezone.utc).isoformat()
@@ -764,6 +778,7 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
         identity_validation = (analysis.get("recognition") or {}).get("identity_validation")
         if identity_validation:
             trace_refresh(owner, "identity_validation", **identity_validation)
+        record_candidate(owner, "candidate_verified", analysis, **job)
         trace_refresh(owner, "analysis_validated", scope=scope)
         if helper and latest is not None:
             # Candidate admission and per-question answer permission have
@@ -1190,7 +1205,7 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
     if observer is None or observer.done() or not owner._observer_status.get("enabled"):
         return
     owner._last_visual_query_at = time.monotonic()
-    trace = {"started": time.monotonic(), "stages": [], "plan": query_plan}
+    trace = {"started": time.monotonic(), "stages": [], "plan": query_plan, "correlation": correlation()}
     if timeout >= 4:
         deadline = trace["started"] + timeout - .05
         stale_reserve = min(.8, timeout * .25)
@@ -1309,7 +1324,9 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
                 region_visual = await asyncio.wait_for(
                     read_query_regions(owner, query_plan, fresh_deadline),
                     timeout=max(.001, fresh_deadline - time.monotonic()))
-            except (TimeoutError, Exception):
+            except (TimeoutError, Exception) as exc:
+                trace_refresh(owner, "region_read_unavailable",
+                              reason="timeout" if isinstance(exc, TimeoutError) else "error", error_type=type(exc).__name__)
                 region_visual = None
             finally:
                 owner._region_query_waiters -= 1
