@@ -142,7 +142,7 @@ flowchart TB
 
 | 现有文件 | 去向 |
 | --- | --- |
-| `observation_store`、`observation`（去掉 instruction 文案）、`fact_lifecycle`、`delivery_scope`、`delivery_boundary`、`review_policy`、`query_reuse`、`page_handoff`、`manual_refresh`、`vision_scheduler` | L2b。其中后几个在新路径里会大幅瘦身（见第 10 节），不是原样搬 |
+| `observation_store`、`observation_evidence`（当前画面证据）、`fact_lifecycle`、`delivery_scope`、`delivery_boundary`、`review_policy`、`query_reuse`、`page_handoff`、`manual_refresh`、`vision_scheduler` | L2b。其中后几个在新路径里会大幅瘦身（见第 10 节），不是原样搬 |
 | `runtime/live_refresh.py`（1254 行） | ⚠ 要拆：取帧 → L1；像素比对 `frame_changed` → L1 工具；OCR 调度 + 复核 → L2b；`refresh_for_query` 的提问等待循环 → 删除，由 `observe()` 取代 |
 | `__init__.py` 的 `_observer_loop`（约 340 行）、506–632 的观察状态封装、688–894 的 `_apply_local_analysis` | ⚠ 要拆：采集源选择 + 健康检查 → L2b；"commit 后投递主动事件"那一段 → L5 |
 | `runtime/query_coordinator.resolve_query` 里的锁和 `create_task(refresh)` | 下沉到 `observe()` |
@@ -184,6 +184,7 @@ flowchart TB
 | 现有文件 | 去向 |
 | --- | --- |
 | `answer_message`、`page_message`、`cone_message`、`service_contract`、`chat_activity` | L5 |
+| `context_text`（被动上下文与路由提示） | L5 |
 | `pending_reply`（兼容门面）、`pending_handler`（待办接话处理） | L5；数据类型与辅助函数放 L3 的 `pending_contract` |
 | `consultation.build_reply_plan`、`equipment_reply` 的评价 + 回复包部分 | L5 |
 | `followup.py`（537 行） | ⚠ 要拆：补答的等待循环 + 主动读取恢复整体删除（见 4.5）；仍被其它路径用到的消息渲染与推送留 L5 |
@@ -217,6 +218,14 @@ flowchart TB
 为保留旧导入路径，`runtime/pending_reply.py` 归 L5，仅 re-export 六个旧名称。`handle_pending_reply` 的实现整体搬到 L5 的 `runtime/pending_handler.py`；`UserActivity`、`message_digest`、`activity_stamp`、`message_allows`、`relation_contract` 整体搬到 L3 的 `runtime/pending_contract.py`，内部调用按职责引用新文件。
 
 原方案让旧文件留在 L3，若同时转接 L5 的处理函数，会新增 L3→L5 越界。因此采用兼容门面，六个旧名称与新路径保持同一对象，统一登记到 `tests/test_legacy_imports.py`。本次只删除原两条 import 白名单，预计 17→15，函数判断、截止时间和待办状态处理沿用原实现。
+
+### 3.7.3 0.9.8 P5 观察与交付的兼容边界（2026-11-21）
+
+`public_visual_evidence`、`VISUAL_TTL_SECONDS` 和证据状态词表放在 L2b 的 `runtime/observation_evidence.py`；`visual_context_text`、界面范围标签及 `SERVICE_ROUTING_RULE` 放在 L5 的 `runtime/context_text.py`，提示内容沿用原值。`service_contract.py` 继续 re-export 原路由提示名称。
+
+旧 `runtime/observation.py` 只转接上述旧名称，归 entrypoints，以同时装配 L2b 证据与 L5 文案。L2b 内部改用证据实现文件。`query_coordinator` 对旧观察入口的既有越界继续登记在原白名单，留待 P7 下沉查询编排时处理。
+
+`equipment_reply.try_equipment_reply` 显式接收 `make_evidence`，由入口传入原证据函数，沿用原调用参数。六个迁移名称登记到兼容表，验证对象身份一致；仅删除 P5 对应两条白名单，预计 15→13。
 
 ### 3.8 入口 / 装配 `entrypoints/`
 

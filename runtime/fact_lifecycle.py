@@ -11,7 +11,7 @@ from collections import Counter
 from datetime import datetime, timezone
 
 from .contracts import FRESH_LIVE_AGE_SECONDS, STALE_MAX_AGE_SECONDS
-from .observation import VISUAL_TTL_SECONDS, public_visual_evidence
+from .observation_evidence import VISUAL_TTL_SECONDS, public_visual_evidence
 
 
 def timestamp(value):

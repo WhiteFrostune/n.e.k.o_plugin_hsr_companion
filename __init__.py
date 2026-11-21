@@ -48,6 +48,7 @@ from .runtime import CompanionRuntime, build_event_delivery
 from .runtime.build_info import BUILD_COMMIT, PLUGIN_VERSION
 from .runtime.chat_activity import latest_user_activity
 from .runtime.consultation_contract import CONSULTATION_SCHEMA, bound_followup_plan, normalize_model_consultation
+from .runtime.context_text import visual_context_text
 from .runtime.data_freshness import data_freshness
 from .runtime.diagnostic_export import export_diagnostic
 from .runtime.diagnostics import build_diagnostic_report
@@ -66,11 +67,7 @@ from .runtime.live_refresh import (
     watch_latest_frame,
 )
 from .runtime.manual_refresh import cancel_manual_refresh, public_manual_refresh, request_manual_refresh
-from .runtime.observation import (
-    VISUAL_TTL_SECONDS,
-    public_visual_evidence,
-    visual_context_text,
-)
+from .runtime.observation_evidence import VISUAL_TTL_SECONDS, public_visual_evidence
 from .runtime.observation_store import ObservationStore
 from .runtime.player_builds import STORE_KEY as MANUAL_BUILDS_KEY
 from .runtime.player_builds import BuildError, player_build_service
@@ -2411,7 +2408,8 @@ class HsrCompanionPlugin(NekoPluginBase):
         try:
             prepare_stage("equipment_reply")
             from .runtime.equipment_reply import try_equipment_reply
-            supplied = await try_equipment_reply(self, query, player_reply=player_reply, generation=answer_generation) if (
+            supplied = await try_equipment_reply(self, query, player_reply=player_reply, generation=answer_generation,
+                                                make_evidence=public_visual_evidence) if (
                 intent not in SEMANTIC_INTENTS or player_reply is not None) else None
             prepare_stage("equipment_reply", completed=True)
             if supplied is not None:

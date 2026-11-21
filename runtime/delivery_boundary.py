@@ -56,7 +56,7 @@ def review(snapshot, owner, *, generation=None):
     contribute a new row or extend a capture/verification timestamp.
     """
     from .equipment_view import equipment_card
-    from .observation import public_visual_evidence
+    from .observation_evidence import public_visual_evidence
 
     selected = snapshot.evidence()
     observer = getattr(owner, "_observer_status", {})

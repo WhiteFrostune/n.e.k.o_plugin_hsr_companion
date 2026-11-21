@@ -33,7 +33,7 @@ L2a = [
   "game_state.py",
 ]
 L2b = [
-  "runtime/observation.py",
+  "runtime/observation_evidence.py",
   "runtime/observation_store.py",
   "runtime/fact_lifecycle.py",
   "runtime/delivery_scope.py",
@@ -76,6 +76,7 @@ L5 = [
   "runtime/page_message.py",
   "runtime/cone_message.py",
   "runtime/service_contract.py",
+  "runtime/context_text.py",
   "runtime/followup.py",
   "runtime/chat_activity.py",
   "runtime/pending_reply.py",
@@ -113,4 +114,5 @@ trace = [
 paths = [
   "__init__.py",
   "runtime/diagnostics.py",
+  "runtime/observation.py",
 ]
