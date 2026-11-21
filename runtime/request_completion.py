@@ -38,7 +38,7 @@ def evaluate_request(plan, visual, *, completion=None):
     role/cached assessment borrowed from another observation. Terminal missing
     rules/subject is different from evidence which can still complete a task.
     """
-    from .query_coordinator import navigation_applicable, satisfied_fields
+    from .readiness import navigation_applicable, satisfied_fields
 
     confirmed = satisfied_fields(plan, visual)
     missing = plan.fields - confirmed

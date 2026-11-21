@@ -35,6 +35,7 @@ L2a = [
   "game_state.py",
 ]
 L2b = [
+  "runtime/query_observation.py",
   "runtime/observation_evidence.py",
   "runtime/observation_store.py",
   "runtime/fact_lifecycle.py",
@@ -52,7 +53,7 @@ L3 = [
   "runtime/query_plan.py",
   "runtime/consultation.py",
   "runtime/consultation_contract.py",
-  "runtime/query_coordinator.py",
+  "runtime/query_status.py",
   "runtime/pending_contract.py",
   "runtime/request_completion.py",
 ]
@@ -95,6 +96,7 @@ L5 = [
 
 [sidebars]
 contracts = [
+  "runtime/readiness.py",
   "runtime/contracts.py",
   "runtime/build_info.py",
   "runtime/equipment_view.py",
@@ -114,6 +116,7 @@ trace = [
 
 [entrypoints]
 paths = [
+  "runtime/query_coordinator.py",
   "session.py",
   "__init__.py",
   "runtime/diagnostics.py",

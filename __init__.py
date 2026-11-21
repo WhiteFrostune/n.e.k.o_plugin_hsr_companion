@@ -74,8 +74,9 @@ from .runtime.player_builds import STORE_KEY as MANUAL_BUILDS_KEY
 from .runtime.player_builds import BuildError, player_build_service
 from .runtime.prepare_trace import prepare_correction, prepare_failure, prepare_stage, read_records, trace_prepare
 from .runtime.progression import plan_progression
-from .runtime.query_coordinator import answer_status, needs_followup, resolve_query
+from .runtime.query_observation import resolve_query
 from .runtime.query_plan import SCREEN_FIELDS, SEMANTIC_INTENTS, build_query_plan
+from .runtime.query_status import answer_status, needs_followup
 from .runtime.service_contract import (
     PREPARE_TOOL_DESCRIPTION,
     clear_discussion,

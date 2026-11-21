@@ -6,19 +6,15 @@ import time
 from datetime import datetime, timezone
 
 from .observation_store import ObservationSnapshot
-from .query_coordinator import satisfied_fields
-from .query_plan import build_query_plan
+from .readiness import fields_for_page, satisfied_fields
 
 MANUAL_TIMEOUT_SECONDS = 20.0
 
 
 def content_ready(value):
     """Completion means expected page content, not merely one recognized name."""
-    page = value.get("page_type")
-    fields = {"relic_detail": ["equipment"], "exploration_hud": ["location", "quest"],
-              "character_detail": ["characters", "attributes"], "team_setup": ["characters"]}.get(page)
-    if fields:
-        plan = build_query_plan("主副词条" if page == "relic_detail" else "", screen_fields=fields)
+    plan = fields_for_page(value.get("page_type"))
+    if plan is not None:
         return plan.fields <= satisfied_fields(plan, value)
     return bool(value.get("fresh") and ((value.get("screen_facts") or {}).get("facts")
                                       or (value.get("screen_facts") or {}).get("visible_text")))

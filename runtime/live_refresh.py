@@ -1238,7 +1238,7 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
             return False
         if query_plan is None:
             return True  # Compatibility callers retain their existing partial semantics.
-        from .query_coordinator import has_answerable_content, satisfied_fields
+        from .readiness import has_answerable_content, satisfied_fields
         enough = query_plan.fields <= satisfied_fields(query_plan, value)
         completion_state = "ready" if enough else "partial"
         if not enough:

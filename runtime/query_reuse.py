@@ -253,7 +253,7 @@ def scoped_snapshot(owner, evidence, guard, kinds):
 async def try_reuse(owner, *, navigation: bool, full: bool = False, require_characters: bool = False, plan=None, pixel_only=False, allow_stale=False):
     from .live_refresh import delivery_turn, mark_delivery_verified
     if full and plan is not None:
-        from .query_coordinator import has_answerable_content
+        from .readiness import has_answerable_content
         snapshots = getattr(owner, "_reusable_observations", {})
         if not any(s and has_answerable_content(plan, s["evidence"])
                    for s in (snapshots.get("full"), snapshots.get("full_previous"))):
@@ -286,7 +286,7 @@ async def _try_reuse(owner, *, navigation: bool, full: bool, require_characters:
         selected = await _try_reuse_once(owner, navigation=navigation, full=full, require_characters=require_characters, plan=plan,
                                        pixel_only=pixel_only, allow_stale=allow_stale)
         if selected is not _SUPERSEDED:
-            from .query_coordinator import answer_coverage, satisfied_fields
+            from .readiness import answer_coverage, satisfied_fields
             current = getattr(owner, "_reusable_observations", {}).get(key)
             original = ((selected or {}).get("reuse") or {}).get("original_serial")
             current_serial = ((current or {}).get("evidence", {}).get("screen_facts") or {}).get("observation_serial")
@@ -318,7 +318,7 @@ async def _try_reuse(owner, *, navigation: bool, full: bool, require_characters:
 
 
 async def _try_reuse_once(owner, *, navigation: bool, full: bool, require_characters: bool, plan=None, prefer_current=False, pixel_only=False, allow_stale=False):
-    from .query_coordinator import has_answerable_content
+    from .readiness import has_answerable_content
 
     snapshots = getattr(owner, "_reusable_observations", {})
     key = "full" if full else "navigation" if navigation else "scene"
@@ -328,7 +328,7 @@ async def _try_reuse_once(owner, *, navigation: bool, full: bool, require_charac
         # make independent page proof depend on a navigation cache existing.
         snapshot = snapshots.get("full")
     if plan is not None:
-        from .query_coordinator import satisfied_fields
+        from .readiness import satisfied_fields
         # Keep at most one detached richer read. It MUST still pass its own
         # age, epoch, process, page and literal guards below; never merge rows.
         candidates = [snapshot] if prefer_current else [snapshot, snapshots.get(key + "_previous")]

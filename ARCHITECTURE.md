@@ -92,7 +92,7 @@ flowchart TB
 
 | 包 | 放什么 | 规则 |
 | --- | --- | --- |
-| `contracts` | 状态词表（第 5 节）、`Deadline`、`ReadSubject`（要读什么）、`ReadRequest`、`ObservationResult`、`ScreenFacts`、`QueryPlan`、`SCREEN_FIELDS` | 只放数据类型和常量，不放逻辑，不 import 任何其他包 |
+| `contracts` | 状态词表（第 5 节）、`Deadline`、`ReadSubject`（要读什么）、`ReadRequest`、`ObservationResult`、`ScreenFacts`、`QueryPlan`、`SCREEN_FIELDS` | 可以放数据类型、常量及无状态的纯函数；不执行 I/O，不 import 其他层（允许依赖同属 contracts 的模块） |
 | `knowledge` | `data/`（资料包、头像包、`catalog`）、`core.KnowledgeBase`、`resources/*.json`（含新增 `phrases.json`） | 只读。⚠ `data/pack.py`（下载 + 校验 + sqlite 读取混在一起）要拆；`avatar_pack.py` 里的 SIFT 匹配属识别能力，应归 L2a |
 | `trace` | `prepare_trace`、`diagnostics`、`revocation_trace`、`page_control_trace`、`vision_trace` 等 | 只写不读业务状态；不记游戏文字和图像（保持现有隐私约定） |
 
@@ -233,6 +233,13 @@ flowchart TB
 `adapters/native_text.py` 保留原通用扫描和取消原语（L1）；领域名称重读策略在 `adapters/text_policy.py`（L2a），原名称复核函数搬入 `adapters/text_verification.py`。底层有 catalog 时要求三个回调齐备，`local_vision` 显式装配；旧 `text_reader` 改为 L2a 兼容门面，其 `read_native_text` 包装器保持原签名并自动装配同一策略。
 
 图像指纹搬 `vision.py`（L1），纯字符串指纹比较搬 `runtime/contracts.py`。其余会话函数保持原体，搬 `session_state.py`（L5）；旧 `session.py` 归入口，只导出原对象，避免为旧路径制造 L5→L1 越界。未更改预算、核验阈值、任务调度及返回结构；仅删三条白名单（13→10）。这些门面可在旧调用方迁移后清理，不处理 owner 私有状态访问与 O1/O2。
+
+
+### 3.7.5 0.9.8 P7 就绪判断与读取协调（2026-11-21）
+
+`runtime/readiness.py` 归 contracts 侧栏，收纳字段就绪类型与纯判断；`query_status.py`（L3）保留状态说明和补答登记判断。`resolve_query` 原体搬入 `query_observation.py`（L2b），直接引用 P5 的证据实现；旧 `query_coordinator.py` 是只转接原对象的入口门面。
+
+`QueryObservation` 搬 contracts，构造字段、顺序及默认值不变；快照仅用 `Any` 作类型标注，避免契约反向 import L2b。`fields_for_page` 按原页面映射构造完全等价的结构化计划，手动刷新不再伪造自然语言问题。旧 API 加入对象身份兼容表；等待、锁、取消、快照与完成判断保持原逻辑。仅删七条白名单（10→3），P3 的六项混合职责仍后置。
 
 ### 3.8 入口 / 装配 `entrypoints/`
 

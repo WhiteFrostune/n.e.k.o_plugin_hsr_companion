@@ -13,8 +13,8 @@ from dataclasses import replace
 from .consultation import STAT_PROPERTIES
 from .equipment import assess_relic
 from .equipment_view import equipment_card, equipment_digest, equipment_object, property_name
-from .query_coordinator import answer_status
 from .query_plan import build_query_plan
+from .query_status import answer_status
 from .service_contract import mark_service_request, record_answer_delivery, response_contract
 
 REPLY_SECONDS = 120.0
