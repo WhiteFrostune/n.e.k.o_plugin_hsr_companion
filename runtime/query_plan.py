@@ -7,30 +7,21 @@ The legacy helpers remain public for compatibility, but all rules live here.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from types import MappingProxyType
 
-TOPIC_WORDS = MappingProxyType({
-    "skill": ("技能", "战技", "终结技", "天赋", "行迹", "星魂"),
-    "equipment": ("装备", "遗器", "光锥", "词条", "套装"),
-    "quest": ("任务", "目标", "接下来", "干嘛", "干吗", "做啥"),
-    "attributes": ("属性", "面板", "攻击力", "速度", "暴击", "培养", "等级"),
-    "location": ("地点", "位置", "地区", "在哪", "哪里", "哪儿"),
-    "enemy": ("敌人", "怪物", "弱点", "机制"),
-    "dialogue": ("对话", "剧情", "台词", "说什么"),
-    "resource": ("星琼", "专票", "通票", "信用点"),
-    "visible_text": ("页面文字", "界面文字", "写的什么", "写了什么", "什么内容", "页面说明", "页面内容", "界面内容"),
-})
-ENTITY_TOPICS = MappingProxyType({
-    "skill": frozenset({"character_skill", "character_trace", "character_rank"}),
-    "equipment": frozenset({"light_cone", "relic_set", "item"}),
-})
-SCREEN_FIELDS = ("page", "location", "quest", "characters", "controlled_character",
-                 "visible_text", "skill", "equipment", "attributes", "enemy", "dialogue", "resource")
-RESOURCE_LABELS = MappingProxyType({"星琼": "星琼", "专票": "星轨专票", "通票": "星轨通票", "信用点": "信用点"})
-SEMANTIC_INTENTS = frozenset({"read_screen", "explain_page", "assess_relic", "assess_cone", "assess_panel",
-                              "equipment_guide", "build_guide", "team_guide", "challenge_guide", "continue_consultation",
-                              "build_priority", "build_explain", "build_howto", "stat_threshold", "stat_value"})
+# Re-exported for existing callers; the definitions now live in contracts.
+from .contracts import (
+    ENTITY_TOPICS as ENTITY_TOPICS,
+)
+from .contracts import (
+    RESOURCE_LABELS,
+    SCREEN_FIELDS,
+    SEMANTIC_INTENTS,
+    TOPIC_WORDS,
+    QueryPlan,
+)
+
 _SUBJECT_GUIDES = frozenset({"equipment_guide", "build_guide"})
 _SEMANTIC_FIELDS = MappingProxyType({
     "explain_page": frozenset({"page", "visible_text"}),
@@ -116,95 +107,6 @@ def asks_navigation_only(query: str) -> bool:
     topics = {topic for topic, words in TOPIC_WORDS.items() if any(word in query for word in words)}
     return bool(asks_screen_content(query) and topics and topics <= {"quest", "location"}
                 and not any(word in query for word in ("角色", "人物", "谁", "名字", "头像", "队伍", "队员")))
-
-
-@dataclass(frozen=True)
-class QueryPlan:
-    query: str
-    intent: str
-    screen: bool
-    identity: bool
-    content: bool
-    scene_only: bool
-    navigation: bool
-    controlled: bool
-    topics: frozenset[str]
-    fields: frozenset[str]
-    equipment_kinds: frozenset[str] = frozenset()
-    planning_source: str = "legacy_keywords"
-    response_detail: str = ""
-    archived_guidance: bool = False
-
-    def with_fields(self, fields, *, equipment_kinds=None):
-        """Derive execution switches from ONE accepted field set.
-
-        No semantic classification, capture, proof relaxation or history lookup.
-        Guidance and structured/legacy callers share this same projection.
-        """
-        fields = frozenset(fields)
-        scene = bool(fields) and fields <= {"page", "location"}
-        navigation = "quest" in fields and fields <= {"page", "location", "quest"}
-        return replace(self, fields=fields, screen=bool(fields),
-            identity=bool(fields & {"page", "characters", "controlled_character"}),
-            controlled="controlled_character" in fields, scene_only=scene, navigation=navigation,
-            content=bool(fields - {"page", "characters", "controlled_character"}) and not scene,
-            topics=frozenset(fields & TOPIC_WORDS.keys()),
-            equipment_kinds=(self.equipment_kinds if equipment_kinds is None else frozenset(equipment_kinds))
-                            if "equipment" in fields else frozenset())
-
-    @property
-    def required_equipment_kinds(self) -> frozenset[str]:
-        if "equipment" not in self.fields:
-            return frozenset()
-        if self.equipment_kinds:
-            return self.equipment_kinds
-        if self.intent == "assess_cone":
-            return frozenset()
-        if self.response_detail == "full":
-            return frozenset({"main_stat", "sub_stat"})
-        if "主副词条" in self.query or "主词条" in self.query and "副词条" in self.query:
-            return frozenset({"main_stat", "sub_stat"})
-        if "主词条" in self.query:
-            return frozenset({"main_stat"})
-        if "副词条" in self.query:
-            return frozenset({"sub_stat"})
-        return frozenset({"main_stat", "sub_stat"}) if "词条" in self.query else frozenset()
-
-    @property
-    def required_resource_labels(self) -> frozenset[str]:
-        return frozenset(label for word, label in RESOURCE_LABELS.items() if word in self.query)
-
-    @property
-    def requires_quest_objective(self) -> bool:
-        return any(word in self.query for word in ("接下来", "做什么", "做啥", "干嘛", "干吗", "任务目标", "怎么做"))
-
-    def refresh_args(self) -> dict:
-        # Legacy OCR API's require_characters also selects the full read path.
-        # Keep that contract while avoiding roster dependencies in readiness.
-        return {"require_characters": not (self.scene_only or self.navigation),
-                "require_content": self.content and not self.navigation,
-                "require_navigation": self.navigation}
-
-    def public(self) -> dict:
-        # No query text, guessed names, paths, or observed facts.
-        result = {"screen": self.screen, "fields": sorted(self.fields), "topics": sorted(self.topics),
-                  "planning_source": self.planning_source,
-                  "evidence_source": "current_screen" if self.screen else
-                                     "saved_or_reference" if self.archived_guidance else "optional_context",
-                  "read_path": "navigation" if self.navigation else "scene" if self.scene_only else "full" if self.screen else "knowledge"}
-        if self.required_equipment_kinds:
-            result["equipment_kinds"] = sorted(self.required_equipment_kinds)
-        return result
-
-    def relevant_facts(self, facts: list[dict]) -> list[dict]:
-        topics = self.topics
-        relevant = [f for f in facts if not topics or f.get("scope") in topics
-                or "quest" in topics and f.get("kind") == "quest_destination"
-                or "equipment" in topics and f.get("scope") == "attributes"
-                or topics & {"skill", "equipment", "attributes"} and f.get("scope") == "progression"
-                or f.get("kind") == "entity_label" and any(f.get("entity_type") in ENTITY_TOPICS.get(t, ()) for t in topics)]
-        labels = self.required_resource_labels
-        return [f for f in relevant if f.get("scope") != "resource" or not labels or f.get("label") in labels]
 
 
 def build_query_plan(query: str, intent: str = "conversation", *, screen_fields=None, response_detail=None) -> QueryPlan:

@@ -228,6 +228,7 @@ def test_grounding_accepts_discussion_subject_without_claiming_wearer(catalog):
     from plugin.plugins.hsr_companion.runtime.grounding import build_grounding
 
     result = build_grounding("这个遗器适合谁", visual(fact("main_stat", "主词条·速度", "25")), catalog,
+                             plan=build_query_plan("这个遗器适合谁"),
                              analysis_subject_ids=("character.pearl",), analysis_subject_origin="discussion_context")
     assert result["analysis_subject"]["ids"] == ["character.pearl"]
     assert result["analysis_subject"]["scope"] == "discussion_only_not_visual_or_wearer"
@@ -240,6 +241,7 @@ def test_invalid_grounding_hint_not_an_analysis_subject(catalog):
     from plugin.plugins.hsr_companion.runtime.grounding import build_grounding
 
     result = build_grounding("这个遗器适合谁", visual(), catalog,
+                             plan=build_query_plan("这个遗器适合谁"),
                              analysis_subject_ids=("character.fake",), analysis_subject_origin="discussion_context")
     assert result["analysis_subject"]["ids"] == []
 

@@ -8,6 +8,7 @@ from plugin.plugins.hsr_companion.data.catalog import StructuredCatalog
 from plugin.plugins.hsr_companion.detectors.layout import analyze_layout, classify_supported_page
 from plugin.plugins.hsr_companion.detectors.scene_preview import scene_preview
 from plugin.plugins.hsr_companion.runtime.grounding import build_grounding
+from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.runtime.screen_facts import extract_screen_facts
 from plugin.plugins.hsr_companion.tests.test_experience_fixes import box
 from plugin.plugins.hsr_companion.tests.test_screen_facts import catalog, visual
@@ -108,7 +109,8 @@ def test_navigation_phrase_in_paragraph_does_not_establish_hud_control():
 
 
 def test_quest_query_keeps_destination_but_does_not_call_it_current_location():
-    result = build_grounding("当前任务是什么", visual(extract(hud())), catalog())
+    result = build_grounding("当前任务是什么", visual(extract(hud())), catalog(),
+                             plan=build_query_plan("当前任务是什么"))
     assert any(f["kind"] == "quest_destination" and f["value"] == "区域乙" for f in result["facts"])
     assert not any(f["kind"] == "current_location" for f in result["facts"])
 

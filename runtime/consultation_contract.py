@@ -7,9 +7,8 @@ It does not classify the player's words, guess aliases or certify pixels.
 import time
 from dataclasses import replace
 
-CURRENT_SCOPES = {"current_relic", "current_cone", "current_panel"}
-CORRECTION_REASONS = {"read_screen_current_scope_dropped", "read_screen_declaration_dropped",
-                      "current_screen_subject_inferred", "stale_reference_build_for_team_dropped"}
+from .contracts import CORRECTION_REASONS as CORRECTION_REASONS
+from .contracts import CURRENT_SCOPES
 
 CONSULTATION_SCHEMA = {
     "type": "object", "additionalProperties": False,

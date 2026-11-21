@@ -3,6 +3,7 @@ import pytest
 from plugin.plugins.hsr_companion.detectors.layout import classify_supported_page
 from plugin.plugins.hsr_companion.detectors.scene_preview import scene_preview
 from plugin.plugins.hsr_companion.runtime.grounding import build_grounding
+from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.tests.test_experience_fixes import box
 from plugin.plugins.hsr_companion.tests.test_screen_facts import catalog, facts, visual
 
@@ -51,7 +52,8 @@ def test_icon_suffix_is_not_silently_fixed_or_used_as_a_number():
     result = facts(boxes, "relic_detail")
     assert any(f["kind"] == "unreadable_stat" and f["label"] == "副词条·生命值" for f in result["facts"])
     assert not any(f["value"] == "8.2%0" for f in result["facts"])
-    grounded = build_grounding("这件遗器的主词条和副词条是什么", visual(result), catalog())
+    grounded = build_grounding("这件遗器的主词条和副词条是什么", visual(result), catalog(),
+                               plan=build_query_plan("这件遗器的主词条和副词条是什么"))
     assert any("部分装备词条" in message for message in grounded["missing_information"])
 
 
@@ -67,7 +69,8 @@ def test_comparison_columns_and_missing_controls_do_not_choose_an_item():
     for boxes in (relic_boxes(x=50) + relic_boxes(x=650), relic_boxes()[:-1]):
         result = facts(boxes, "relic_detail")
         assert not any(f["kind"] in {"main_stat", "sub_stat", "stat"} for f in result["facts"])
-        grounded = build_grounding("这件遗器的主词条是什么", visual(result), catalog())
+        grounded = build_grounding("这件遗器的主词条是什么", visual(result), catalog(),
+                                   plan=build_query_plan("这件遗器的主词条是什么"))
         assert any("尚未可靠区分" in message for message in grounded["missing_information"])
 
 

@@ -18,7 +18,7 @@ from plugin.plugins.hsr_companion.runtime.live_refresh import (
     guarded_analysis,
     refresh_for_query,
 )
-from plugin.plugins.hsr_companion.runtime.observation import asks_screen_identity
+from plugin.plugins.hsr_companion.runtime.query_plan import asks_screen_identity
 from plugin.plugins.hsr_companion.tests.test_current_observation import analysis, plugin_fixture
 from plugin.plugins.hsr_companion.tests.test_experience_fixes import box, catalog
 

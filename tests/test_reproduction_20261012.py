@@ -15,8 +15,8 @@ import pytest
 from plugin.core.bus.memory import MemoryClient
 from plugin.plugins.hsr_companion.runtime import followup
 from plugin.plugins.hsr_companion.runtime.chat_activity import latest_user_activity
-from plugin.plugins.hsr_companion.runtime.grounding import asks_navigation_only, asks_screen_content
 from plugin.plugins.hsr_companion.runtime.live_refresh import refresh_for_query
+from plugin.plugins.hsr_companion.runtime.query_plan import asks_navigation_only, asks_screen_content
 from plugin.plugins.hsr_companion.tests.test_current_observation import analysis, plugin_fixture
 from plugin.sdk.plugin import NekoPluginBase
 

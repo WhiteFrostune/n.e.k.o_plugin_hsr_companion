@@ -12,15 +12,6 @@ from typing import Any
 
 from ..game_state import GAME_STATE_LABELS
 from .contracts import FRESH_LIVE_AGE_SECONDS
-from .query_plan import (
-    asks_controlled_identity as asks_controlled_identity,
-)
-from .query_plan import (
-    asks_scene_only as asks_scene_only,
-)
-from .query_plan import (
-    asks_screen_identity as asks_screen_identity,
-)
 from .screen_facts import public_screen_facts
 
 VISUAL_TTL_SECONDS = 60

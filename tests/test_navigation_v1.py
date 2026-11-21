@@ -12,9 +12,10 @@ import pytest
 from PIL import Image
 from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter
 from plugin.plugins.hsr_companion.detectors.scene_preview import scene_preview
-from plugin.plugins.hsr_companion.runtime.grounding import asks_navigation_only, build_grounding
+from plugin.plugins.hsr_companion.runtime.grounding import build_grounding
 from plugin.plugins.hsr_companion.runtime.live_refresh import guarded_analysis, refresh_for_query
 from plugin.plugins.hsr_companion.runtime.navigation import navigation_answer
+from plugin.plugins.hsr_companion.runtime.query_plan import asks_navigation_only, build_query_plan
 from plugin.plugins.hsr_companion.tests.test_current_observation import analysis, plugin_fixture
 from plugin.plugins.hsr_companion.tests.test_experience_fixes import box
 from plugin.plugins.hsr_companion.tests.test_exploration_fields import classify, extract, hud
@@ -102,7 +103,8 @@ def test_other_queries_do_not_enter_navigation_only(query):
 
 
 def test_typed_answer_separates_place_destination_objective_and_unknown_progress():
-    answer = build_grounding("现在在哪，接下来这个任务要做什么？", visual(extract(interior())), catalog())["navigation"]
+    answer = build_grounding("现在在哪，接下来这个任务要做什么？", visual(extract(interior())), catalog(),
+                             plan=build_query_plan("现在在哪，接下来这个任务要做什么？"))["navigation"]
     assert answer["requested"]
     assert answer["current_location"]["value"] == "地点甲"
     assert answer["destination"]["value"] == "区域乙"

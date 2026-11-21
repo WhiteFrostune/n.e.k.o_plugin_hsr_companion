@@ -10,8 +10,13 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from plugin.plugins.hsr_companion.data.catalog import StructuredCatalog
-from plugin.plugins.hsr_companion.runtime.grounding import asks_screen_content, build_grounding
-from plugin.plugins.hsr_companion.runtime.observation import asks_scene_only, public_visual_evidence
+from plugin.plugins.hsr_companion.runtime.grounding import build_grounding
+from plugin.plugins.hsr_companion.runtime.observation import public_visual_evidence
+from plugin.plugins.hsr_companion.runtime.query_plan import (
+    asks_scene_only,
+    asks_screen_content,
+    build_query_plan,
+)
 from plugin.plugins.hsr_companion.runtime.screen_facts import extract_screen_facts
 from plugin.plugins.hsr_companion.tests.test_current_observation import analysis, plugin_fixture
 from plugin.plugins.hsr_companion.tests.test_experience_fixes import box
@@ -96,7 +101,8 @@ def visual(data):
 
 
 def test_deictic_equipment_lookup_uses_observed_entity_not_question_substring():
-    result = build_grounding("这件光锥的效果是什么", visual(facts([box("测试光锥", 20, 40)])), catalog())
+    result = build_grounding("这件光锥的效果是什么", visual(facts([box("测试光锥", 20, 40)])), catalog(),
+                             plan=build_query_plan("这件光锥的效果是什么"))
     assert result["target_entity_ids"] == ["light_cone.test"]
     assert result["knowledge_results"][0]["sources"]
     assert not result["needs_target_clarification"]
@@ -104,10 +110,12 @@ def test_deictic_equipment_lookup_uses_observed_entity_not_question_substring():
 
 def test_duplicate_skill_name_requires_confirmed_owner():
     value = visual(facts([box("同名技能", 20, 40)]))
-    result = build_grounding("这个技能是什么意思", value, catalog())
+    result = build_grounding("这个技能是什么意思", value, catalog(),
+                             plan=build_query_plan("这个技能是什么意思"))
     assert result["needs_target_clarification"] and len(result["target_entity_ids"]) == 2
     value["characters"] = [{"identity_scope": "detail_subject", "entity_id": "character.a"}]
-    result = build_grounding("这个技能是什么意思", value, catalog())
+    result = build_grounding("这个技能是什么意思", value, catalog(),
+                             plan=build_query_plan("这个技能是什么意思"))
     assert result["target_entity_ids"] == ["character_skill.a"]
 
 
@@ -124,7 +132,8 @@ def test_expired_text_never_grounded_by_knowledge_matches():
     value = analysis(roles=False)
     value["screen_facts"] = facts([box("测试光锥", 20, 40)])
     value["observed_at"] = (datetime.now(timezone.utc) - timedelta(seconds=61)).isoformat()
-    result = build_grounding("这件光锥的效果是什么", public_visual_evidence(value, {"state": "observing"}), catalog())
+    result = build_grounding("这件光锥的效果是什么", public_visual_evidence(value, {"state": "observing"}), catalog(),
+                             plan=build_query_plan("这件光锥的效果是什么"))
     assert not result["target_entity_ids"] and not result["facts"]
     assert result["missing_information"]
 

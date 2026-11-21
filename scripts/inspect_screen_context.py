@@ -25,6 +25,7 @@ def main():
     from plugin.plugins.hsr_companion.runtime import CompanionRuntime
     from plugin.plugins.hsr_companion.runtime.grounding import build_grounding
     from plugin.plugins.hsr_companion.runtime.observation import public_visual_evidence
+    from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
     from plugin.plugins.hsr_companion.runtime.screen_facts import safe_text
     from plugin.plugins.hsr_companion.session import utc_now_iso
 
@@ -80,7 +81,7 @@ def main():
             result.update(source="assistant_local_ocr", observed_at=datetime.fromtimestamp(frame.timestamp, timezone.utc).isoformat()
                           if frame.timestamp else utc_now_iso(), observation_serial=serial, runtime=runtime.snapshot())
             evidence = public_visual_evidence(result, {"state": "observing", "enabled": True})
-            grounded = build_grounding(args.query, evidence, catalog)
+            grounded = build_grounding(args.query, evidence, catalog, plan=build_query_plan(args.query))
             print(json.dumps({
                 "kind": "live_source_check_not_host_chat", "sample": serial,
                 "source_size": size, "page": result.get("page"),
