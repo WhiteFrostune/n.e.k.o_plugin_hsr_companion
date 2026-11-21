@@ -189,3 +189,17 @@ __all__ = ["CompanionEvent", "TEAM_MEMBER_SLOTS", "FRESH_LIVE_AGE_SECONDS",
            "STALE_MAX_AGE_SECONDS", "LIVE_PAGE_TYPES", "team_roster_state",
            "TOPIC_WORDS", "ENTITY_TOPICS", "SCREEN_FIELDS", "RESOURCE_LABELS",
            "SEMANTIC_INTENTS", "CURRENT_SCOPES", "CORRECTION_REASONS", "QueryPlan"]
+
+
+def visual_fingerprints_match(left: object, right: object, *, max_distance: int = 8) -> bool:
+    first = str(left or "").strip().lower()
+    second = str(right or "").strip().lower()
+    if not first or not second:
+        return False
+    if first.startswith("dhash:") and second.startswith("dhash:"):
+        try:
+            distance = (int(first[6:], 16) ^ int(second[6:], 16)).bit_count()
+        except ValueError:
+            return False
+        return distance <= max(0, min(int(max_distance), 16))
+    return first == second

@@ -14,7 +14,7 @@ from time import perf_counter
 from typing import Any
 
 from ..adapters.local_vision import LocalVisionAdapter
-from ..adapters.text_reader import ObservationSuperseded, QueryPreempted
+from ..adapters.native_text import ObservationSuperseded, QueryPreempted
 from ..adapters.text_verification import identity_literal, proof_key
 from ..detectors.exploration import generic_navigation
 from . import vision_scheduler

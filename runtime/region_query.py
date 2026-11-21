@@ -8,7 +8,7 @@ from io import BytesIO
 
 from PIL import Image
 
-from ..adapters.text_reader import ObservationSuperseded
+from ..adapters.native_text import ObservationSuperseded
 from ..detectors.character import detect_characters
 from ..detectors.team import assign_slot_names, slot_card_states
 from .contracts import team_roster_state

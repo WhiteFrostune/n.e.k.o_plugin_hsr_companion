@@ -5,7 +5,7 @@ import math
 import re
 
 from ..detectors.exploration import location_headings, navigation_boxes, task_stacks
-from .text_reader import check_current
+from .native_text import check_current
 from .text_verification import text_key
 
 
