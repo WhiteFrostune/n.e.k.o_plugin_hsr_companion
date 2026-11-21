@@ -4,23 +4,13 @@ from __future__ import annotations
 
 import re
 
+from .contracts import QueryPlan
 from .mechanics import skill_view
 from .navigation import navigation_answer
-from .query_plan import (
-    QueryPlan,
-    build_query_plan,
-)
-from .query_plan import (
-    asks_navigation_only as asks_navigation_only,
-)
-from .query_plan import (
-    asks_screen_content as asks_screen_content,
-)
 
 
-def build_grounding(query: str, visual: dict, catalog, *, category: str = "", plan: QueryPlan | None = None,
+def build_grounding(query: str, visual: dict, catalog, *, category: str = "", plan: QueryPlan,
                     analysis_subject_ids=(), analysis_subject_origin: str = "") -> dict:
-    plan = plan if plan is not None else build_query_plan(query)
     current_request = plan.content
     topics = plan.topics
     screen = visual.get("screen_facts") or {}

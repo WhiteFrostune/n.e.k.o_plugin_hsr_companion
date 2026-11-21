@@ -21,7 +21,7 @@ from plugin.plugins.hsr_companion.runtime.live_refresh import (
     validate_before_delivery,
     watch_latest_frame,
 )
-from plugin.plugins.hsr_companion.runtime.observation import asks_scene_only, asks_screen_identity
+from plugin.plugins.hsr_companion.runtime.query_plan import asks_scene_only, asks_screen_identity
 from plugin.plugins.hsr_companion.tests.test_current_observation import analysis, plugin_fixture
 from plugin.plugins.hsr_companion.tests.test_experience_fixes import box, catalog
 from plugin.plugins.hsr_companion.tests.test_live_demo_fixes import png

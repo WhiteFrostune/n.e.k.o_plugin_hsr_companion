@@ -17,7 +17,8 @@ from plugin.plugins.hsr_companion.core import CharacterRegistry
 from plugin.plugins.hsr_companion.data import ExternalKnowledgeCatalog
 from plugin.plugins.hsr_companion.detectors import analyze_layout
 from plugin.plugins.hsr_companion.runtime import CompanionRuntime
-from plugin.plugins.hsr_companion.runtime.observation import asks_screen_identity, public_visual_evidence
+from plugin.plugins.hsr_companion.runtime.observation import public_visual_evidence
+from plugin.plugins.hsr_companion.runtime.query_plan import asks_screen_identity
 from plugin.plugins.hsr_companion.session import start_session, utc_now_iso
 from plugin.sdk.plugin import Ok
 

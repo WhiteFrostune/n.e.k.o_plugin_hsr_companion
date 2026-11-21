@@ -27,7 +27,8 @@ from plugin.plugins.hsr_companion.runtime.live_refresh import (
     invalidate_frame_change,
     watch_latest_frame,
 )
-from plugin.plugins.hsr_companion.runtime.observation import asks_scene_only, public_visual_evidence
+from plugin.plugins.hsr_companion.runtime.observation import public_visual_evidence
+from plugin.plugins.hsr_companion.runtime.query_plan import asks_scene_only
 from plugin.plugins.hsr_companion.runtime.screen_facts import extract_screen_facts
 from plugin.plugins.hsr_companion.tests.test_current_observation import plugin_fixture
 from plugin.plugins.hsr_companion.tests.test_experience_fixes import box, catalog

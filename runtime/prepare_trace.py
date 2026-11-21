@@ -19,8 +19,7 @@ from functools import wraps
 from pathlib import Path
 from uuid import uuid4
 
-from .consultation_contract import CORRECTION_REASONS, CURRENT_SCOPES
-from .query_plan import SCREEN_FIELDS, SEMANTIC_INTENTS
+from .contracts import CORRECTION_REASONS, CURRENT_SCOPES, SCREEN_FIELDS, SEMANTIC_INTENTS
 
 STORE_KEY = "prepare_failure_records_v1"
 LIMIT = 4

@@ -9,6 +9,7 @@ from plugin.plugins.hsr_companion.data.catalog import StructuredCatalog
 from plugin.plugins.hsr_companion.runtime.grounding import build_grounding
 from plugin.plugins.hsr_companion.runtime.mechanics import skill_view
 from plugin.plugins.hsr_companion.runtime.progression import plan_progression
+from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.runtime.team_overview import team_overview
 from plugin.plugins.hsr_companion.tests.test_current_observation import plugin_fixture
 
@@ -112,10 +113,12 @@ def test_source_parameter_view_needs_explicit_skill_level_not_random_page_level(
         {"kind": "entity_label", "entity_type": "character_skill", "entity_id": "character_skill.s", "scope": "skill"},
         {"kind": "level", "label": "等级", "value": "1", "scope": "progression"},
     ]}}
-    value = build_grounding("这个技能是什么意思", visual, db)
+    value = build_grounding("这个技能是什么意思", visual, db,
+                            plan=build_query_plan("这个技能是什么意思"))
     assert not value["skill_explanations"][0]["description_verified"]
     visual["screen_facts"]["facts"][1]["label"] = "技能等级"
-    assert build_grounding("这个技能是什么意思", visual, db)["skill_explanations"][0]["description_verified"]
+    assert build_grounding("这个技能是什么意思", visual, db,
+                           plan=build_query_plan("这个技能是什么意思"))["skill_explanations"][0]["description_verified"]
 
 
 def test_unified_tool_accepts_plan_and_ignores_host_internal_parameters(tmp_path):

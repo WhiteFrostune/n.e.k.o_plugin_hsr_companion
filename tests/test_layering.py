@@ -87,6 +87,11 @@ def resolve_from(source: str, node: ast.ImportFrom) -> list[str]:
         module = node.module or ""
     if not module:
         return []
+    if node.module is None:
+        # ``from . import name`` names sibling submodules, not the package
+        # object. Counting the bare package flagged L2b -> runtime/__init__.py
+        # for a plain ``from . import vision_scheduler``.
+        return [f"{module}.{alias.name}" for alias in node.names if alias.name != "*"]
     return [module, *(f"{module}.{alias.name}" for alias in node.names if alias.name != "*")]
 
 
@@ -120,6 +125,34 @@ def collect_violations(mapping: dict[str, str]) -> list[str]:
             if mapping[target_path] not in ALLOWED[source_layer]:
                 violations.add(f"{source} -> {target_path}")
     return sorted(violations)
+
+
+def _resolved(snippet: str, source: str) -> list[str]:
+    return resolve_from(source, ast.parse(snippet).body[0])
+
+
+def test_from_dot_import_resolves_submodule_not_package() -> None:
+    """`from . import x` is a sibling module, not the runtime package itself."""
+    assert _resolved("from . import vision_scheduler", "runtime/live_refresh.py") == [
+        "plugin.plugins.hsr_companion.runtime.vision_scheduler"
+    ]
+
+
+def test_from_relative_module_keeps_module_and_members() -> None:
+    resolved = _resolved("from .query_plan import QueryPlan", "runtime/grounding.py")
+    assert "plugin.plugins.hsr_companion.runtime.query_plan" in resolved
+    assert "plugin.plugins.hsr_companion.runtime.query_plan.QueryPlan" in resolved
+
+
+def test_target_module_uses_longest_registered_prefix() -> None:
+    """A submodule must not be attributed to its package's __init__.py."""
+    modules = {
+        "plugin.plugins.hsr_companion.runtime": "runtime/__init__.py",
+        "plugin.plugins.hsr_companion.runtime.vision_scheduler": "runtime/vision_scheduler.py",
+    }
+    assert target_module("plugin.plugins.hsr_companion.runtime.vision_scheduler", modules) == (
+        "plugin.plugins.hsr_companion.runtime.vision_scheduler"
+    )
 
 
 def write_baseline() -> None:
