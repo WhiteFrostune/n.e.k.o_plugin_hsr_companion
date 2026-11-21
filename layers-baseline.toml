@@ -1,6 +1,3 @@
 # Current layering exceptions. Only shrink; delete an entry when fixed.
 violations = [
-  "runtime/followup.py -> runtime/live_refresh.py",
-  "runtime/followup.py -> runtime/observation_store.py",
-  "runtime/followup.py -> runtime/query_reuse.py",
 ]

@@ -11,6 +11,7 @@ import time
 from types import SimpleNamespace
 
 import pytest
+from plugin.plugins.hsr_companion.runtime import followup_read
 from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
 from plugin.plugins.hsr_companion.runtime.guidance import build_guidance, plan_guidance
 from plugin.plugins.hsr_companion.runtime.observation_store import ObservationSnapshot
@@ -314,7 +315,7 @@ def test_resident_formal_swap_confirm_and_fit_followup_share_the_same_subject(tm
     Public SDK event shapes and receiving formatter are real; captures, bus
     transport and model choice are isolated fixtures, not a live cat result.
     """
-    from plugin.plugins.hsr_companion.runtime import followup
+    from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
     from plugin.plugins.hsr_companion.runtime.pending_handler import handle_pending_reply
     from plugin.plugins.hsr_companion.tests.test_d1_fit_repair import label_only
     owner, values, sent, holder = formal_fixture(tmp_path, monkeypatch, catalog, item())
@@ -332,7 +333,7 @@ def test_resident_formal_swap_confirm_and_fit_followup_share_the_same_subject(tm
         return evidence  # The visual proof boundary has separate D0 tests.
 
     monkeypatch.setattr(followup, "record_answer_delivery", capture)
-    monkeypatch.setattr(followup, "validated_delivery", validated)
+    monkeypatch.setattr(followup_read, "validated_delivery", validated)
     monkeypatch.setattr(followup, "FOLLOWUP_GRACE_SECONDS", 0)
 
     async def run():

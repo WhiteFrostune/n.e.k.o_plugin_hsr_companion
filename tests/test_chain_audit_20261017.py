@@ -15,7 +15,8 @@ from types import SimpleNamespace
 import pytest
 from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter, serial_ocr
 from plugin.plugins.hsr_companion.adapters.text_verification import proof_key
-from plugin.plugins.hsr_companion.runtime import followup, live_refresh, manual_refresh
+from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
+from plugin.plugins.hsr_companion.runtime import followup_read, live_refresh, manual_refresh
 from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
 from plugin.plugins.hsr_companion.runtime.observation_store import ObservationSnapshot, ObservationStore
 from plugin.plugins.hsr_companion.runtime.query_coordinator import needs_followup, satisfied_fields
@@ -345,7 +346,7 @@ def test_submission_receipt_does_not_prove_final_cat_wording(tmp_path, monkeypat
 
     monkeypatch.setattr(followup, "FOLLOWUP_GRACE_SECONDS", 0)
     monkeypatch.setattr(followup, "checked_activity", available)  # External host activity read.
-    monkeypatch.setattr(followup, "validated_delivery", validated)  # Isolate emission boundary only.
+    monkeypatch.setattr(followup_read, "validated_delivery", validated)  # Isolate emission boundary only.
     owner._target_character = lambda: "fake-cat"
 
     async def run():

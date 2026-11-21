@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 from plugin.core.bus.memory import MemoryClient
-from plugin.plugins.hsr_companion.runtime import followup
+from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
 from plugin.plugins.hsr_companion.runtime.chat_activity import latest_user_activity
 from plugin.plugins.hsr_companion.runtime.live_refresh import refresh_for_query
 from plugin.plugins.hsr_companion.runtime.query_plan import asks_navigation_only, asks_screen_content

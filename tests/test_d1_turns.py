@@ -158,7 +158,7 @@ def test_plain_advice_works_paused_and_does_not_get_new_visual_facts(tmp_path):
 
 
 def test_partial_full_request_does_not_yield_before_registered_missing_evidence(book, catalog, monkeypatch):
-    from plugin.plugins.hsr_companion.runtime import followup
+    from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
     from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner
     monkeypatch.setattr(followup, "FOLLOWUP_GRACE_SECONDS", 0)
     current = relic()

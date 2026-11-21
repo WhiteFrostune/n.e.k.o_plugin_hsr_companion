@@ -7,7 +7,8 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
-from plugin.plugins.hsr_companion.runtime import followup, live_refresh, query_reuse
+from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
+from plugin.plugins.hsr_companion.runtime import live_refresh, query_reuse
 from plugin.plugins.hsr_companion.runtime.delivery_scope import coordinates
 from plugin.plugins.hsr_companion.runtime.observation_store import ObservationStore
 from plugin.plugins.hsr_companion.tests.test_chain_audit_20261017 import audit_owner, commit_raw, raw_page

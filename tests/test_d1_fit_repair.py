@@ -15,7 +15,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from plugin.plugins.hsr_companion.runtime import followup
+from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
+from plugin.plugins.hsr_companion.runtime import followup_read
 from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card, equipment_object
 from plugin.plugins.hsr_companion.runtime.guidance import build_guidance
 from plugin.plugins.hsr_companion.runtime.query_coordinator import answer_status, needs_followup
@@ -305,7 +306,7 @@ def test_formal_prepare_then_real_registration_then_new_item_delivery(tmp_path, 
     monkeypatch.setattr(importlib.import_module(type(owner).__module__), "resolve_query", resolve)
     monkeypatch.setattr(followup, "record_answer_delivery", record)
     monkeypatch.setattr(followup, "latest_user_activity", available)
-    monkeypatch.setattr(followup, "validated_delivery", validated)
+    monkeypatch.setattr(followup_read, "validated_delivery", validated)
     monkeypatch.setattr(followup, "FOLLOWUP_GRACE_SECONDS", 0)
     owner._current_visual_evidence = read
 

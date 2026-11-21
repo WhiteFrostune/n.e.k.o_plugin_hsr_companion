@@ -14,7 +14,8 @@ from types import SimpleNamespace
 import pytest
 from plugin.plugins.hsr_companion.detectors.exploration import distinct_rows, task_stacks
 from plugin.plugins.hsr_companion.detectors.layout import classify_supported_page, scene_control_regions
-from plugin.plugins.hsr_companion.runtime import answer_message, followup
+from plugin.plugins.hsr_companion.runtime import answer_message, followup_read
+from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
 from plugin.plugins.hsr_companion.runtime.answer_message import render_followup
 from plugin.plugins.hsr_companion.runtime.consultation_contract import validate_declaration
 from plugin.plugins.hsr_companion.runtime.delivery_scope import project_evidence
@@ -129,7 +130,7 @@ def test_partial_has_no_bypass_or_duplicate_notice(records, monkeypatch, offline
     if kind == 'unverified':
         async def rejected(*a, **kw):
             return None
-        monkeypatch.setattr(followup, 'validated_delivery', rejected)
+        monkeypatch.setattr(followup_read, 'validated_delivery', rejected)
     owner._pending_answer = req
     offline.run(followup.deliver_followup(owner, req))
     assert sent == []

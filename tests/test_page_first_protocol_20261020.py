@@ -52,7 +52,7 @@ def test_coarse_invalidation_has_causal_receipt_not_a_guess(tmp_path):
 
 
 def test_confirm_message_keeps_original_request_and_deadline(monkeypatch):
-    from plugin.plugins.hsr_companion.runtime import followup
+    from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
     from plugin.plugins.hsr_companion.runtime.pending_contract import message_allows
     from plugin.plugins.hsr_companion.runtime.pending_handler import handle_pending_reply
     from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner, request
@@ -158,7 +158,7 @@ def test_cold_three_field_request_admits_scene_worker_not_full_batch(tmp_path):
 
 @pytest.mark.parametrize("where", ["before_result", "during_formatting"])
 def test_formal_three_fields_confirm_and_complete_once(tmp_path, monkeypatch, where):
-    from plugin.plugins.hsr_companion.runtime import followup
+    from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
     from plugin.plugins.hsr_companion.runtime.answer_message import render_followup
     from plugin.sdk.plugin import NekoPluginBase
     owner, _, sent = audit_owner(tmp_path)
@@ -220,7 +220,7 @@ def test_revocation_diagnostics_never_export_arbitrary_cause():
 
 @pytest.mark.parametrize("action", ["cancel", "new_question"])
 def test_formal_new_question_or_cancel_ends_old_obligation(tmp_path, monkeypatch, action):
-    from plugin.plugins.hsr_companion.runtime import followup
+    from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
     from plugin.sdk.plugin import NekoPluginBase
     owner, _, sent = audit_owner(tmp_path)
     owner._target_character = lambda: "猫娘"

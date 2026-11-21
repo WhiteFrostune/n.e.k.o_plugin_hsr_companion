@@ -12,7 +12,8 @@ from types import SimpleNamespace
 
 from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter, serial_ocr
 from plugin.plugins.hsr_companion.adapters.text_verification import proof_key
-from plugin.plugins.hsr_companion.runtime import followup, live_refresh
+from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
+from plugin.plugins.hsr_companion.runtime import live_refresh
 from plugin.plugins.hsr_companion.runtime.observation_store import ObservationStore
 from plugin.plugins.hsr_companion.runtime.query_coordinator import satisfied_fields
 from plugin.plugins.hsr_companion.runtime.query_reuse import try_reuse

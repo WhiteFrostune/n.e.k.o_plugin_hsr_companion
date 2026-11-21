@@ -247,7 +247,7 @@ def test_formal_entry_keeps_card_receipt_and_focus_consistent(tmp_path, monkeypa
     ("这件遗器主副词条是什么？", None, None),
 ])
 def test_real_followup_executor_uses_same_policy_no_new_question(book, catalog, monkeypatch, query, mode, count):
-    from plugin.plugins.hsr_companion.runtime import followup
+    from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
     from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner
     monkeypatch.setattr(followup, "FOLLOWUP_GRACE_SECONDS", 0)
     current = relic()

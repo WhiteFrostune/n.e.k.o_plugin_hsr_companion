@@ -175,7 +175,7 @@ def test_rows_only_misrouted_as_assessment_has_no_subject_dependency(tmp_path, m
         else:
             assert result["followup"]["pending"], result["followup"]
             assert owner._pending_answer.guidance_plan is None
-            from plugin.plugins.hsr_companion.runtime.followup import cancel_followup
+            from plugin.plugins.hsr_companion.runtime.followup_delivery import cancel_followup
             cancel_followup(owner, "test_done")
 
     asyncio.run(run())

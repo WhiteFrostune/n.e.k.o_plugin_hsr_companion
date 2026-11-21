@@ -136,7 +136,7 @@ def test_late_identity_completes_even_when_advice_and_numbers_unchanged(book, ca
 
 
 def test_metadata_stays_silent_until_final_fit_on_same_pending_request(book, catalog, monkeypatch):
-    from plugin.plugins.hsr_companion.runtime import followup
+    from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
     from plugin.plugins.hsr_companion.tests.test_guidance import plan
     from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner
     query = "这件遗器适合绯英吗？"
@@ -180,7 +180,8 @@ def test_metadata_stays_silent_until_final_fit_on_same_pending_request(book, cat
 
 
 def test_cache_recovery_does_not_replace_richer_current_packet(book, catalog, monkeypatch):
-    from plugin.plugins.hsr_companion.runtime import followup, query_reuse
+    from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
+    from plugin.plugins.hsr_companion.runtime import query_reuse
     from plugin.plugins.hsr_companion.tests.test_guidance import plan
     from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner
     query = "这件遗器适合绯英吗？"

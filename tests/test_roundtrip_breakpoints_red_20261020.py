@@ -18,7 +18,7 @@ from plugin.plugins.hsr_companion.detectors.layout import classify_supported_pag
 from plugin.plugins.hsr_companion.runtime.answer_message import render_followup
 from plugin.plugins.hsr_companion.runtime.consultation_contract import validate_declaration
 from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
-from plugin.plugins.hsr_companion.runtime.followup import AnswerRequest, answer_ready, reply_data
+from plugin.plugins.hsr_companion.runtime.followup_delivery import AnswerRequest, answer_ready, reply_data
 from plugin.plugins.hsr_companion.runtime.guidance import build_guidance, load_guidance_catalog
 from plugin.plugins.hsr_companion.runtime.query_coordinator import satisfied_fields
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
@@ -83,7 +83,7 @@ def test_complete_task_objective_should_survive_same_frame_prefix_duplicate(reco
 
 
 def test_new_confirmed_location_should_not_expire_as_no_new_facts(diagnosis, records, monkeypatch, no_network, local_text_channel):
-    from plugin.plugins.hsr_companion.runtime import followup
+    from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
     from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner
 
     partial = diagnosis['exploration']

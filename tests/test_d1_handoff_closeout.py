@@ -11,7 +11,7 @@ import time
 from types import SimpleNamespace
 
 import pytest
-from plugin.plugins.hsr_companion.runtime import followup
+from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
 from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
 from plugin.plugins.hsr_companion.runtime.guidance import build_guidance
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
