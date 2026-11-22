@@ -17,12 +17,14 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw
+from plugin.plugins.hsr_companion.adapters import local_vision, native_text
 from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter
-from plugin.plugins.hsr_companion.runtime import live_refresh, page_handoff
+from plugin.plugins.hsr_companion.runtime import live_refresh, page_handoff, vision_scheduler
 from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.runtime.vision_trace import public_trace
+from plugin.plugins.hsr_companion.tests.controlled_time import ManualClock, deadlock_guard
 from plugin.plugins.hsr_companion.tests.test_current_observation import plugin_fixture
 from plugin.plugins.hsr_companion.tests.test_experience_fixes import box
 from plugin.plugins.hsr_companion.tests.test_relic_fields import relic_boxes
@@ -55,15 +57,14 @@ def scaled(boxes, width, height):
 class Backend:
     """Identify each crop by a drawn marker so tile order can change."""
 
-    def __init__(self, *, with_character=True):
+    def __init__(self, *, with_character=True, clock):
+        self.clock = clock
         self.calls = []
         self.started = []
         self.first_tile = True
         self.with_character = with_character
         self.entered = threading.Event()
         self.release = threading.Event()
-        self.slow_release = threading.Event()
-        self.relic_release = threading.Event()
         self.rows = [box("遗器详情", 60, 30), *relic_boxes("头部", x=RELIC_X, y=RELIC_Y)]
 
     def recognize_line(self, image):
@@ -74,14 +75,17 @@ class Backend:
         if image.size == (768, 432):
             return "scene_probe", 0, 0
         present = {color for _, color in image.getcolors(maxcolors=image.width * image.height) or []}
-        pixels = image.load()
+        channels = image.convert("RGB").split()
         for color, stage in MARKER_COLORS.items():
             if color not in present:
                 continue
-            for y in range(image.height):
-                for x in range(image.width):
-                    if pixels[x, y] == color:
-                        return stage, x, y
+            # Exact same colored marker, located by Pillow rather than a
+            # Python scan of millions of unrelated pixels in the fake backend.
+            masks = [channel.point([255 if n == expected else 0 for n in range(256)])
+                     for channel, expected in zip(channels, color, strict=True)]
+            bounds = ImageChops.multiply(ImageChops.multiply(masks[0], masks[1]), masks[2]).getbbox()
+            if bounds is not None:
+                return stage, bounds[0], bounds[1]
         return None, None, None
 
     @staticmethod
@@ -91,7 +95,7 @@ class Backend:
                  "top": item["top"] - oy, "bottom": item["bottom"] - oy} for item in boxes]
 
     def extract_text_with_boxes(self, image):
-        started = time.monotonic()
+        started = self.clock.monotonic()
         stage, marker_x, marker_y = self.find(image)
         boxes = []
         if stage == "scene_probe":
@@ -103,11 +107,11 @@ class Backend:
             self.started.append({"stage": stage, "size": list(image.size), "at": started})
             if first:
                 self.entered.set()
-                self.release.wait(5)
+                assert self.release.wait(30), "query never joined the producer"
             if stage == "native_tile_unrelated":
-                self.slow_release.wait(UNRELATED_TILE_SECONDS)
+                self.clock.advance(UNRELATED_TILE_SECONDS)
             elif stage == "native_tile_relic_bottom":
-                self.relic_release.wait(RELIC_BOTTOM_SECONDS)
+                self.clock.advance(RELIC_BOTTOM_SECONDS)
             if stage == "native_tile_page":
                 rows = [box("遗器详情", 60, 30)]
                 if self.with_character:
@@ -122,7 +126,7 @@ class Backend:
                         if item["left"] >= origin[0] and item["right"] <= right
                         and item["top"] >= origin[1] and item["bottom"] <= bottom]
             boxes = self.shift(rows, origin)
-        seconds = round(time.monotonic() - started, 3)
+        seconds = round(self.clock.monotonic() - started, 3)
         self.calls.append({"stage": stage or "other", "size": list(image.size), "seconds": seconds})
         return "\n".join(item["text"] for item in boxes), boxes
 
@@ -152,13 +156,11 @@ def test_late_relic_query_does_not_wait_for_four_tile_scan(
     stream = BytesIO()
     image.save(stream, format="PNG")
     data = stream.getvalue()
-    backend = Backend(with_character=with_character)
+    clock = ManualClock()
+    clock.install(monkeypatch, live_refresh, page_handoff, vision_scheduler, local_vision, native_text)
+    backend = Backend(with_character=with_character, clock=clock)
     owner._vision = LocalVisionAdapter(owner._catalog)
     monkeypatch.setattr(owner._vision, "_get_backend", lambda: backend)
-    real_clock = time.monotonic
-    clock_offset = 0.
-    monkeypatch.setattr(live_refresh, "time", SimpleNamespace(
-        monotonic=lambda: real_clock() + clock_offset, time=time.time))
     monkeypatch.setattr(live_refresh, "LIVE_POLL_SECONDS", .01)
     monkeypatch.setattr(page_handoff, "queue_page_check", lambda *args, **kwargs: None)
 
@@ -181,8 +183,6 @@ def test_late_relic_query_does_not_wait_for_four_tile_scan(
                              screen_fields=["equipment"], response_detail="full")
 
     async def run():
-        nonlocal clock_offset
-
         async def produce():
             value = await live_refresh.guarded_analysis(owner, data, helper=True)
             if value is not None:
@@ -193,9 +193,9 @@ def test_late_relic_query_does_not_wait_for_four_tile_scan(
         producer = asyncio.create_task(produce())
         owner._observer_task = producer
         try:
-            assert await asyncio.to_thread(backend.entered.wait, 2)
+            assert await asyncio.to_thread(backend.entered.wait)
             # The producer has already been running; the question joins late.
-            clock_offset = 13.75
+            clock.advance(13.75)
             waiter = asyncio.create_task(live_refresh.refresh_for_query(
                 owner, timeout=8, query_plan=query, **query.refresh_args()))
 
@@ -215,7 +215,7 @@ def test_late_relic_query_does_not_wait_for_four_tile_scan(
             timings = {
                 "completed": list(backend.calls),
                 "started": list(backend.started),
-                "pending": [{"stage": item["stage"], "elapsed": round(time.monotonic() - item["at"], 3)}
+                "pending": [{"stage": item["stage"], "elapsed": round(clock.monotonic() - item["at"], 3)}
                             for item in backend.started if item["stage"] not in completed],
                 "unrelated_tile_seconds": UNRELATED_TILE_SECONDS,
                 "relic_bottom_seconds": RELIC_BOTTOM_SECONDS,
@@ -255,8 +255,6 @@ def test_late_relic_query_does_not_wait_for_four_tile_scan(
             assert not any(item["stage"] == "native_tile_unrelated" for item in backend.started), timings
         finally:
             backend.release.set()
-            backend.slow_release.set()
-            backend.relic_release.set()
             try:
                 await asyncio.wait_for(producer, timeout=5)
             except TimeoutError:
@@ -265,4 +263,4 @@ def test_late_relic_query_does_not_wait_for_four_tile_scan(
             except Exception:
                 pass  # Cleanup must not replace the replay assertion.
 
-    asyncio.run(run())
+    asyncio.run(deadlock_guard(run()))

@@ -9,6 +9,7 @@ from contextvars import ContextVar
 from functools import wraps
 
 from .prepare_trace import request_id as prepare_request_id
+from .timing_detail import phase
 
 _IDS = ContextVar("hsr_vision_trace_ids", default=None)
 _ID_NUMBERS = ("generation", "epoch", "serial", "job_id", "frame_seq", "verification_frame_seq")
@@ -94,7 +95,8 @@ def measure(owner, stage, **details):
     record(owner, stage, outcome="started", **details)
     error = None
     try:
-        yield
+        with phase(stage, owner, **{**correlation(), **details}):
+            yield
     except (Exception, asyncio.CancelledError) as exc:
         error = type(exc).__name__
         raise

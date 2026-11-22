@@ -89,6 +89,8 @@ from .runtime.service_contract import (
 from .runtime.speech import PendingSpeech, SpeechArbiter
 from .runtime.storage import migrate_legacy_store
 from .runtime.team_overview import team_overview
+from .runtime.timing_detail import phase as timing_phase
+from .runtime.timing_detail import snapshot as query_timings
 from .runtime.uid_import import STORE_KEY as UID_STORE_KEY
 from .runtime.uid_import import profile_with_roster
 from .runtime.uid_service import uid_service
@@ -631,7 +633,8 @@ class HsrCompanionPlugin(NekoPluginBase):
         # A title preview is not a replacement for a full same-page read.
         # Query freshness remains controlled by validation, not empty previews.
         if (
-            not latest.get("invalidated") and previous_page == next_page
+            not getattr(self, "_observation_invalidated", False)
+            and not latest.get("invalidated") and previous_page == next_page
             and (latest.get("screen_facts", {}).get("facts") or latest.get("characters"))
         ):
             return
@@ -2571,7 +2574,8 @@ class HsrCompanionPlugin(NekoPluginBase):
             # The final boundary returns this packet's safe SUBSET. A changed
             # task/row must not erase an independently admitted page. No OCR,
             # borrowing a newer value, or assembling a cross-item card here.
-            final_visual = query_observation.snapshot.delivery(self, generation=answer_generation) if screen_request else current_visual
+            with timing_phase("tool_exit", self):
+                final_visual = query_observation.snapshot.delivery(self, generation=answer_generation) if screen_request else current_visual
             if navigation_request or scene_only_request:
                 final_visual["screen_facts"]["unclassified_text"] = []
                 if navigation_request:
@@ -3160,6 +3164,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             frame_comparisons=frame_comparison_stats(self),
             prepare_calls=await read_records(self),
         )
+        report["query_timings"] = query_timings(self)
         trace = delivery_value_trace(self)
         if include_delivery_trace is True:
             report["delivery_value_trace"] = trace
@@ -3339,6 +3344,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             "runtime": self._runtime.snapshot(),
             "speech_arbitration": self._get_speech_arbiter().snapshot(),
             "query_followup": dict(getattr(self, "_followup_status", {"state": "idle"})),
+            "query_timings": query_timings(self),
             "correction_count": sum(1 for item in corrections if item.get("active") is not False),
             "disabled_correction_count": sum(1 for item in corrections if item.get("active") is False),
             "recent_corrections": list(

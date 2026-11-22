@@ -128,6 +128,8 @@ def read_native_text(
 
     def read(sample, stage):
         check_current(cancelled)
+        if yield_requested is not None and yield_requested():
+            raise QueryPreempted()
         call_started = time.monotonic()
         try:
             return backend.extract_text_with_boxes(sample)
@@ -172,8 +174,6 @@ def read_native_text(
     for index in order:
         left, top, right, bottom = tiles[index]
         check_current(cancelled)
-        if yield_requested is not None and yield_requested():
-            raise QueryPreempted()
         if time.monotonic() - started > 22:
             failures.append("ocr_time_budget")
             break
@@ -298,8 +298,6 @@ def read_native_text(
                     y += crop.height + padding
                 try:
                     check_current(cancelled)
-                    if yield_requested is not None and yield_requested():
-                        raise QueryPreempted()
                     _, values = read(atlas, "unresolved_lines")
                     check_current(cancelled)
                     rereads = len(parts)

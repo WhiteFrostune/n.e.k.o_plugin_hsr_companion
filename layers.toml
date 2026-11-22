@@ -35,6 +35,7 @@ L2a = [
   "game_state.py",
 ]
 L2b = [
+  "runtime/current_regions.py",
   "runtime/followup_read.py",
   "runtime/query_observation.py",
   "runtime/observation_evidence.py",
@@ -113,6 +114,7 @@ trace = [
   "runtime/prepare_trace.py",
   "runtime/revocation_trace.py",
   "runtime/vision_trace.py",
+  "runtime/timing_detail.py",
 ]
 
 [entrypoints]

@@ -344,7 +344,9 @@ def trace_prepare(function):
         started = time.monotonic()
         result = None
         try:
-            result = await function(owner, *args, **kwargs)
+            from .timing_detail import capture
+            with capture(owner, record["request_id"]):
+                result = await function(owner, *args, **kwargs)
             if isinstance(result, dict):
                 answer = result.get("query_answer") if isinstance(result.get("query_answer"), dict) else {}
                 completion = result.get("request_completion") if isinstance(result.get("request_completion"), dict) else {}

@@ -28,8 +28,9 @@ def serial_ocr(method=None, *, cooperative=False):
         return lambda target: serial_ocr(target, cooperative=cooperative)
     @wraps(method)
     def run(self, *args, **kwargs):
-        if not self._inference_lock.acquire(timeout=.2):
-            raise ObservationSuperseded()
+        with measure(self, "native_lock_wait", operation=method.__name__):
+            if not self._inference_lock.acquire(timeout=.2):
+                raise ObservationSuperseded()
         queue = self._review_queue if cooperative else None
         cancelled = kwargs.get("cancelled")
         if queue is not None:
@@ -61,7 +62,7 @@ class _MeasuredOCR:
             return method
 
         def read(*args, **kwargs):
-            with measure(self._adapter, "ocr_call"):
+            with measure(self._adapter, "ocr_call", operation=name):
                 return method(*args, **kwargs)
         return read
 
@@ -166,6 +167,12 @@ class LocalVisionAdapter:
         return self.analyze(image_bytes, cancelled=cancelled, on_scene=on_scene,
                             **({"wants_relic": wants_relic} if wants_relic is not None else {}),
                             **({"yield_requested": yield_requested} if yield_requested is not None else {}))
+
+    @serial_ocr
+    def read_character_detail(self, payload, *, fields, cancelled=None, layout_regions=None):
+        from ..detectors.character_regions import read_character_detail
+        return read_character_detail(self._get_backend(), payload, self.catalog,
+                                     fields=fields, cancelled=cancelled, layout_regions=layout_regions)
 
     @serial_ocr
     def read_region(self, image_bytes: bytes, regions: list, *, cancelled=None, yield_requested=None) -> list:

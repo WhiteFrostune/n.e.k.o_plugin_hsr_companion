@@ -60,6 +60,10 @@ async def read_query_regions(owner, plan, deadline):
     if not callable(getattr(vision, "read_region", None)):
         trace_refresh(owner, "region_skip", reason="no_reader")
         return None
+    from .current_regions import read_current_character
+    current = await read_current_character(owner, plan, deadline)
+    if current is not None:
+        return current
     committed = getattr(owner, "_committed_observation", None) or {}
     if not committed:
         trace_refresh(owner, "region_skip", reason="no_commit")
