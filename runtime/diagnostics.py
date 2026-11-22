@@ -160,7 +160,8 @@ def build_diagnostic_report(*, observer: dict, assistant: dict, evidence: dict,
                             review_state: dict | None = None, page_control_trace: list | None = None,
                             revocation_trace: list | None = None,
                             vision_trace: list | None = None,
-                            frame_comparisons: dict | None = None) -> dict:
+                            frame_comparisons: dict | None = None,
+                            observation_health: dict | None = None) -> dict:
     """Project explicit safe fields, not arbitrary logs/config/raw errors."""
     checked_at = (now or datetime.now(timezone.utc)).isoformat()
     from .page_control_trace import sanitize_trace
@@ -352,5 +353,7 @@ def build_diagnostic_report(*, observer: dict, assistant: dict, evidence: dict,
                    "submitted_count": _number((speech.get("counts") or {}).get("submitted", 0)),
                    "can_retract_submitted": False, "ack_scope": "sdk_submission_only"},
     }
+    if observation_health is not None:
+        snapshot["observation_health"] = observation_health  # Explicit server projection.
     return {"checked_at": checked_at, "checks": checks, "last_query": snapshot["last_query"],
             "copy_text": json.dumps(snapshot, ensure_ascii=False, indent=2)}

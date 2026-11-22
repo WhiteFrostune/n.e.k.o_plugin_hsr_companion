@@ -42,7 +42,18 @@ type UidImport = {
     summary?: { added: number; updated: number; unchanged: number; retained: number; total_after: number } } | null
   roster?: { characters: ImportedBuild[] }
 }
+type ObservationHealth = {
+  patrol?: { decision?: string; reason?: string; fallback?: boolean; suppressed?: number }
+  identity?: { required?: number; tracked_counts?: number[]; pending_count?: number; confirmed_count?: number
+    recent_resets?: { at: string; reason: string; slots_cleared: number; confirmed_cleared: number }[] }
+  recent_fulls?: { job_id: number; processing_seconds?: number | null; state: string }[]
+  discarded_for_query?: number
+  discarded_at_30s_gate?: number
+  current_age_seconds?: number | null
+  committed_age_seconds?: number | null
+}
 type CompanionState = {
+  observation_health?: ObservationHealth
   observer?: { enabled?: boolean; state?: string; message?: string; assistant?: Assistant; capture_backend?: string }
   vision_assistant?: Assistant
   current_visual_evidence?: Visual
@@ -137,6 +148,7 @@ export default function HsrCompanionPanel(props: PluginSurfaceProps<CompanionSta
   const assistant = state.vision_assistant || observer.assistant || {}
   const visual = state.observation_display?.current || state.current_visual_evidence || {}
   const history = state.observation_display?.last_successful
+  const health = state.observation_health
   const manualRefresh = state.manual_refresh || {}
   const usable = observer.enabled === true && visual.fresh === true
   const roles = usable ? (visual.characters || []).map(item => item.name).filter(Boolean) : []
@@ -358,6 +370,33 @@ export default function HsrCompanionPanel(props: PluginSurfaceProps<CompanionSta
             {history.scene?.verified ? <Text>{history.scene.label}</Text> : null}
             {history.characters?.length ? <Text>{t("panel.roles", { names: history.characters.map(item => item.name).filter(Boolean).join("、") })}</Text> : null}
             {(history.screen_facts?.facts || []).slice(0, 12).map((fact, index) => <Text key={index}>{fact.label}：{String(fact.value || "").slice(0, 160)}</Text>)}
+          </Accordion> : null}
+          {health ? <Accordion id="observation-health-v1" open={false} title={t("observationHealth.title")}>
+            <Text>{t("observationHealth.patrol", {
+              decision: t("observationHealth." + (health.patrol?.decision || "unknown")),
+              reason: health.patrol?.reason || "—",
+              fallback: health.patrol?.fallback ? t("observationHealth.fallback") : "",
+              count: health.patrol?.suppressed || 0,
+            })}</Text>
+            <Text>{t("observationHealth.age", {
+              current: health.current_age_seconds ?? "—", committed: health.committed_age_seconds ?? "—",
+            })}</Text>
+            <Text>{t("observationHealth.identity", {
+              counts: (health.identity?.tracked_counts || []).join(" / ") || "—",
+              required: health.identity?.required ?? "—", pending: health.identity?.pending_count ?? 0,
+              confirmed: health.identity?.confirmed_count ?? 0,
+            })}</Text>
+            <Text>{t("observationHealth.discards", {
+              yielded: health.discarded_for_query || 0, late: health.discarded_at_30s_gate || 0,
+            })}</Text>
+            <Text>{t("observationHealth.fulls", { samples: (health.recent_fulls || [])
+              .map(pass => String(pass.processing_seconds ?? "—") + (pass.state === "yielded" ? " ×" : ""))
+              .join(" / ") || "—" })}</Text>
+            {(health.identity?.recent_resets || []).slice(-5).reverse().map((entry, index) =>
+              <Text key={index}>{t("observationHealth.reset", {
+                time: new Date(entry.at).toLocaleTimeString(), reason: entry.reason,
+                slots: entry.slots_cleared, confirmed: entry.confirmed_cleared,
+              })}</Text>)}
           </Accordion> : null}
           <Button tone={observer.enabled ? "default" : "success"} disabled={!!running} onClick={() => call(
             observer.enabled ? "stop_auto_observation" : "start_auto_observation", {}, "companion",

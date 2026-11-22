@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import time
+from collections import deque
 from dataclasses import replace
 from typing import Any
 
 from .arbiter import EventArbiter
 from .contracts import CompanionEvent, native_name_confirmed
+from .recognition_metrics import RESET_LIMIT, count_reset
 
 
 class CompanionRuntime:
@@ -48,6 +50,7 @@ class CompanionRuntime:
         self.pending_character_ids: tuple[str, ...] = ()
         self.pending_character_count = 0
         self.missing_character_count = 0
+        self._identity_resets = deque(maxlen=RESET_LIMIT)
         self._identity_counts: dict[str, tuple[str, int]] = {}
         self.last_analysis: dict[str, Any] = {}
         self.last_decisions: list[dict[str, str]] = []
@@ -56,6 +59,7 @@ class CompanionRuntime:
         self._deferred_events: list[CompanionEvent] = []
 
     def reset(self) -> None:
+        self._note_identity_reset("runtime_reset")
         self.arbiter.reset()
         self._deferred_events.clear()
         self.stable_scene = "unknown"
@@ -72,8 +76,9 @@ class CompanionRuntime:
         self.last_meaningful_event_at = 0.0
         self.last_idle_chatter_at = 0.0
 
-    def invalidate_observation(self) -> None:
+    def invalidate_observation(self, *, reason="observation_revoked") -> None:
         """Forget screen facts, not event cooldowns or the player's history."""
+        self._note_identity_reset(reason)
         self.stable_scene = "unknown"
         self.stable_scene_since = 0.0
         self.pending_scene = ""
@@ -159,6 +164,12 @@ class CompanionRuntime:
             # Each position is independent. An intermittently readable fourth
             # name cannot restart confirmation for the other three positions.
             # Missing/replaced positions are dropped, never replayed as current.
+            removed = [value for key, value in self._identity_counts.items() if key not in next_counts]
+            replaced = [value for key, value in self._identity_counts.items()
+                        if key in next_counts and next_counts[key][0] != value[0]]
+            for reason, cleared in (("slot_missing", removed), ("slot_replaced", replaced)):
+                count_reset(self._identity_resets, reason, slots=len(cleared),
+                            stable=sum(count >= self.confirmation_frames for _, count in cleared))
             self._identity_counts = next_counts
             self.stable_character_ids = tuple(
                 sorted({entity_id for entity_id, count in next_counts.values() if count >= self.confirmation_frames})
@@ -198,11 +209,14 @@ class CompanionRuntime:
                 )
                 self.last_meaningful_event_at = observed_at
         else:
+            count_reset(self._identity_resets, "empty_character_list", slots=len(self._identity_counts))
             self._identity_counts.clear()
             self.pending_character_ids = ()
             self.pending_character_count = 0
             self.missing_character_count += 1
             if (verified and scene != "menu") or self.missing_character_count >= self.confirmation_frames:
+                count_reset(self._identity_resets, "verified_non_menu" if verified and scene != "menu"
+                            else "missing_frame_limit", stable=len(self.stable_character_ids))
                 self.stable_character_ids = ()
                 self.pending_character_ids = ()
                 self.pending_character_count = 0
@@ -254,6 +268,18 @@ class CompanionRuntime:
             self.last_idle_chatter_at = observed_at
         self.last_decisions = decisions
         return selected, decisions
+
+    def _note_identity_reset(self, reason):
+        count_reset(self._identity_resets, reason, slots=len(self._identity_counts),
+                    stable=len(self.stable_character_ids))
+
+    def identity_diagnostics(self) -> dict[str, Any]:
+        return {"required": self.confirmation_frames,
+                "tracked_counts": sorted(count for _, count in self._identity_counts.values()),
+                "pending_count": self.pending_character_count,
+                "confirmed_count": len(self.stable_character_ids),
+                "missing_count": self.missing_character_count,
+                "recent_resets": [dict(row) for row in self._identity_resets]}
 
     def snapshot(self) -> dict[str, Any]:
         return {

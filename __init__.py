@@ -80,6 +80,7 @@ from .runtime.progression import plan_progression
 from .runtime.query_observation import resolve_query
 from .runtime.query_plan import SCREEN_FIELDS, SEMANTIC_INTENTS, build_query_plan
 from .runtime.query_status import answer_status, needs_followup
+from .runtime.recognition_metrics import observation_health, record_late_discard
 from .runtime.service_contract import (
     PREPARE_TOOL_DESCRIPTION,
     clear_discussion,
@@ -824,7 +825,7 @@ class HsrCompanionPlugin(NekoPluginBase):
         ):
             # A query-only capture already passed latest-control validation;
             # do not keep the previous scene's two-full-frame waiting gate.
-            self._runtime.invalidate_observation()
+            self._runtime.invalidate_observation(reason="scene_only_transition")
         event, decisions = self._runtime.ingest(
             analysis, proactive_enabled=deliver_event and self._observer_status.get("proactive_enabled") is True,
             idle_chatter_enabled=self._observer_status.get("idle_chatter_enabled") is True,
@@ -1330,6 +1331,7 @@ class HsrCompanionPlugin(NekoPluginBase):
                     if time.monotonic() - capture_started_at > 30:
                         from .runtime.fact_lifecycle import late_read_proved
                         if not late_read_proved(self, analysis):
+                            record_late_discard(self)
                             if job := analysis.get("_relic_job"):
                                 record_vision_event(self, "relic_job_ended", **job, outcome="rejected",
                                                     reason="candidate_too_old")
@@ -3170,6 +3172,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             revocation_trace=getattr(self, "_revocation_trace", []),
             vision_trace=public_vision_trace(self),
             frame_comparisons=frame_comparison_stats(self),
+            observation_health=observation_health(self, evidence),
             prepare_calls=await read_records(self),
         )
         report["query_timings"] = query_timings(self)
@@ -3347,6 +3350,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             "local_vision": local_vision,
             "current_visual_evidence": observation_display["current"],
             "observation_display": observation_display,
+            "observation_health": observation_health(self, observation_display["current"]),
             "manual_refresh": public_manual_refresh(self),
             "vision_backend": await asyncio.to_thread(self._vision.status),
             "runtime": self._runtime.snapshot(),
