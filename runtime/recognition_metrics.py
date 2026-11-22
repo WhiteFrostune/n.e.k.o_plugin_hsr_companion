@@ -2,6 +2,7 @@
 
 from collections import deque
 from datetime import datetime, timezone
+from functools import wraps
 from math import isfinite
 
 from .revocation_trace import REASONS as REVOCATION_REASONS
@@ -20,6 +21,7 @@ PATROL_REASONS = {
     "demand",
     "confirming_frames",
     "stable_content",
+    "age_budget",
 }
 RESET_REASONS = {
     "runtime_reset",
@@ -43,6 +45,18 @@ def _utc():
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
 
+def _best_effort(function):
+    @wraps(function)
+    def record(*args, **kwargs):
+        try:
+            return function(*args, **kwargs)
+        except Exception:
+            # A broken diagnostic sample must never stop recognition or delivery.
+            return None
+    return record
+
+
+@_best_effort
 def count_reset(events, reason, *, slots=0, stable=0):
     if slots or stable:
         events.append(
@@ -66,10 +80,12 @@ def _metrics(owner):
     return data
 
 
+@_best_effort
 def record_late_discard(owner):
     _metrics(owner)["discarded_at_30s_gate"] += 1
 
 
+@_best_effort
 def record_full(owner, *, job_id, state, analysis=None, checkpoint=None):
     """Keep actual pass timings and count only full jobs that were discarded."""
     data = _metrics(owner)
@@ -83,6 +99,12 @@ def record_full(owner, *, job_id, state, analysis=None, checkpoint=None):
     if isinstance(analysis, dict):
         latest["processing_seconds"] = _number((analysis.get("recognition") or {}).get("processing_seconds"))
     latest.update(state=state, checkpoint=checkpoint, at=_utc())
+
+
+@_best_effort
+def record_page_only_timeout(owner):
+    data = _metrics(owner)
+    data["page_only_reuse_timeouts"] = data.get("page_only_reuse_timeouts", 0) + 1
 
 
 def _commit_age(owner):
@@ -107,10 +129,12 @@ def observation_health(owner, evidence):
             "fallback": patrol.get("fallback") is True,
             "checks": _number(patrol.get("checks")) or 0,
             "suppressed": _number(patrol.get("suppressed")) or 0,
+            "age_refreshes": _number(patrol.get("age_refreshes")) or 0,
         },
         "recent_fulls": [dict(row) for row in data.get("recent_fulls", ())],
         "discarded_for_query": data.get("discarded_for_query", 0),
         "discarded_at_30s_gate": data.get("discarded_at_30s_gate", 0),
+        "page_only_reuse_timeouts": data.get("page_only_reuse_timeouts", 0),
         "identity": identity() if callable(identity) else {},
         "current_age_seconds": _number(evidence.get("age_seconds")),
         "committed_age_seconds": _commit_age(owner),

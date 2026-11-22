@@ -10,7 +10,13 @@ import time
 from io import BytesIO
 
 from ..detectors.patrol_regions import static_content_regions
+from .contracts import STALE_MAX_AGE_SECONDS
+from .fact_lifecycle import timestamp
 from .query_reuse import LIVE_FRAME_MAX_AGE_SECONDS, complete_fact_guard
+
+_MIN_QUIET_SECONDS = 4.0
+_RETRY_SECONDS = 40.0
+_DEFAULT_LEAD_SECONDS = 33.0
 
 
 def _fingerprints(payload, regions, expected_size):
@@ -40,7 +46,8 @@ def _note(owner, decision, reason, *, fallback=False):
     previous = getattr(owner, "_patrol_status", {})
     owner._patrol_status = {"decision": decision, "reason": reason, "fallback": fallback,
         "checks": previous.get("checks", 0)+1,
-        "suppressed": previous.get("suppressed", 0)+int(decision == "skip")}
+        "suppressed": previous.get("suppressed", 0)+int(decision == "skip"),
+        "age_refreshes": previous.get("age_refreshes", 0)+int(reason == "age_budget")}
 
 
 async def remember_capture(owner, payload):
@@ -54,8 +61,12 @@ async def remember_capture(owner, payload):
         return
     patches = await asyncio.to_thread(_fingerprints, payload, regions, size)
     if patches is not None and _basis(owner, pid)[0] == key:
+        observed = timestamp(raw.get("observed_at"))
+        elapsed = time.time() - observed if observed is not None else None
+        lead = min(35.0, max(8.0, elapsed + 3.0)) if elapsed is not None and elapsed >= 0 else _DEFAULT_LEAD_SECONDS
         owner._patrol_anchor = {"key": key, "regions": regions, "patches": patches,
-                               "first_seq": -1, "first_at": 0, "frames": 0, "stable": False}
+                               "first_seq": -1, "first_at": 0, "frames": 0, "stable": False,
+                               "observed": observed, "lead": lead, "next_refresh_at": time.monotonic() + _MIN_QUIET_SECONDS}
 
 
 async def should_scan(owner, payload, *, requested, changed, frame_seq, captured_at, pid):
@@ -107,6 +118,13 @@ async def should_scan(owner, payload, *, requested, changed, frame_seq, captured
                and not regional_reading):
         return fallback("demand")
     if state["stable"]:
+        now = time.monotonic()
+        observed = state["observed"]
+        if (not regional_reading and observed is not None and now >= state["next_refresh_at"]
+                and time.time() - observed >= STALE_MAX_AGE_SECONDS - state["lead"]):
+            state["next_refresh_at"] = now + _RETRY_SECONDS
+            _note(owner, "full", "age_budget")
+            return True
         _note(owner, "skip", "stable_content")
         return False
     return fallback("confirming_frames")

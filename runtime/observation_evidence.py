@@ -26,6 +26,33 @@ _UNAVAILABLE = {
 }
 
 
+_IDENTITY_FAILURE_MESSAGES = {
+    "insufficient_confirmations": "在时限内未取得足够的姓名确认。",
+    "confirmation_reset": "确认期间姓名依据中断，未攒够有效读数。",
+    "yielded_for_query": "确认期间的整屏扫描为提问让位，未完成核对。",
+    "ocr_timeout": "确认期间有文字读取超时，未完成核对。",
+}
+
+
+def with_identity_confirmation(owner, evidence):
+    """Add identity status without supplying an identity or changing evidence freshness."""
+    if "identity_confirmation" in evidence:
+        evidence = {key: value for key, value in evidence.items() if key != "identity_confirmation"}
+    observer = getattr(owner, "_observer_status", {})
+    if (evidence.get("can_answer_character_identity") and evidence.get("characters_complete") is not False
+            or not observer.get("enabled") or observer.get("state") not in {"observing", "updating"}
+            or getattr(owner, "_observer_stop_requested", False)
+            or getattr(owner, "_observation_pending_reason", "").startswith(("capture_error", "capture_unavailable"))):
+        return evidence
+    confirmation = getattr(getattr(owner, "_runtime", None), "identity_confirmation", None)
+    state = confirmation(page=evidence.get("page_type")) if confirmation is not None else None
+    if state is None:
+        return evidence
+    if state["state"] == "failed":
+        state["message"] = _IDENTITY_FAILURE_MESSAGES[state["reason"]]
+    return {**evidence, "identity_confirmation": state}
+
+
 def public_visual_evidence(
     analysis: object,
     observer: dict[str, Any],

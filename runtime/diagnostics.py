@@ -356,4 +356,5 @@ def build_diagnostic_report(*, observer: dict, assistant: dict, evidence: dict,
     if observation_health is not None:
         snapshot["observation_health"] = observation_health  # Explicit server projection.
     return {"checked_at": checked_at, "checks": checks, "last_query": snapshot["last_query"],
+            **({"observation_health": observation_health} if observation_health is not None else {}),
             "copy_text": json.dumps(snapshot, ensure_ascii=False, indent=2)}

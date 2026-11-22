@@ -19,7 +19,7 @@ from ..adapters.text_verification import identity_literal, proof_key
 from ..detectors.exploration import generic_navigation
 from . import vision_scheduler
 from .query_reuse import LIVE_FRAME_MAX_AGE_SECONDS, region_stamp, regions_changed, text_pixel_differences, try_reuse
-from .recognition_metrics import record_full
+from .recognition_metrics import record_full, record_page_only_timeout
 from .timing_detail import mark, phase, timed_callback
 from .vision_scheduler import VisionWorkerBusy, vision_turn
 from .vision_scheduler import drain_analysis_worker as drain_analysis_worker
@@ -367,6 +367,13 @@ async def invalidate_frame_change(owner: Any, previous, current, controls, reaso
                      "recognition": {"phase": "scene_only", "scene_regions": list(controls)}})
 
 
+def _full_yielded(owner, checkpoint):
+    note = getattr(getattr(owner, "_runtime", None), "note_identity_blocker", None)
+    if note is not None:
+        note("yielded_for_query")
+    record_full(owner, job_id=owner._vision_job_id, state="yielded", checkpoint=checkpoint)
+
+
 @traced_operation("analysis_worker")
 async def guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict[str, Any] | None:
     """Monitor the live helper while OCR runs; discard superseded work."""
@@ -616,7 +623,7 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
             analysis = await asyncio.shield(task)
         except QueryPreempted:
             if scope == "full":
-                record_full(owner, job_id=owner._vision_job_id, state="yielded", checkpoint="ocr")
+                _full_yielded(owner, "ocr")
             mark(owner, "handoff_completed", **correlation())
             trace_refresh(owner, "producer_yielded", scope=scope)
             return None
@@ -654,7 +661,7 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
             mark(owner, "handoff_completed", **correlation())
             trace_refresh(owner, "producer_yielded", scope=scope, checkpoint="post_ocr")
             if scope == "full":
-                record_full(owner, job_id=owner._vision_job_id, state="yielded", checkpoint="post_ocr")
+                _full_yielded(owner, "post_ocr")
             return None
         live_validation = None
         delivery_guard = None
@@ -692,7 +699,7 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
                     analysis = await asyncio.shield(task)
                 except ObservationSuperseded as exc:
                     if scope == "full" and isinstance(exc, QueryPreempted):
-                        record_full(owner, job_id=owner._vision_job_id, state="yielded", checkpoint="literal_review")
+                        _full_yielded(owner, "literal_review")
                     if job:
                         record(owner, "relic_job_ended", **job, outcome="rejected", reason="analysis_superseded")
                     return None
@@ -1302,7 +1309,9 @@ async def _refresh_for_query(owner, *, timeout, require_characters, require_cont
                 try:
                     richer = await asyncio.wait_for(try_reuse(owner, **original_reuse_args, pixel_only=True), timeout=.35)
                 except TimeoutError:
-                    pass  # Optional enrichment cannot erase the admitted page.
+                    if "characters" in query_plan.fields and not result.get("characters"):
+                        record_page_only_timeout(owner)
+                    # Optional enrichment cannot erase the admitted page.
             if richer is not None:
                 return richer
         return result

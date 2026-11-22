@@ -381,25 +381,24 @@ test('server errors show safe HTTP status and do not duplicate the UID error ale
   assert.equal(fixture.nodes(tree).filter(n => n.type === 'Alert' && /Enka 本次返回服务器错误/.test(fixture.text(n))).length, 1)
 })
 
-test('observation dashboard keeps timings and reset diagnostics separate from publishing facts', () => {
-  const fixture = panelFixture({ observer: { enabled: true },
-    observation_health: {
-      patrol: { decision: 'wait', fallback: true, reason: 'coverage_unavailable', suppressed: 3 },
-      identity: { required: 2, tracked_counts: [1], pending_count: 1, confirmed_count: 0,
-        recent_resets: [{ at: '2026-11-22T10:00:00Z', reason: 'empty_character_list',
-          slots_cleared: 1, confirmed_cleared: 0 }] },
-      recent_fulls: [{ job_id: 1, processing_seconds: 27.5, state: 'parsed' }],
-      discarded_for_query: 4, discarded_at_30s_gate: 1, current_age_seconds: null,
-      committed_age_seconds: 65.3,
-    },
+test('observation diagnostics move to one-click report and failed confirmation shows the reason', async () => {
+  const health = { patrol: { decision: 'full', reason: 'age_budget' }, page_only_reuse_timeouts: 2 }
+  const fixture = panelFixture({
+    observer: { enabled: true, capture_backend: 'plugin_compatibility', state: 'observing' },
+    current_visual_evidence: { fresh: true, scene: { verified: true }, characters: [],
+      identity_confirmation: { state: 'failed', reason: 'ocr_timeout', message: '确认期间有文字读取超时' } },
+
   })
-  const panel = fixture.nodes(fixture.render()).find(node => node.props?.id === 'observation-health-v1')
-  assert.equal(panel.type, 'Accordion')
-  assert.equal(panel.props.open, false)
-  const contents = fixture.text(panel)
-  for (const value of ['coverage_unavailable', '回退原调度', '65.3', '27.5', 'empty_character_list', '整屏让位丢弃 4 次']) {
-    assert.ok(contents.includes(value), value)
-  }
+  const before = fixture.render()
+  assert.ok(fixture.nodes(before).some(node =>
+    node.type === 'StatusBadge' && node.props.label === '本轮角色确认失败'))
+  assert.match(fixture.text(before), /确认期间有文字读取超时/)
+  assert.doesNotMatch(fixture.text(before), /观察诊断/)
   assert.deepEqual(fixture.calls, [])
-  assert.equal(fixture.refreshes(), 0)
+  fixture.setReport({ checked_at: '2026-11-22T10:00:00Z', checks: [], copy_text: 'SAFE_REPORT', observation_health: health })
+  await fixture.button(before, '一键诊断').props.onClick()
+  const after = fixture.render()
+  assert.match(fixture.text(after), /观察诊断/)
+  assert.ok(fixture.nodes(after).some(node =>
+    node.type === 'Textarea' && node.props.value === JSON.stringify(health, null, 2)))
 })

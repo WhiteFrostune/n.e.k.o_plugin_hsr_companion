@@ -40,6 +40,9 @@ def request_manual_refresh(owner):
     if not can_observe(owner):
         owner._manual_refresh_status = {"state": "unavailable"}
         return public_manual_refresh(owner)
+    retry = getattr(getattr(owner, "_runtime", None), "retry_identity_confirmation", None)
+    if retry is not None:
+        retry()
     owner._manual_refresh_status = {"state": "running", "requested_at": datetime.now(timezone.utc).isoformat()}
     baseline = getattr(owner, "_last_full_commit_serial", getattr(owner, "_observation_serial", 0))
     owner._observer_last_signature = None

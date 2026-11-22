@@ -11,6 +11,9 @@ from .arbiter import EventArbiter
 from .contracts import CompanionEvent, native_name_confirmed
 from .recognition_metrics import RESET_LIMIT, count_reset
 
+IDENTITY_CONFIRMATION_SECONDS = 70.0
+_IDENTITY_PAGES = {"character_detail", "character_attributes", "team_setup"}
+
 
 class CompanionRuntime:
     _PROACTIVE_SCENES = {"combat", "team_setup", "warp", "reward"}
@@ -52,6 +55,9 @@ class CompanionRuntime:
         self.missing_character_count = 0
         self._identity_resets = deque(maxlen=RESET_LIMIT)
         self._identity_counts: dict[str, tuple[str, int]] = {}
+        self._confirmation_page = ""
+        self._confirmation_started = None
+        self._confirmation_reason = ""
         self.last_analysis: dict[str, Any] = {}
         self.last_decisions: list[dict[str, str]] = []
         self.last_meaningful_event_at = 0.0
@@ -60,6 +66,7 @@ class CompanionRuntime:
 
     def reset(self) -> None:
         self._note_identity_reset("runtime_reset")
+        self._clear_identity_confirmation()
         self.arbiter.reset()
         self._deferred_events.clear()
         self.stable_scene = "unknown"
@@ -79,6 +86,7 @@ class CompanionRuntime:
     def invalidate_observation(self, *, reason="observation_revoked") -> None:
         """Forget screen facts, not event cooldowns or the player's history."""
         self._note_identity_reset(reason)
+        self._clear_identity_confirmation()
         self.stable_scene = "unknown"
         self.stable_scene_since = 0.0
         self.pending_scene = ""
@@ -93,7 +101,7 @@ class CompanionRuntime:
 
     def ingest(
         self, analysis: dict[str, Any], *, now: float | None = None,
-        proactive_enabled: bool = False, idle_chatter_enabled: bool = False,
+        proactive_enabled: bool = False, idle_chatter_enabled: bool = False, track_identity: bool = True,
     ) -> tuple[CompanionEvent | None, list[dict[str, str]]]:
         observed_at = time.monotonic() if now is None else float(now)
         self.last_analysis = dict(analysis)
@@ -146,6 +154,7 @@ class CompanionRuntime:
                 if isinstance(item, dict) and item.get("entity_id")
             )
         )
+        previous_pending = self.pending_character_ids
         if ids:
             self.missing_character_count = 0
             previous_ids = self.stable_character_ids
@@ -222,6 +231,9 @@ class CompanionRuntime:
                 self.pending_character_count = 0
                 self.missing_character_count = 0
 
+        if track_identity:
+            self._track_identity_confirmation(analysis, observed_at, previous_pending)
+
         if (
             proactive_enabled and idle_chatter_enabled
             and not candidates
@@ -269,6 +281,61 @@ class CompanionRuntime:
         self.last_decisions = decisions
         return selected, decisions
 
+    def _clear_identity_confirmation(self):
+        self._confirmation_page = ""
+        self._confirmation_started = None
+        self._confirmation_reason = ""
+
+    def observe_identity_page(self, page, *, now=None, expects_identity=False):
+        if page != self._confirmation_page:
+            self._clear_identity_confirmation()
+            self._confirmation_page = page
+        if (expects_identity or page in _IDENTITY_PAGES) and self._confirmation_started is None:
+            self._confirmation_started = time.monotonic() if now is None else now
+            self._confirmation_reason = "insufficient_confirmations"
+
+    def identity_confirmation(self, *, page=None, now=None):
+        if self._confirmation_started is None or page not in (None, "unknown", self._confirmation_page):
+            return None
+        elapsed = max(0.0, (time.monotonic() if now is None else now) - self._confirmation_started)
+        return {"state": "failed" if elapsed >= IDENTITY_CONFIRMATION_SECONDS else "pending",
+                "reason": self._confirmation_reason, "elapsed_seconds": round(elapsed, 1),
+                "limit_seconds": IDENTITY_CONFIRMATION_SECONDS}
+
+    def note_identity_blocker(self, reason, *, now=None):
+        state = self.identity_confirmation(now=now)
+        if state and state["state"] == "pending":
+            self._confirmation_reason = reason
+
+    def retry_identity_confirmation(self):
+        state = self.identity_confirmation()
+        if state and state["state"] == "failed":
+            self._confirmation_started = time.monotonic()
+            self._confirmation_reason = "insufficient_confirmations"
+
+    def _track_identity_confirmation(self, analysis, now, previous_pending):
+        page = (analysis.get("page") or {}).get("page_type")
+        scene = analysis.get("scene") or {}
+        recognition = analysis.get("recognition") or {}
+        if not scene.get("verified") or not page or page == "unknown" or recognition.get("navigation_only_query"):
+            return
+        if self.stable_character_ids and not self.pending_character_ids:
+            self._clear_identity_confirmation()
+            return
+        self.observe_identity_page(page, now=now, expects_identity=bool(self.pending_character_ids))
+        if previous_pending and set(previous_pending) - set(self.pending_character_ids):
+            self.note_identity_blocker("confirmation_reset", now=now)
+        self.note_identity_read_issue(analysis, now=now)
+
+    def note_identity_read_issue(self, analysis, *, now=None):
+        page = (analysis.get("page") or {}).get("page_type")
+        if page != self._confirmation_page:
+            return
+        reader = (analysis.get("recognition") or {}).get("text_reader") or {}
+        error = str((analysis.get("ocr") or {}).get("error") or "").lower()
+        if "ocr_time_budget" in (reader.get("errors") or ()) or "timeout" in error:
+            self.note_identity_blocker("ocr_timeout", now=now)
+
     def _note_identity_reset(self, reason):
         count_reset(self._identity_resets, reason, slots=len(self._identity_counts),
                     stable=len(self.stable_character_ids))
@@ -279,7 +346,8 @@ class CompanionRuntime:
                 "pending_count": self.pending_character_count,
                 "confirmed_count": len(self.stable_character_ids),
                 "missing_count": self.missing_character_count,
-                "recent_resets": [dict(row) for row in self._identity_resets]}
+                "recent_resets": [dict(row) for row in self._identity_resets],
+                "confirmation": self.identity_confirmation()}
 
     def snapshot(self) -> dict[str, Any]:
         return {
