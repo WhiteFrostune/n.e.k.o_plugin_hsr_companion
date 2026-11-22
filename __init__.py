@@ -71,6 +71,8 @@ from .runtime.live_refresh import (
 from .runtime.manual_refresh import cancel_manual_refresh, public_manual_refresh, request_manual_refresh
 from .runtime.observation_evidence import VISUAL_TTL_SECONDS, public_visual_evidence
 from .runtime.observation_store import ObservationStore
+from .runtime.patrol import remember_capture as patrol_remember_capture
+from .runtime.patrol import should_scan as patrol_should_scan
 from .runtime.player_builds import STORE_KEY as MANUAL_BUILDS_KEY
 from .runtime.player_builds import BuildError, player_build_service
 from .runtime.prepare_trace import prepare_correction, prepare_failure, prepare_stage, read_records, trace_prepare
@@ -1259,6 +1261,9 @@ class HsrCompanionPlugin(NekoPluginBase):
                     or (elapsed >= 2 and difference >= 0.025)
                     or elapsed >= 4
                 )
+                should_push = await patrol_should_scan(self, image_bytes, requested=should_push, changed=changed,
+                    frame_seq=getattr(assistant_frame, "frame_seq", None),
+                    captured_at=getattr(assistant_frame, "timestamp", None), pid=public_window.get("pid"))
                 if should_push:
                     if getattr(self, "_active_refresh_trace", None) is not None:
                         trace_refresh(self, "capture_selected", backend=capture_backend,
@@ -1356,6 +1361,7 @@ class HsrCompanionPlugin(NekoPluginBase):
                     )
                     trace_refresh(self, "commit_started", job_id=getattr(self, "_vision_job_id", 0),
                                   frame_seq=self._analysis_input_frame_seq)
+                    previous_full = getattr(self, "_last_full_commit_serial", 0)
                     local_result = await self._apply_local_analysis(
                         analysis,
                         image_fingerprint=image_fingerprint,
@@ -1373,6 +1379,8 @@ class HsrCompanionPlugin(NekoPluginBase):
                     trace_refresh(self, "commit_finished", job_id=getattr(self, "_vision_job_id", 0),
                                   frame_seq=self._analysis_input_frame_seq)
 
+                    if getattr(self, "_last_full_commit_serial", 0) > previous_full:
+                        await patrol_remember_capture(self, image_bytes)
                     self._observer_last_signature = signature
                     self._observer_last_push_monotonic = time.monotonic()
                     scene_key = str((analysis.get("scene") or {}).get("primary_state") or "unknown")

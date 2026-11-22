@@ -46,6 +46,7 @@ L2b = [
   "runtime/review_policy.py",
   "runtime/query_reuse.py",
   "runtime/page_handoff.py",
+  "runtime/patrol.py",
   "runtime/manual_refresh.py",
   "runtime/vision_scheduler.py",
   "runtime/live_refresh.py",
