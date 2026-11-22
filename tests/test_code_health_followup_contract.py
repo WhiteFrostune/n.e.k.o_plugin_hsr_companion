@@ -12,6 +12,7 @@ import pytest
 from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.tests import test_guidance as cases
+from plugin.plugins.hsr_companion.tests.controlled_time import ManualClock, deadlock_guard
 from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner
 from plugin.plugins.hsr_companion.tests.test_stage1_repairs import fact, visual
 
@@ -30,23 +31,25 @@ def numbers(*, slot=False):
     return value
 
 
-def pending(book, catalog, *, duration=1):
+def pending(book, catalog, *, duration=1, clock=None):
     selected = cases.plan(QUERY, book, catalog)
     plan = selected.observation_plan(build_query_plan(QUERY))
-    start = time.monotonic()
+    start = (clock.monotonic if clock is not None else time.monotonic)()
     return followup.AnswerRequest("slot-late", QUERY, "猫娘", time.time(), start,
         start + duration, "unknown", False, False, True, False,
         plan=plan, guidance_plan=selected, guidance_profile={})
 
 
 def test_empty_advice_waits_for_later_self_contained_equipment_packet(book, catalog, monkeypatch):
+    clock = ManualClock()
+    clock.install(monkeypatch, followup, drive_sleep=True, expire_events=True)
     first, final = numbers(), numbers(slot=True)
     first["screen_facts"]["facts"][0]["value"] = "19"
     owner, sent = followup_owner(monkeypatch, value=first)
     owner._guidance_book, owner._catalog = book, catalog
     owner._visual_update_event = asyncio.Event()
     reads, stages = [], []
-    request = pending(book, catalog)
+    request = pending(book, catalog, clock=clock)
     before = copy.deepcopy(first)
 
     async def current():
@@ -69,7 +72,7 @@ def test_empty_advice_waits_for_later_self_contained_equipment_packet(book, cata
         owner._pending_answer = request
         await followup.deliver_followup(owner, request)
 
-    asyncio.run(run())
+    asyncio.run(deadlock_guard(run()))
     assert stages[0]["facts_ready"] and not stages[0]["service_ready"]
     assert len(reads) >= 2 and len(sent) == 1, owner._followup_status
     assert owner._followup_status["answer_complete"]
@@ -84,9 +87,11 @@ def test_empty_advice_waits_for_later_self_contained_equipment_packet(book, cata
 
 @pytest.mark.parametrize("end", ["deadline", "cancel", "epoch", "slot_only"])
 def test_empty_advice_cannot_send_or_complete_without_valid_evidence(book, catalog, monkeypatch, end):
+    clock = ManualClock()
+    clock.install(monkeypatch, followup, drive_sleep=True, expire_events=True)
     owner, sent = followup_owner(monkeypatch, value=numbers())
     owner._guidance_book, owner._catalog = book, catalog
-    request = pending(book, catalog, duration=.06 if end == "deadline" else .35 if end == "slot_only" else 1)
+    request = pending(book, catalog, duration=.06 if end == "deadline" else .35 if end == "slot_only" else 1, clock=clock)
     reads = []
 
     async def current():
@@ -107,7 +112,7 @@ def test_empty_advice_cannot_send_or_complete_without_valid_evidence(book, catal
         owner._pending_answer = request
         await followup.deliver_followup(owner, request)
 
-    asyncio.run(run())
+    asyncio.run(deadlock_guard(run()))
     assert not sent and not owner._test_answer_payloads
     assert owner._pending_answer is None
     assert not owner._followup_status.get("answer_complete")
@@ -117,8 +122,10 @@ def test_empty_advice_cannot_send_or_complete_without_valid_evidence(book, catal
 
 def test_deadline_keeps_ready_result_distinct_from_failed_speech_transport(monkeypatch):
     from plugin.plugins.hsr_companion.tests.test_page_followup import request
+    clock = ManualClock()
+    clock.install(monkeypatch, followup, drive_sleep=True, expire_events=True)
     owner, sent = followup_owner(monkeypatch)
-    pending_request = replace(request(), expires_at=time.monotonic() + .035)
+    pending_request = replace(request(), armed_at=clock.monotonic(), expires_at=clock.monotonic() + .035)
 
     async def unavailable(*args, **kwargs):
         return "unavailable", None
@@ -129,7 +136,7 @@ def test_deadline_keeps_ready_result_distinct_from_failed_speech_transport(monke
         owner._pending_answer = pending_request
         await followup.deliver_followup(owner, pending_request)
 
-    asyncio.run(run())
+    asyncio.run(deadlock_guard(run()))
     assert not sent and owner._followup_status["result_ready"]
     assert owner._followup_status["reason"] == "activity_unavailable_after_retries"
 
