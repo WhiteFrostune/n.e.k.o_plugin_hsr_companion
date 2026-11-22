@@ -89,6 +89,7 @@ async def resolve_query(owner, plan: QueryPlan, *, refresh, timeout: float, gene
                 diagnostics = {"outcome": "timeout", "stages": diagnostics.get("stages", [])}
     snapshot = ObservationSnapshot.select(owner, selected, fields=plan.fields)
     if plan.screen:
-        selected = snapshot.delivery(owner, generation=generation)
-        snapshot = ObservationSnapshot.select(owner, selected, fields=plan.fields)
+        with measure(owner, "query_exit"):
+            selected = snapshot.delivery(owner, generation=generation)
+            snapshot = ObservationSnapshot.select(owner, selected, fields=plan.fields)
     return QueryObservation(snapshot, diagnostics, round(time.monotonic() - started, 3), generation)

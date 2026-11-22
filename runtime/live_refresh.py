@@ -19,6 +19,7 @@ from ..adapters.text_verification import identity_literal, proof_key
 from ..detectors.exploration import generic_navigation
 from . import vision_scheduler
 from .query_reuse import LIVE_FRAME_MAX_AGE_SECONDS, region_stamp, regions_changed, text_pixel_differences, try_reuse
+from .timing_detail import mark, phase, timed_callback
 from .vision_scheduler import VisionWorkerBusy, vision_turn
 from .vision_scheduler import drain_analysis_worker as drain_analysis_worker
 from .vision_trace import (
@@ -456,8 +457,15 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
     trace_refresh(owner, "analysis_started", scope=scope)
     pass_generation = request_generation
 
+    yield_marked = False
+
     def yield_requested():
-        return vision_scheduler.query_yield_requested(owner, pass_generation, scope)
+        nonlocal yield_marked
+        requested = vision_scheduler.query_yield_requested(owner, pass_generation, scope)
+        if requested and not yield_marked:
+            yield_marked = True
+            mark(owner, "handoff_signal", **correlation())
+        return requested
 
     priority = {"wants_relic": wants_relic} if isinstance(owner._vision, LocalVisionAdapter) else {}
     if callable(live) and _supports_kwarg(live, "yield_requested"):
@@ -476,6 +484,7 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
                 # page change still stops/discards the old work below.
                 request_generation = getattr(owner, "_query_refresh_generation", 0)
                 wants_relic()
+                mark(owner, "handoff_demand", **correlation())
                 trace_refresh(owner, "query_joined_worker", scope=scope,
                               job_id=job["job_id"], frame_seq=job["frame_seq"],
                               worker_elapsed_seconds=round(time.monotonic() - worker_started, 3))
@@ -596,6 +605,7 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
         try:
             analysis = await asyncio.shield(task)
         except QueryPreempted:
+            mark(owner, "handoff_completed", **correlation())
             trace_refresh(owner, "producer_yielded", scope=scope)
             return None
         except ObservationSuperseded:
@@ -627,6 +637,7 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
             # OCR already finished. A waiting region query can use the native
             # turn now; skip this pass's broad validation/verification instead
             # of making the query wait for work it does not need.
+            mark(owner, "handoff_completed", **correlation())
             trace_refresh(owner, "producer_yielded", scope=scope, checkpoint="post_ocr")
             return None
         live_validation = None
@@ -987,6 +998,7 @@ async def _revalidate_guard_text(owner, latest, coordinates, *, evidence=None, c
         return result("busy")
     stop = threading.Event()
     queued = None
+    @timed_callback("checkpoint_review", owner)
     def read_at_checkpoint():
         nonlocal selected, coordinates
         # A queued screenshot can become old before admission. Acquire a new
@@ -1022,15 +1034,18 @@ async def _revalidate_guard_text(owner, latest, coordinates, *, evidence=None, c
                 raise ValueError("checkpoint_literal_coverage_missing")
         if not selected:
             return set(), capture  # All original scoped patches match THIS frame.
-        return reader(capture.image_bytes, selected, cancelled=check_current), capture
+        with phase("review_work", owner):
+            return reader(capture.image_bytes, selected, cancelled=check_current), capture
     if cooperative:
         submit = getattr(owner._vision, "enqueue_review", None)
-        queued = submit(read_at_checkpoint) if callable(submit) else None
+        with phase("review_enqueue", owner):
+            queued = submit(read_at_checkpoint) if callable(submit) else None
         if queued is None:
             return result("busy")
         task = asyncio.wrap_future(queued)
         trace_refresh(owner, "verification_queued", region_count=len(coordinates))
     else:
+        @timed_callback("review_work", owner)
         def read_direct():
             def cancelled():
                 return (stop.is_set() or (epoch, serial, generation, capture_revision) != (

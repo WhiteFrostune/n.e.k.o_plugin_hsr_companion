@@ -14,6 +14,7 @@ from .live_refresh import _supports_kwarg, delivery_turn, fetch_recent_frame, fr
 from .observation_store import ObservationSnapshot
 from .query_reuse import _SUPERSEDED, _remember_candidate, region_stamp, regions_changed, review_snapshot
 from .review_policy import checked_receipt
+from .timing_detail import phase, timed
 from .vision_scheduler import run_query_worker
 from .vision_trace import bind_trace, record_candidate
 
@@ -56,6 +57,7 @@ def _layout_regions(owner):
             "name_regions": geometry(a for a in raw.get("characters") or [] if a.get("identity_scope") == "detail_subject")}
 
 
+@timed("region_packet")
 async def read_current_character(owner, plan, deadline):
     reader = getattr(owner._vision, "read_character_detail", None)
     if (not callable(reader) or not plan.fields or not plan.fields <= {"page", "characters", "attributes"}
@@ -67,7 +69,8 @@ async def read_current_character(owner, plan, deadline):
     # A real consumer claim prevents the next producer from racing this short
     # read and its review. It does not cancel an unreturned native call.
     async with delivery_turn(owner):
-        source = await fetch_recent_frame(owner, wait_seconds=max(.001, min(2., deadline-time.monotonic())))
+        with phase("region_capture", owner):
+            source = await fetch_recent_frame(owner, wait_seconds=max(.001, min(2., deadline-time.monotonic())))
         if source is None or not _live(owner, generation, epoch, failure):
             return None
         bind_trace(frame_seq=getattr(source, "frame_seq", None))
@@ -100,7 +103,9 @@ async def read_current_character(owner, plan, deadline):
             if source.image_bytes == latest.image_bytes:
                 return False
             return regions_changed(region_stamp(source.image_bytes, controls), region_stamp(latest.image_bytes, controls))
-        if await asyncio.to_thread(controls_changed):
+        with phase("region_controls", owner):
+            changed = await asyncio.to_thread(controls_changed)
+        if changed:
             return None
         publish = getattr(owner, "_publish_scene_preview", None)
         if callable(publish):
@@ -121,7 +126,8 @@ async def read_current_character(owner, plan, deadline):
         proofs = list({coordinates(p): p for p in proofs if p.get("region")}.values())
         def source_guards():
             return region_stamp(source.image_bytes, proofs), frame_stamp(source.image_bytes)
-        patches, stamp = await asyncio.to_thread(source_guards)
+        with phase("region_guards", owner):
+            patches, stamp = await asyncio.to_thread(source_guards)
         snapshot = {"evidence": evidence, "guard": (proofs, patches),
             "stamp": stamp, "epoch": epoch, "game_pid": source.game.get("pid"),
             "page_controls": controls, "identity_proofs": actors, "detached_region": True}
@@ -133,14 +139,16 @@ async def read_current_character(owner, plan, deadline):
             if time.monotonic() >= deadline or not _live(owner, generation, epoch, failure):
                 return None
             snapshot["evidence"]["screen_facts"]["observation_serial"] = getattr(owner, "_observation_serial", 0)
-            result = await review_snapshot(owner, snapshot, plan=plan, full=True)
+            with phase("region_snapshot_review", owner):
+                result = await review_snapshot(owner, snapshot, plan=plan, full=True)
             if result is not _SUPERSEDED:
                 break
             trace_refresh(owner, "region_review_reselected")
-        if (result is None or result is _SUPERSEDED or not _live(owner, generation, epoch, failure)
-                or not checked_receipt(owner, result, plan=plan)
-                or not ObservationSnapshot.select(owner, result, fields=plan.fields).matches(owner)):
-            return None
+        with phase("region_receipt", owner):
+            if (result is None or result is _SUPERSEDED or not _live(owner, generation, epoch, failure)
+                    or not checked_receipt(owner, result, plan=plan)
+                    or not ObservationSnapshot.select(owner, result, fields=plan.fields).matches(owner)):
+                return None
         record_candidate(owner, "candidate_verified", result)
         _page_guard(owner, result, snapshot)
         snapshots = getattr(owner, "_reusable_observations", {})
@@ -150,4 +158,5 @@ async def read_current_character(owner, plan, deadline):
         owner._reusable_observations = snapshots
         trace_refresh(owner, "current_region_admitted", fields=sorted(plan.fields),
                       age_seconds=result.get("age_seconds"))
-        return result
+        with phase("region_exit", owner):
+            return result

@@ -10,6 +10,7 @@ from ..adapters.native_text import _box_value, check_current, read_region
 from ..adapters.text_verification import verify_name_regions
 from ..runtime.contracts import native_name_confirmed
 from ..runtime.screen_facts import extract_screen_facts
+from ..runtime.timing_detail import phase
 from .layout import detect_characters_in_page
 from .scene_preview import scene_preview
 
@@ -106,13 +107,17 @@ def read_character_detail(backend, payload, catalog, *, fields, cancelled=None, 
     if image.width*image.height > 16_000_000:
         raise ValueError("Frame exceeds local recognition size limit")
     check_current(cancelled)
-    boxes,names,acquisition = _compact_read(backend,image,layout_regions,cancelled)
-    preview = scene_preview(boxes,width=image.width,height=image.height)
+    with phase("region_crop_atlas"):
+        boxes,names,acquisition = _compact_read(backend,image,layout_regions,cancelled)
+    with phase("region_page"):
+        preview = scene_preview(boxes,width=image.width,height=image.height)
     if (preview is None or preview["page"].get("page_type") != "character_detail"
             or not preview["scene"].get("verified") or not preview["recognition"].get("scene_regions")):
         return None
-    names,name_check = verify_name_regions(backend,image,names,catalog,cancelled=cancelled,single_line=True)
-    actors = detect_characters_in_page(preview["page"],names,catalog,width=image.width,height=image.height)
+    with phase("region_name_confirmation"):
+        names,name_check = verify_name_regions(backend,image,names,catalog,cancelled=cancelled,single_line=True)
+    with phase("region_name_assignment"):
+        actors = detect_characters_in_page(preview["page"],names,catalog,width=image.width,height=image.height)
     actors = [a for a in actors if a.get("identity_scope") == "detail_subject" and native_name_confirmed(a)]
     if len({a["entity_id"] for a in actors}) != 1:
         actors = []

@@ -96,7 +96,8 @@ async def vision_turn(owner, role):
     owner._vision_schedule_waiters = getattr(owner, "_vision_schedule_waiters", 0) + 1
     acquired = False
     try:
-        await lock.acquire()  # asyncio.Lock admission is FIFO, including queries.
+        with measure(owner, "scheduler_wait", role=role):
+            await lock.acquire()  # asyncio.Lock admission is FIFO, including queries.
         acquired = True
         owner._vision_schedule_role = role
         from .live_refresh import trace_refresh
@@ -105,10 +106,12 @@ async def vision_turn(owner, role):
         record(owner, "ocr_admission", role=role, seconds=queue_seconds)
         # wait_for/to_thread cancellation cannot kill native inference. Drain
         # the actual retained thread task, not its cancelled caller wrapper.
-        if (_admission_blocked(owner) or not await drain_analysis_worker(owner)
-                or getattr(owner, "_vision_closing", False)):
-            raise VisionWorkerBusy()
-        yield
+        with measure(owner, "scheduler_drain", role=role):
+            if (_admission_blocked(owner) or not await drain_analysis_worker(owner)
+                    or getattr(owner, "_vision_closing", False)):
+                raise VisionWorkerBusy()
+        with measure(owner, "scheduler_hold", role=role):
+            yield
     finally:
         owner._vision_schedule_waiters -= 1
         if acquired:

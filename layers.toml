@@ -114,6 +114,7 @@ trace = [
   "runtime/prepare_trace.py",
   "runtime/revocation_trace.py",
   "runtime/vision_trace.py",
+  "runtime/timing_detail.py",
 ]
 
 [entrypoints]

@@ -28,8 +28,9 @@ def serial_ocr(method=None, *, cooperative=False):
         return lambda target: serial_ocr(target, cooperative=cooperative)
     @wraps(method)
     def run(self, *args, **kwargs):
-        if not self._inference_lock.acquire(timeout=.2):
-            raise ObservationSuperseded()
+        with measure(self, "native_lock_wait", operation=method.__name__):
+            if not self._inference_lock.acquire(timeout=.2):
+                raise ObservationSuperseded()
         queue = self._review_queue if cooperative else None
         cancelled = kwargs.get("cancelled")
         if queue is not None:
@@ -61,7 +62,7 @@ class _MeasuredOCR:
             return method
 
         def read(*args, **kwargs):
-            with measure(self._adapter, "ocr_call"):
+            with measure(self._adapter, "ocr_call", operation=name):
                 return method(*args, **kwargs)
         return read
 
