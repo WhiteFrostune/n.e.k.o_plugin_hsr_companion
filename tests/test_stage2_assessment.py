@@ -252,11 +252,15 @@ def test_direct_entry_returns_same_card_as_evaluation_and_no_profile_write(tmp_p
 
 
 def test_diagnostic_separates_direct_timeout_and_submitted_equipment_followup():
+    from datetime import datetime, timezone
+
     from plugin.plugins.hsr_companion.runtime.diagnostics import build_diagnostic_report
     from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card, handoff_receipt
     from plugin.plugins.hsr_companion.tests.test_diagnostics import inputs
     params = inputs()
     params["last_tool"] = {"refresh_diagnostics": {"outcome": "timeout"}}
+    # Privacy checks must not accidentally match seconds in the wall clock.
+    params["now"] = datetime(2026, 11, 22, tzinfo=timezone.utc)
     receipts = [handoff_receipt(equipment_card(relic()), channel="followup")]
     result = json.loads(build_diagnostic_report(**params, equipment_handoffs=receipts,
                         followup_status={"state": "submitted", "outcome": "ready"})["copy_text"])

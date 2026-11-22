@@ -10,13 +10,33 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image, ImageDraw
 from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapter
-from plugin.plugins.hsr_companion.runtime import live_refresh
+from plugin.plugins.hsr_companion.runtime import current_regions, live_refresh
 from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.runtime.vision_trace import public_trace
 from plugin.plugins.hsr_companion.tests.test_current_observation import plugin_fixture
 from plugin.plugins.hsr_companion.tests.test_experience_fixes import box
 from plugin.plugins.hsr_companion.tests.test_relic_fields import relic_boxes
+
+
+def patch_validation_capture(monkeypatch, reader):
+    """Restore both defining and from-import consumer bindings on teardown."""
+    monkeypatch.setattr(live_refresh, "fetch_recent_frame", reader)
+    monkeypatch.setattr(current_regions, "fetch_recent_frame", reader)
+
+
+def test_validation_capture_restores_both_module_bindings():
+    original = (live_refresh.fetch_recent_frame, current_regions.fetch_recent_frame)
+
+    async def replacement(owner):
+        return None
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch_validation_capture(patch, replacement)
+        assert live_refresh.fetch_recent_frame is replacement
+        assert current_regions.fetch_recent_frame is replacement
+    assert live_refresh.fetch_recent_frame is original[0]
+    assert current_regions.fetch_recent_frame is original[1]
 
 
 @pytest.mark.parametrize("scenario", ["complete", "partial", "switched"])
@@ -80,7 +100,7 @@ def test_late_relic_question_does_not_wait_for_unrelated_line_reread(tmp_path, m
     owner._assistant_client.fetch_frame = lambda _seq: SimpleNamespace(
         image_bytes=data, frame_seq=21, timestamp=time.time(),
         game={"running": True, "pid": 1}, capture={"state": "capturing", "isolated_window": True})
-    monkeypatch.setattr(live_refresh, "fetch_recent_frame", validation_frame)
+    patch_validation_capture(monkeypatch, validation_frame)
     owner._analysis_capture_at = (live_refresh.datetime.now(live_refresh.timezone.utc) - timedelta(seconds=14)).isoformat()
     owner._analysis_input_frame_seq = 21
     query = build_query_plan("这件遗器的主词条和副词条分别是什么？", "read_screen", screen_fields=["equipment"],
