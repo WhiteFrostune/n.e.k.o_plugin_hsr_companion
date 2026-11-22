@@ -370,7 +370,11 @@ async def invalidate_frame_change(owner: Any, previous, current, controls, reaso
 async def guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict[str, Any] | None:
     """Monitor the live helper while OCR runs; discard superseded work."""
     await wait_delivery_turn(owner)
+    if vision_scheduler.foreground_region_waiting(owner):
+        return None
     async with vision_turn(owner, "producer"):
+        if vision_scheduler.foreground_region_waiting(owner):
+            return None
         return await _guarded_analysis(owner, payload, helper=helper)
 
 
@@ -467,11 +471,16 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
             mark(owner, "handoff_signal", **correlation())
         return requested
 
+    def checkpoint_stop():
+        if not stop.is_set() and vision_scheduler.foreground_region_waiting(owner) and yield_requested():
+            raise QueryPreempted()
+        return stop.is_set()
+
     priority = {"wants_relic": wants_relic} if isinstance(owner._vision, LocalVisionAdapter) else {}
     if callable(live) and _supports_kwarg(live, "yield_requested"):
         priority["yield_requested"] = yield_requested
-    task = asyncio.create_task(asyncio.to_thread(navigation_reader if navigation_only else scene_reader, payload, cancelled=stop.is_set) if scene_only else asyncio.to_thread(
-        live, payload, cancelled=stop.is_set, on_scene=on_scene, **priority
+    task = asyncio.create_task(asyncio.to_thread(navigation_reader if navigation_only else scene_reader, payload, cancelled=checkpoint_stop) if scene_only else asyncio.to_thread(
+        live, payload, cancelled=checkpoint_stop, on_scene=on_scene, **priority
     ) if callable(live) else asyncio.to_thread(owner._vision.analyze, payload))
     changed = False
     page_check_skipped = False
@@ -671,7 +680,7 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
                         return verifier(*args, **kwargs)
                 task = asyncio.create_task(asyncio.to_thread(
                     stable_screen_content, analysis, payload, latest.image_bytes,
-                    verifier=verify if callable(verifier) else None, cancelled=stop.is_set))
+                    verifier=verify if callable(verifier) else None, cancelled=checkpoint_stop))
                 try:
                     analysis = await asyncio.shield(task)
                 except ObservationSuperseded:
@@ -859,7 +868,8 @@ async def watch_latest_frame(owner: Any, payload: bytes, *, helper: bool) -> boo
         if changed:
             from .observation_store import ObservationStore
             if (helper and isinstance(checked_at, (int, float)) and 0 <= time.time() - checked_at <= LIVE_FRAME_MAX_AGE_SECONDS
-                    and getattr(owner, "_vision_schedule_role", "idle") != "producer"):
+                    and getattr(owner, "_vision_schedule_role", "idle") != "producer"
+                    and not vision_scheduler.foreground_region_waiting(owner)):
                 # Between producer passes, try literal review before marking
                 # background animation as lost page/values. Same reviewer and
                 # same serial OCR backend, never a second full recognizer.
@@ -956,6 +966,9 @@ async def _revalidate_guard_text(owner, latest, coordinates, *, evidence=None, c
         owner._last_delivery_verification = {"state": state}
         trace_refresh(owner, "text_verification", reason=state, region_count=len(coordinates))
         return TextVerification(state, frozenset(admitted), capture)
+    demand = vision_scheduler.review_demand.get()
+    if demand is not None and demand.expired():
+        return result("superseded")
     if not callable(reader) or not current:
         return result("unavailable")
     screen = current.get("screen_facts") or {}
@@ -979,7 +992,8 @@ async def _revalidate_guard_text(owner, latest, coordinates, *, evidence=None, c
     # The immutable fact/question/capture boundary owns this native job, not
     # the set of background-challenged pixels chosen by the latest caller.
     # That set can grow/shrink while the SAME job waits for a checkpoint.
-    if job is not None and job["identity"][:4] != identity[:4]:
+    if job is not None and (job["identity"][:4] != identity[:4]
+                            or job.get("demand") is not None and job["demand"].expired()):
         job["stop"].set()
         if job["queued"] is not None:
             job["queued"].cancel()
@@ -987,6 +1001,8 @@ async def _revalidate_guard_text(owner, latest, coordinates, *, evidence=None, c
             return result("busy")  # Drain the native call; never overlap it.
         owner._content_revalidation_job = job = None
     if job is not None:
+        if job.get("demand") is not demand:
+            return result("busy")  # Never consume another request's pending receipt.
         task = job["task"]
         if job["identity"][4] != identity[4]:
             trace_refresh(owner, "verification_scope_changed", queued_regions=len(job["queued_coordinates"]),
@@ -1004,7 +1020,8 @@ async def _revalidate_guard_text(owner, latest, coordinates, *, evidence=None, c
         # A queued screenshot can become old before admission. Acquire a new
         # atomic helper frame in the producer thread, preserving its timestamp.
         def check_current():
-            return (stop.is_set() or (epoch, serial, generation, capture_revision) != (
+            return (stop.is_set() or (demand is not None and demand.expired())
+                or (epoch, serial, generation, capture_revision) != (
                 getattr(owner, "_observation_epoch", 0), getattr(owner, "_observation_serial", 0),
                 getattr(owner, "_answer_query_generation", 0), getattr(owner, "_capture_failure_revision", 0))
                 or getattr(owner, "_observer_stop_requested", False)
@@ -1032,6 +1049,8 @@ async def _revalidate_guard_text(owner, latest, coordinates, *, evidence=None, c
             selected = [p for p in available if proof_key(p)[0] in coordinates]
             if {proof_key(p)[0] for p in selected} != coordinates:
                 raise ValueError("checkpoint_literal_coverage_missing")
+        if check_current():
+            raise ObservationSuperseded()
         if not selected:
             return set(), capture  # All original scoped patches match THIS frame.
         with phase("review_work", owner):
@@ -1048,11 +1067,14 @@ async def _revalidate_guard_text(owner, latest, coordinates, *, evidence=None, c
         @timed_callback("review_work", owner)
         def read_direct():
             def cancelled():
-                return (stop.is_set() or (epoch, serial, generation, capture_revision) != (
+                return (stop.is_set() or (demand is not None and demand.expired())
+                or (epoch, serial, generation, capture_revision) != (
                     getattr(owner, "_observation_epoch", 0), getattr(owner, "_observation_serial", 0),
                     getattr(owner, "_answer_query_generation", 0), getattr(owner, "_capture_failure_revision", 0))
                     or getattr(owner, "_observer_stop_requested", False)
                     or not owner._observer_status.get("enabled"))
+            if cancelled():
+                raise ObservationSuperseded()
             return reader(latest.image_bytes, selected, cancelled=cancelled), latest
         task = asyncio.create_task(asyncio.to_thread(read_direct))
     def finished(value):
@@ -1065,7 +1087,7 @@ async def _revalidate_guard_text(owner, latest, coordinates, *, evidence=None, c
     job = {"identity": identity, "task": task, "stop": stop, "queued": queued,
            "proofs": lambda: selected, "coordinates": lambda: coordinates,
            "queued_coordinates": queued_coordinates, "cooperative": cooperative,
-           "reference_guard": reference_guard}
+           "reference_guard": reference_guard, "demand": demand}
     owner._content_revalidation_job = job
     return await _receive_guard_review(owner, job, result, expected_proofs=available)
 
@@ -1081,6 +1103,8 @@ async def _receive_guard_review(owner, job, result, *, expected_proofs):
     retain = False
     try:
         confirmed, capture = await asyncio.wait_for(asyncio.shield(task), timeout=2.0)
+        if job.get("demand") is not None and job["demand"].expired():
+            return result("superseded")
         if capture is None:
             return result("unavailable")
         selected, coordinates = job["proofs"](), job["coordinates"]()
@@ -1214,6 +1238,17 @@ async def validated_delivery(owner: Any, evidence: dict, *, plan=None) -> dict |
 
 async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_characters: bool = True,
                             require_content: bool = False, require_navigation: bool = False, query_plan=None) -> dict | None:
+    from .current_regions import supports_current_character
+    regional = (supports_current_character(owner, query_plan)
+                and "characters" in query_plan.fields)
+    with vision_scheduler.query_demand(owner, time.monotonic()+timeout, regional=regional) as demand:
+        return await _refresh_for_query(owner, timeout=timeout, require_characters=require_characters,
+            require_content=require_content, require_navigation=require_navigation, query_plan=query_plan,
+            regional_demand=demand if regional else None)
+
+
+async def _refresh_for_query(owner, *, timeout, require_characters, require_content, require_navigation,
+                             query_plan, regional_demand):
     """Validate a scoped snapshot first; otherwise wait for fresh single-worker OCR."""
     owner._last_refresh_diagnostics = {"outcome": "observer_unavailable", "stages": []}
     observer = getattr(owner, "_observer_task", None)
@@ -1248,8 +1283,8 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
         require_characters = require_content = require_navigation = False
         trace_refresh(owner, "page_first_scheduled", remaining_fields=sorted(query_plan.fields - {"page"}))
 
-    async def reuse_selected():
-        result = await try_reuse(owner, **reuse_args)
+    async def reuse_selected(*, pixel_only=False):
+        result = await try_reuse(owner, **reuse_args, **({"pixel_only": True} if pixel_only else {}))
         if page_first and result is not None:
             # Preserve already-ready complete results without queuing native
             # OCR for unrelated text. A miss cannot erase the checked page.
@@ -1278,7 +1313,11 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
         # A cold start must not spend the whole budget waiting for a cache
         # review that is queued behind the producer. A miss falls through to
         # the region path and, at the deadline, to the guarded stale reading.
-        reused = await asyncio.wait_for(reuse_selected(),
+        # A pixel match can still answer immediately. A literal miss goes to
+        # the current region instead of queuing review ahead of its own read.
+        bypass_native = regional_demand is not None and getattr(owner, "_vision_schedule_role", "idle") == "producer"
+        initial = reuse_selected(pixel_only=bypass_native)
+        reused = await asyncio.wait_for(initial,
             timeout=min(1.5, max(.001, fresh_deadline - time.monotonic())))
     except TimeoutError:
         reused = None
@@ -1345,6 +1384,8 @@ async def refresh_for_query(owner: Any, *, timeout: float = 20.0, require_charac
                 region_visual = None
             finally:
                 owner._region_query_waiters -= 1
+                if getattr(owner, "_foreground_region_demand", None) is regional_demand:
+                    owner._foreground_region_demand = None
             if ready(region_visual):
                 trace_refresh(owner, "region_query_selected", fields=sorted(query_plan.fields))
                 completed = True

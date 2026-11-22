@@ -9,13 +9,51 @@ from __future__ import annotations
 import asyncio
 import threading
 import time
-from contextlib import asynccontextmanager
+from collections.abc import Callable
+from contextlib import asynccontextmanager, contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass
 
 from ..adapters.native_text import ObservationSuperseded
 from .vision_trace import bind_trace, measure, record
 
 OCR_DRAIN_SECONDS = 1.0
 _RETAINED_WORKERS = ("_draining_vision_worker", "_content_revalidation_worker")
+
+
+@dataclass(eq=False)
+class ReviewDemand:
+    deadline: float
+    active: bool = True
+    still_current: Callable[[], bool] | None = None
+
+    def expired(self):
+        return (not self.active or time.monotonic() >= self.deadline
+                or self.still_current is not None and not self.still_current())
+
+
+review_demand = ContextVar("ocr_review_demand", default=None)
+
+
+@contextmanager
+def query_demand(owner, deadline, *, regional):
+    """Keep OCR reviews tied to their consumer, including the initial reuse check."""
+    demand = ReviewDemand(deadline)
+    token = review_demand.set(demand)
+    if regional:
+        owner._foreground_region_demand = demand
+    try:
+        yield demand
+    finally:
+        demand.active = False
+        review_demand.reset(token)
+        if regional and getattr(owner, "_foreground_region_demand", None) is demand:
+            owner._foreground_region_demand = None
+
+
+def foreground_region_waiting(owner):
+    demand = getattr(owner, "_foreground_region_demand", None)
+    return demand is not None and not demand.expired()
 
 
 class VisionWorkerBusy(RuntimeError):
@@ -34,13 +72,13 @@ def _admission_blocked(owner):
 
 
 def query_yield_requested(owner, request_generation, scope):
-    """A query may preempt only a pass that does not already cover it.
+    """Yield to an independent region read or a query outside this pass's scope.
 
-    A full pass already serves every question; aborting it would only restart
-    the same work. A scene pass covers scene questions; a navigation pass
-    covers scene and navigation questions. Anything broader (characters,
-    content, equipment) yields at the next native-call boundary.
+    A request that actually needs the full producer may still join it. A scene
+    pass covers scene questions, and a navigation pass also covers navigation.
     """
+    if foreground_region_waiting(owner):
+        return True
     if getattr(owner, "_visual_query_waiters", 0) <= 0:
         return False
     if getattr(owner, "_query_refresh_deadline", 0) <= time.monotonic():
@@ -142,7 +180,7 @@ async def analyze_image(owner, payload):
                     worker.exception()
 
 
-async def run_query_worker(owner, function, *args, deadline, **kwargs):
+async def run_query_worker(owner, function, *args, deadline, prepare=None, **kwargs):
     """A cancelled waiter never releases or forgets native work still running."""
     stop = threading.Event()
     generation = getattr(owner, "_answer_query_generation", 0)
@@ -155,6 +193,13 @@ async def run_query_worker(owner, function, *args, deadline, **kwargs):
     async with vision_turn(owner, "query"):
         if cancelled():
             raise ObservationSuperseded()
+        if prepare is not None:
+            prepared = await prepare()
+            if prepared is None:
+                return None
+            args, kwargs = prepared
+            if cancelled():
+                raise ObservationSuperseded()
         owner._vision_job_id = getattr(owner, "_vision_job_id", 0) + 1
         bind_trace(job_id=owner._vision_job_id)
         def read():

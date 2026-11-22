@@ -78,7 +78,11 @@ def _compact_read(backend, image, layout, cancelled):
     for (_,bounds,_,_),x,y in positions:
         atlas.paste(image.crop(bounds),(x,y))
     check_current(cancelled)
-    _, values = backend.extract_text_with_boxes(atlas)
+    read = (getattr(backend, "extract_native_crops_with_boxes", None) if image.height >= 1080 else None)
+    if callable(read):
+        _, values = read(atlas, min_short_side=320 if image.height >= 1440 else 512)
+    else:
+        _, values = backend.extract_text_with_boxes(atlas)
     check_current(cancelled)
     boxes, names = [], []
     for value in values:

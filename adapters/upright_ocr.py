@@ -46,6 +46,20 @@ class UprightOCRBackend:
                           "right": max(p[0] for p in points), "top": min(p[1] for p in points), "bottom": max(p[1] for p in points)})
         return "\n".join(b["text"] for b in boxes), boxes
 
+    def extract_native_crops_with_boxes(self, image, *, min_short_side=512):
+        """Avoid excessive upscaling of native crops under the adapter gate."""
+        detector = getattr(self.engine, "text_det", None)
+        original = getattr(detector, "limit_side_len", None)
+        if getattr(detector, "limit_type", None) != "min" or not isinstance(original, int):
+            return self.extract_text_with_boxes(image)
+        try:
+            # RapidOCR min mode never shrinks these source pixels. Native
+            # literal and name verification still use the normal profile.
+            detector.limit_side_len = min(original, min_short_side)
+            return self.extract_text_with_boxes(image)
+        finally:
+            detector.limit_side_len = original
+
     def recognize_line(self, image):
         """Public RapidOCR rec-only API for an already detected single text line."""
         import numpy as np
