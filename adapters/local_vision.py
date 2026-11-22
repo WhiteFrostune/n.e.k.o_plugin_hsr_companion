@@ -58,7 +58,7 @@ class _MeasuredOCR:
 
     def __getattr__(self, name):
         method = getattr(self._backend, name)
-        if name not in {"extract_text_with_boxes", "recognize_line"}:
+        if name not in {"extract_text_with_boxes", "extract_native_crops_with_boxes", "recognize_line"}:
             return method
 
         def read(*args, **kwargs):
@@ -461,12 +461,15 @@ class LocalVisionAdapter:
 
             name_labels, skip_name_reread, name_verifier = text_reading_callbacks(self.catalog)
             try:
+                backend = self._get_backend()
                 text, boxes, text_details = read_native_text(
-                    self._get_backend(), image, catalog=self.catalog, cancelled=cancelled,
+                    backend, image, catalog=self.catalog, cancelled=cancelled,
                     on_progress=progress if on_scene is not None else None,
                     verify_names=True,
                     name_labels=name_labels, skip_name_reread=skip_name_reread, name_verifier=name_verifier,
                     yield_requested=yield_requested,
+                    split_background=(yield_requested is not None
+                                      and callable(getattr(backend, "extract_native_crops_with_boxes", None))),
                     **({"accept_native_relic": accept_native_relic, "relic_tiles": relic_tiles}
                        if wants_relic is not None else {}),
                 )

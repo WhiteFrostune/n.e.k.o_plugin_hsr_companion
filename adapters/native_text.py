@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import re
 import time
+from functools import partial
 from typing import Any
 
 
@@ -104,7 +105,7 @@ def split_label_geometry(image, box):
 def read_native_text(
     backend: Any, image: Any, *, catalog: Any = None, cancelled=None, on_progress=None,
     verify_names: bool = False, accept_native_relic=None, relic_tiles=None, yield_requested=None,
-    name_labels=None, skip_name_reread=None, name_verifier=None,
+    name_labels=None, skip_name_reread=None, name_verifier=None, split_background=False,
 ) -> tuple[str, list[dict[str, Any]], dict[str, Any]]:
     """Uniform native tiles, then one bounded reread of wide merged OCR rows."""
     if catalog is not None and not all(callable(callback) for callback in (name_labels, skip_name_reread, name_verifier)):
@@ -126,18 +127,51 @@ def read_native_text(
         except Exception:
             relic_priority = False
 
-    def read(sample, stage):
+    def read(sample, stage, extract=None):
         check_current(cancelled)
         if yield_requested is not None and yield_requested():
             raise QueryPreempted()
         call_started = time.monotonic()
         try:
-            return backend.extract_text_with_boxes(sample)
+            return (extract or backend.extract_text_with_boxes)(sample)
         finally:
             # Includes runtime initialization and shared-backend waiting. Do
             # not mislabel this as pure model inference time.
             calls.append({"stage": stage, "size": list(sample.size),
                           "backend_call_seconds": round(time.monotonic() - call_started, 3)})
+    def background_read(sample, stage):
+        if not split_background:
+            return read(sample, stage)
+        extract = getattr(backend, "extract_native_crops_with_boxes", None)
+
+        scene_probe = stage == "scene_probe"
+        if scene_probe and callable(extract):
+            extract = partial(extract, min_short_side=320)
+
+        def spans(length, limit):
+            if length <= limit:
+                return [(0, length)]
+            midpoint = length // 2
+            return [(0, midpoint + 64), (midpoint - 64, length)]
+
+        horizontal = spans(sample.width, 680)
+        vertical = spans(sample.height, 420 if scene_probe else 680)
+        if len(horizontal) == len(vertical) == 1:
+            return read(sample, stage, extract)
+        # Whole-source coverage at the original input scale. Translating the
+        # boxes before deduplication preserves the existing proof coordinates.
+        boxes = []
+        for top, bottom in vertical:
+            for left, right in horizontal:
+                _, values = read(sample.crop((left, top, right, bottom)), stage + "_part", extract)
+                for value in values:
+                    box = _box_value(value)
+                    boxes.append({**box, "left": left + float(box.get("left") or 0),
+                                  "right": left + float(box.get("right") or 0),
+                                  "top": top + float(box.get("top") or 0),
+                                  "bottom": top + float(box.get("bottom") or 0)})
+        return "", _deduplicate(boxes)
+
     # One reduced full-frame pass reads large UI headings/controls, not names.
     # It covers pages with custom team titles too. Native identity coverage is
     # unchanged and never inherits names from this lower-resolution probe.
@@ -146,7 +180,7 @@ def read_native_text(
         try:
             probe = image.copy()
             probe.thumbnail((768, 768))
-            _, values = read(probe, "scene_probe")
+            _, values = background_read(probe, "scene_probe")
             check_current(cancelled)
             sx, sy = image.width / probe.width, image.height / probe.height
             scaled = []
@@ -178,7 +212,7 @@ def read_native_text(
             failures.append("ocr_time_budget")
             break
         try:
-            _, values = read(image.crop((left, top, right, bottom)), "native_tile")
+            _, values = background_read(image.crop((left, top, right, bottom)), "native_tile")
             check_current(cancelled)
             completed += 1
             for value in values:

@@ -57,27 +57,37 @@ def _layout_regions(owner):
             "name_regions": geometry(a for a in raw.get("characters") or [] if a.get("identity_scope") == "detail_subject")}
 
 
+def supports_current_character(owner, plan):
+    fields = getattr(plan, "fields", frozenset())
+    return bool(fields <= {"page", "characters", "attributes"} and fields & {"characters", "attributes"}
+                and callable(getattr(getattr(owner, "_vision", None), "read_character_detail", None)))
+
+
 @timed("region_packet")
 async def read_current_character(owner, plan, deadline):
-    reader = getattr(owner._vision, "read_character_detail", None)
-    if (not callable(reader) or not plan.fields or not plan.fields <= {"page", "characters", "attributes"}
-            or not plan.fields & {"characters", "attributes"}):
+    if not supports_current_character(owner, plan):
         return None
+    reader = owner._vision.read_character_detail
     generation = getattr(owner, "_answer_query_generation", 0)
     epoch = getattr(owner, "_observation_epoch", 0)
     failure = getattr(owner, "_capture_failure_revision", 0)
     # A real consumer claim prevents the next producer from racing this short
     # read and its review. It does not cancel an unreturned native call.
     async with delivery_turn(owner):
-        with phase("region_capture", owner):
-            source = await fetch_recent_frame(owner, wait_seconds=max(.001, min(2., deadline-time.monotonic())))
-        if source is None or not _live(owner, generation, epoch, failure):
-            return None
-        bind_trace(frame_seq=getattr(source, "frame_seq", None))
-        acquisition = _layout_regions(owner)
-        options = {"layout_regions": acquisition} if acquisition and _supports_kwarg(reader, "layout_regions") else {}
-        analysis = await run_query_worker(owner, reader, source.image_bytes,
-            fields=plan.fields, deadline=deadline, **options)
+        source = None
+
+        async def prepare():
+            nonlocal source
+            with phase("region_capture", owner):
+                source = await fetch_recent_frame(owner, wait_seconds=max(.001, min(2., deadline-time.monotonic())))
+            if source is None or not _live(owner, generation, epoch, failure):
+                return None
+            bind_trace(frame_seq=getattr(source, "frame_seq", None))
+            acquisition = _layout_regions(owner)
+            options = {"layout_regions": acquisition} if acquisition and _supports_kwarg(reader, "layout_regions") else {}
+            return (source.image_bytes,), {"fields": plan.fields, **options}
+
+        analysis = await run_query_worker(owner, reader, deadline=deadline, prepare=prepare)
         if (not isinstance(analysis, dict) or analysis.get("page", {}).get("page_type") != "character_detail"
                 or not analysis.get("scene", {}).get("verified")
                 or not _live(owner, generation, epoch, failure) or time.monotonic() >= deadline):
