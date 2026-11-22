@@ -380,3 +380,26 @@ test('server errors show safe HTTP status and do not duplicate the UID error ale
   assert.match(fixture.text(tree), /HTTP 500/)
   assert.equal(fixture.nodes(tree).filter(n => n.type === 'Alert' && /Enka 本次返回服务器错误/.test(fixture.text(n))).length, 1)
 })
+
+test('observation dashboard keeps timings and reset diagnostics separate from publishing facts', () => {
+  const fixture = panelFixture({ observer: { enabled: true },
+    observation_health: {
+      patrol: { decision: 'wait', fallback: true, reason: 'coverage_unavailable', suppressed: 3 },
+      identity: { required: 2, tracked_counts: [1], pending_count: 1, confirmed_count: 0,
+        recent_resets: [{ at: '2026-11-22T10:00:00Z', reason: 'empty_character_list',
+          slots_cleared: 1, confirmed_cleared: 0 }] },
+      recent_fulls: [{ job_id: 1, processing_seconds: 27.5, state: 'parsed' }],
+      discarded_for_query: 4, discarded_at_30s_gate: 1, current_age_seconds: null,
+      committed_age_seconds: 65.3,
+    },
+  })
+  const panel = fixture.nodes(fixture.render()).find(node => node.props?.id === 'observation-health-v1')
+  assert.equal(panel.type, 'Accordion')
+  assert.equal(panel.props.open, false)
+  const contents = fixture.text(panel)
+  for (const value of ['coverage_unavailable', '回退原调度', '65.3', '27.5', 'empty_character_list', '整屏让位丢弃 4 次']) {
+    assert.ok(contents.includes(value), value)
+  }
+  assert.deepEqual(fixture.calls, [])
+  assert.equal(fixture.refreshes(), 0)
+})

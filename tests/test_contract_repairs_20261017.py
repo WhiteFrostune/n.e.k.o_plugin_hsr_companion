@@ -5,6 +5,7 @@ import hashlib
 import json
 
 import pytest
+from plugin.plugins.hsr_companion.runtime import live_refresh
 from plugin.plugins.hsr_companion.runtime.delivery_scope import scoped_guard
 from plugin.plugins.hsr_companion.runtime.equipment_view import equipment_card
 from plugin.plugins.hsr_companion.runtime.query_coordinator import (
@@ -14,6 +15,7 @@ from plugin.plugins.hsr_companion.runtime.query_coordinator import (
 )
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.runtime.service_contract import record_answer_delivery
+from plugin.plugins.hsr_companion.tests.controlled_time import ManualClock, deadlock_guard
 from plugin.plugins.hsr_companion.tests.test_chain_audit_20261017 import SUBS, audit_owner, commit_raw, raw_page
 from plugin.plugins.hsr_companion.tests.test_current_observation import ROLE
 from plugin.plugins.hsr_companion.tests.test_delivery_fix_20261012 import CONTROL, frame, picture
@@ -153,7 +155,10 @@ def test_final_receipt_hashes_the_return_body_not_an_earlier_projection(tmp_path
 
 
 @pytest.mark.parametrize("word", ["页面", "界面", "场景"])
-def test_role_page_mixed_query_preserves_identity_scope_and_private_proofs(tmp_path, word):
+def test_role_page_mixed_query_preserves_identity_scope_and_private_proofs(tmp_path, word, monkeypatch):
+    # Exercise the scope and privacy contract after prompt fixture verification.
+    # Executor wall time must not consume the optional reuse window in this test.
+    ManualClock().install(monkeypatch, live_refresh)
     owner, _, _ = audit_owner(tmp_path)
 
     async def run():
@@ -169,7 +174,7 @@ def test_role_page_mixed_query_preserves_identity_scope_and_private_proofs(tmp_p
         assert result["current_visual_evidence"]["characters"][0]["identity_scope"] == "team_selection"
         assert "region" not in result["current_visual_evidence"]["characters"][0]
 
-    asyncio.run(run())
+    asyncio.run(deadlock_guard(run()))
 
 
 def test_final_receipts_are_bounded_and_export_no_raw_game_or_chat_text(tmp_path):

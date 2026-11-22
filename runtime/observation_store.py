@@ -342,6 +342,6 @@ class ObservationStore:
         owner._next_frame_scene_only = False
         owner._observation_invalidated = True
         owner._deferred_verification = None
-        owner._runtime.invalidate_observation()
+        owner._runtime.invalidate_observation(reason=reason)
         if hasattr(owner, "_visual_update_event"):
             owner._visual_update_event.set()

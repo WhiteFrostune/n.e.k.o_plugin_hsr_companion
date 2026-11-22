@@ -116,6 +116,7 @@ trace = [
   "runtime/revocation_trace.py",
   "runtime/vision_trace.py",
   "runtime/timing_detail.py",
+  "runtime/recognition_metrics.py",
 ]
 
 [entrypoints]

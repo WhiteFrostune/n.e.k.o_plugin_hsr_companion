@@ -19,6 +19,7 @@ from ..adapters.text_verification import identity_literal, proof_key
 from ..detectors.exploration import generic_navigation
 from . import vision_scheduler
 from .query_reuse import LIVE_FRAME_MAX_AGE_SECONDS, region_stamp, regions_changed, text_pixel_differences, try_reuse
+from .recognition_metrics import record_full
 from .timing_detail import mark, phase, timed_callback
 from .vision_scheduler import VisionWorkerBusy, vision_turn
 from .vision_scheduler import drain_analysis_worker as drain_analysis_worker
@@ -614,6 +615,8 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
         try:
             analysis = await asyncio.shield(task)
         except QueryPreempted:
+            if scope == "full":
+                record_full(owner, job_id=owner._vision_job_id, state="yielded", checkpoint="ocr")
             mark(owner, "handoff_completed", **correlation())
             trace_refresh(owner, "producer_yielded", scope=scope)
             return None
@@ -625,6 +628,8 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
         trace_refresh(owner, "analysis_finished", scope=scope,
                       processing_seconds=(analysis.get("recognition") or {}).get("processing_seconds") if isinstance(analysis, dict) else None,
                       health_polls=health_polls, frame_transfers=frame_transfers)
+        if scope == "full":
+            record_full(owner, job_id=owner._vision_job_id, state="parsed", analysis=analysis)
         record_candidate(owner, "candidate_parsed", analysis, **job)
         if isinstance(analysis, dict) and ((analysis.get("page") or {}).get("page_type") == "relic_detail" or relic_requested):
             reader = (analysis.get("recognition") or {}).get("text_reader") or {}
@@ -648,6 +653,8 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
             # of making the query wait for work it does not need.
             mark(owner, "handoff_completed", **correlation())
             trace_refresh(owner, "producer_yielded", scope=scope, checkpoint="post_ocr")
+            if scope == "full":
+                record_full(owner, job_id=owner._vision_job_id, state="yielded", checkpoint="post_ocr")
             return None
         live_validation = None
         delivery_guard = None
@@ -683,7 +690,9 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
                     verifier=verify if callable(verifier) else None, cancelled=checkpoint_stop))
                 try:
                     analysis = await asyncio.shield(task)
-                except ObservationSuperseded:
+                except ObservationSuperseded as exc:
+                    if scope == "full" and isinstance(exc, QueryPreempted):
+                        record_full(owner, job_id=owner._vision_job_id, state="yielded", checkpoint="literal_review")
                     if job:
                         record(owner, "relic_job_ended", **job, outcome="rejected", reason="analysis_superseded")
                     return None

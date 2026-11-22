@@ -36,9 +36,9 @@ def _basis(owner, pid):
     return key, raw
 
 
-def _note(owner, decision, reason):
+def _note(owner, decision, reason, *, fallback=False):
     previous = getattr(owner, "_patrol_status", {})
-    owner._patrol_status = {"decision": decision, "reason": reason,
+    owner._patrol_status = {"decision": decision, "reason": reason, "fallback": fallback,
         "checks": previous.get("checks", 0)+1,
         "suppressed": previous.get("suppressed", 0)+int(decision == "skip")}
 
@@ -61,7 +61,7 @@ async def remember_capture(owner, payload):
 async def should_scan(owner, payload, *, requested, changed, frame_seq, captured_at, pid):
     """Only replace the old periodic trigger once fresh UI frames are stable."""
     def fallback(reason):
-        _note(owner, "full" if requested else "wait", reason)
+        _note(owner, "full" if requested else "wait", reason, fallback=True)
         return requested
 
     key, raw = _basis(owner, pid)
