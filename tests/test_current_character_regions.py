@@ -248,35 +248,18 @@ def test_formal_tool_returns_current_identity_not_player_roster(tmp_path):
 
 def test_native_reader_reuses_existing_parser_and_double_scale_name_gate(tmp_path):
     from plugin.plugins.hsr_companion.detectors.character_regions import read_character_detail
+    from plugin.plugins.hsr_companion.tests.test_s1_preemption_closeout import PixelBackend, picture
+
     owner, _, _ = owner_at_character(tmp_path)
-    def box(text, left, top, right, bottom, score=.99):
-        return dict(text=text, left=left, top=top, right=right, bottom=bottom, score=score)
-    class Backend:
-        def __init__(self):
-            self.sizes = []
-        def extract_text_with_boxes(self, image):
-            self.sizes.append(image.size)
-            n = len(self.sizes)
-            if n == 1:
-                return "", [box("角色详情", 30, 10, 110, 28), box("光锥", 60, 80, 100, 96),
-                            box("行迹", 60, 120, 100, 136), box("银狼", 500, 40, 560, 60)]
-            if n == 2:
-                return "", [box("银狼", 6, 6, 66, 26)]
-            if n == 3:
-                return "", [box("银狼", 40, 36, 160, 76)]
-            if n == 4:
-                return "", [box("防御力", 10, 15, 60, 35), box("3335", 180, 15, 230, 35)]
-            raise AssertionError("Unexpected extra OCR pass")
-    backend = Backend()
-    buffer = BytesIO()
-    Image.new("RGB", (640, 400), "black").save(buffer, format="PNG")
-    result = read_character_detail(backend, buffer.getvalue(), owner._catalog,
+    backend = PixelBackend()
+    result = read_character_detail(backend, picture(), owner._catalog,
                                    fields={"characters", "attributes"})
     assert result["characters"][0]["entity_id"] == "character.silverwolf"
     assert result["characters"][0]["name_validation"]["method"] == "native_and_enlarged_label_agree"
-    assert any(f.get("label") == "防御力" and f.get("value") == "3335" for f in result["screen_facts"]["facts"])
-    assert len(backend.sizes) == 4
-    assert backend.sizes[1][0] < 640
+    assert any(f.get("label") == "\u9632\u5fa1\u529b" and f.get("value") == "3335" for f in result["screen_facts"]["facts"])
+    # Layout/name are one native acquisition; attributes still use their own native read.
+    assert len(backend.calls) == 3
+    assert backend.calls[1]["size"][0] < 640
     assert not result["recognition"]["text_reader"]["full_frame_covered"]
 
 

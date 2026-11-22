@@ -168,10 +168,10 @@ class LocalVisionAdapter:
                             **({"yield_requested": yield_requested} if yield_requested is not None else {}))
 
     @serial_ocr
-    def read_character_detail(self, payload, *, fields, cancelled=None):
+    def read_character_detail(self, payload, *, fields, cancelled=None, layout_regions=None):
         from ..detectors.character_regions import read_character_detail
         return read_character_detail(self._get_backend(), payload, self.catalog,
-                                     fields=fields, cancelled=cancelled)
+                                     fields=fields, cancelled=cancelled, layout_regions=layout_regions)
 
     @serial_ocr
     def read_region(self, image_bytes: bytes, regions: list, *, cancelled=None, yield_requested=None) -> list:

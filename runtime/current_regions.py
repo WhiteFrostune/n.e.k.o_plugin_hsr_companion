@@ -10,7 +10,7 @@ from ..adapters.text_verification import identity_literal
 from .contracts import native_name_confirmed
 from .delivery_scope import coordinates
 from .fact_lifecycle import candidate_evidence
-from .live_refresh import delivery_turn, fetch_recent_frame, frame_stamp, trace_refresh
+from .live_refresh import _supports_kwarg, delivery_turn, fetch_recent_frame, frame_stamp, trace_refresh
 from .observation_store import ObservationSnapshot
 from .query_reuse import _SUPERSEDED, _remember_candidate, region_stamp, regions_changed, review_snapshot
 from .review_policy import checked_receipt
@@ -43,6 +43,19 @@ def _page_guard(owner, packet, snapshot):
     trace_refresh(owner, "region_page_guard_admitted", region_count=len(controls))
 
 
+def _layout_regions(owner):
+    """Only acquisition coordinates, never cached text, identities or values."""
+    raw = getattr(owner, "_committed_observation", None) or {}
+    if (raw.get("page") or {}).get("page_type") != "character_detail":
+        return None
+    recognition = raw.get("recognition") or {}
+    def geometry(values):
+        return [{"region": dict(a["region"])} for a in values if isinstance(a,dict) and isinstance(a.get("region"),dict)]
+    return {"source_size": recognition.get("source_size"),
+            "page_controls": geometry(recognition.get("scene_regions") or []),
+            "name_regions": geometry(a for a in raw.get("characters") or [] if a.get("identity_scope") == "detail_subject")}
+
+
 async def read_current_character(owner, plan, deadline):
     reader = getattr(owner._vision, "read_character_detail", None)
     if (not callable(reader) or not plan.fields or not plan.fields <= {"page", "characters", "attributes"}
@@ -58,8 +71,10 @@ async def read_current_character(owner, plan, deadline):
         if source is None or not _live(owner, generation, epoch, failure):
             return None
         bind_trace(frame_seq=getattr(source, "frame_seq", None))
+        acquisition = _layout_regions(owner)
+        options = {"layout_regions": acquisition} if acquisition and _supports_kwarg(reader, "layout_regions") else {}
         analysis = await run_query_worker(owner, reader, source.image_bytes,
-            fields=plan.fields, deadline=deadline)
+            fields=plan.fields, deadline=deadline, **options)
         if (not isinstance(analysis, dict) or analysis.get("page", {}).get("page_type") != "character_detail"
                 or not analysis.get("scene", {}).get("verified")
                 or not _live(owner, generation, epoch, failure) or time.monotonic() >= deadline):

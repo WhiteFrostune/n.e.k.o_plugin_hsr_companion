@@ -15,10 +15,13 @@ Warm cache success alone did not cover this path.
 
 ## Execution changes
 
-- L2a detectors/character_regions.py: classify the CURRENT capture with the
-  existing thumbnail page classifier, then read native character-name and, only
-  when requested, attribute regions. Geometry comes from current labels with
-  bounded layout fallbacks; neither a crop nor a database name grants identity.
+- L2a detectors/character_regions.py: assemble CURRENT native control/name
+  crops into one compact atlas, then use the existing page classifier and exact
+  native/enlarged name verifier. No full-frame thumbnail precedes this path.
+  Prior same-size coordinates are acquisition hints only; cached labels, IDs and
+  values are never passed. Invalid/resized hints use bounded layout acquisition.
+  Attribute regions are read only when requested. Neither a crop nor a database
+  name grants identity.
 - Factor the existing native/enlarged exact-name gate into contracts, unchanged.
   A thumbnail name, alias or uncorroborated name cannot pass this gate. Ambiguous
   subjects remain unknown. No new OCR backend or multi-frame numeric assembly.
@@ -107,3 +110,92 @@ That is a 0.9.7 backup, NOT a substitute for backing up the current installed P8
 - Import-layer gate: 5 passed; zero violations; baseline unchanged.
 - Thirteen existing warnings (settings deprecation / JUnit record_property compatibility).
 - No new real-game or host-model acceptance is claimed.
+
+## S1 follow-up: pre-native admission and compact acquisition (2026-11-22)
+
+Approved changes only: central native-call preemption and character-detail
+acquisition. Installed S1 efa451a and the original helper remain unchanged.
+No answer/manual/follow-up deadline, cache-age cap, score threshold or native /
+enlarged agreement predicate changes. No additional model or host changes.
+
+The single isolated request exposed a pre-native checkpoint gap: a region waiter
+already existed when the background producer started an 11.230 s native call;
+the region consumer waited 7.054 s and timed out before name/page/review stages.
+The saved previous chat has a DIFFERENT timing (admission at +0.219 s); this is
+not a claim that its post-admission failure has now been explained.
+
+Changes:
+- Put the preemption check in the existing read_native_text backend-call helper,
+  covering the initial scene probe and name confirmation as well as tiles. Remove
+  the immediately redundant unresolved-atlas check. A call already in progress is
+  retained until its actual return; no async cancellation is sold as thread exit.
+- Replace the full-frame thumbnail + separate native name read with current
+  control/name crops packed at scale 1 into a bounded native atlas. Reuse the
+  existing page classifier; remap only boxes wholly contained in a single chip.
+  Do not accept seam-spanning boxes or suppress alternative subjects in the name
+  header by a narrow old-name crop. All accepted identities still need the
+  unchanged native/enlarged confirmation and final current-frame snapshot review.
+- Pass only coordinates and original dimensions from prior character layout.
+  Current native controls/name determine results. No old identity/value import,
+  no two-frame fact merging, and no new query keyword/page-classification rules.
+- Update one existing test fixture to locate glyph markers in actual crops rather
+  than returning boxes for the old call order. Its identity, score-method and
+  numeric-result assertions remain; expected OCR count changes from four to three
+  for attributes because control/name acquisition is combined. This assertion
+  change was explained before editing, and does not relax a correctness gate.
+
+New counterexamples cover waiting before the first probe, demand arriving while
+preparing that probe, demand before name confirmation, actual in-flight native
+work, absent/wrong controls, weak/disagreeing/ambiguous names, atlas seams,
+resized/malformed prior geometry, cancellation, and geometry without cached text.
+Initial new-contract red run: 8 failed / 5 passed, including unavailable new API
+arguments. Later broader tests retain all first failures locally.
+
+Work comparison uses the SAME synthetic marker frame and a backend substitute,
+NOT a real-model benchmark: character-only OCR calls 3 -> 2; sampled pixels
+494082 -> 428088 (cold layout), or 347136 (prior-layout acquisition). Real OCR
+latency and the original chat's post-admission gap remain unverified here.
+
+The related legacy relic timing suite failed three cases in a targeted run.
+An isolated countercheck using the actual pre-change read_native_text function
+also failed its unchanged selected case under the same environment. This is
+retained as a pre-existing timing sensitivity, NOT waived or marked passed.
+No timeout constants, skip markers or old relic assertions were altered.
+The final full-suite gate is reported separately with its actual outcome.
+
+Known limits: a required native call may itself exceed the direct-answer budget;
+compact geometry alone does not promise latency. Unknown layouts may remain
+unknown. Chat-activity follow-up and manual-refresh completion stay outside this
+patch. Installation and further live checks require separate confirmation.
+
+### Follow-up gate outcome: BLOCKED, not committed
+
+First pre-commit full run: 2546 passed / 3 failed / 10 skipped (432.654 s).
+One failure was introduced by retaining the outer tile check after centralizing
+pre-native admission. The duplicate was removed; the unchanged original
+between-tiles assertion now passes. Corrected-code targeted run: 34 passed /
+1 failed (a 1-second cancellation fixture expired before its second read).
+The 22 new S1 follow-up cases pass. No old priority/cancellation/relic assertions
+or test durations were relaxed.
+
+Remaining two failure families have baseline counterexamples:
+- Original read_native_text, unchanged late-relic timing case: timeout again.
+- Entire original efa451a source, unchanged empty-advice/late-slot case: timeout
+  again (one read before the 1-second fixture deadline).
+These counterexamples show the failures are not newly introduced by the two
+approved changes; they do not make the tests passed or prove the product stable.
+
+Corrected-code Ruff passes. Layer gate: 5 passed, 0 violations; baseline unchanged.
+The full gate is NOT cleared; there was no second full-suite run to seek green.
+No commit/push/install is made. The installed payload still matches efa451a.
+A separate decision is needed before changing legacy test-clock/scheduling
+fixtures; product deadlines and correctness assertions must remain unchanged.
+
+### Subsequent test-only closeout
+
+The blocked run above is historical evidence and remains preserved. The
+separately approved clock/scheduling step reproduced cancellation on unchanged
+efa451a before changing fixtures. With no further product changes, the combined
+candidate now passes all gates. See STABILITY_S1_TEST_CLOCK.md for actual
+counts, deadlines, assertion preservation and evidence limits. The two steps
+are committed separately; this is not permission to replace the installed build.
