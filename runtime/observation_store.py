@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from plugin.sdk.plugin import unwrap_or
 
 from .contracts import STALE_MAX_AGE_SECONDS
-from .observation_evidence import public_visual_evidence
+from .observation_evidence import public_visual_evidence, with_identity_confirmation
 
 
 def richer_last_successful(latest, previous, *, now=None):
@@ -185,7 +185,7 @@ class ObservationStore:
         if deferred and deferred[:2] == (getattr(owner, "_observation_epoch", 0), getattr(owner, "_observation_serial", 0)):
             from .delivery_scope import withhold_regions
             value = withhold_regions(value, deferred[2], identity_proofs=(latest or {}).get("characters", []))
-        return value
+        return with_identity_confirmation(owner, value)
 
     def commit(self, analysis, *, archive=True):
         """Atomically replace current state; never promote historical display."""

@@ -69,7 +69,7 @@ from .runtime.live_refresh import (
     watch_latest_frame,
 )
 from .runtime.manual_refresh import cancel_manual_refresh, public_manual_refresh, request_manual_refresh
-from .runtime.observation_evidence import VISUAL_TTL_SECONDS, public_visual_evidence
+from .runtime.observation_evidence import VISUAL_TTL_SECONDS, public_visual_evidence, with_identity_confirmation
 from .runtime.observation_store import ObservationStore
 from .runtime.patrol import remember_capture as patrol_remember_capture
 from .runtime.patrol import should_scan as patrol_should_scan
@@ -654,6 +654,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             "observation_serial": self._observation_serial,
             "runtime": {"stable_scene": preview["scene"]["primary_state"], "stable_character_ids": []},
         }
+        self._runtime.observe_identity_page(next_page)
         self._preview_frame_stamp = getattr(self, "_analysis_frame_stamp", None)
         self._observation_invalidated = False
         self._observer_status["state"] = "observing"
@@ -793,6 +794,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             # Do not let a weak same-page reread overwrite an independently
             # checkable complete result. Missing text is not new item data;
             # changed values/objects still replace the old commit normally.
+            self._runtime.note_identity_read_issue(analysis)
             trace_refresh(self, "candidate_retained", reason="same_page_incomplete_read")
             from .runtime.page_control_trace import record_controls
             record_controls(self, "retained", analysis=analysis)
@@ -829,6 +831,7 @@ class HsrCompanionPlugin(NekoPluginBase):
         event, decisions = self._runtime.ingest(
             analysis, proactive_enabled=deliver_event and self._observer_status.get("proactive_enabled") is True,
             idle_chatter_enabled=self._observer_status.get("idle_chatter_enabled") is True,
+            track_identity=source.startswith(("assistant", "plugin_compatibility")),
         )
         scene = dict(analysis.get("scene") or {})
         stable_scene = self._runtime.stable_scene
@@ -2590,6 +2593,13 @@ class HsrCompanionPlugin(NekoPluginBase):
                 final_visual["screen_facts"]["unclassified_text"] = []
                 if navigation_request:
                     final_visual["screen_facts"]["visible_text"] = []
+            identity_requested = bool(query_plan.fields & {"characters", "controlled_character"})
+            if identity_requested and answer_generation == self._answer_query_generation:
+                final_visual = with_identity_confirmation(self, final_visual)
+            identity_confirmation = final_visual.get("identity_confirmation") or {}
+            identity_failed = identity_requested and identity_confirmation.get("state") == "failed"
+            if identity_failed and not final_visual.get("characters"):
+                final_visual["page_characters"] = []
             changed = {k: v for k, v in current_visual.items() if k != "delivery_boundary"} != {
                 k: v for k, v in final_visual.items() if k != "delivery_boundary"}
             current_visual = final_visual
@@ -2646,7 +2656,10 @@ class HsrCompanionPlugin(NekoPluginBase):
             from .runtime.request_completion import evaluate_request
             request_progress = evaluate_request(query_plan, current_visual, completion=completion)
             waiting_can_help = not completion.get("requested") or completion.get("can_wait_for_evidence")
-            if not waiting_can_help:
+            if identity_failed and not answer_characters and query_plan.fields <= {"page", "characters", "controlled_character"}:
+                waiting_can_help = False
+                followup.update(reason="identity_confirmation_failed", instruction=identity_confirmation["message"])
+            elif not waiting_can_help:
                 followup.update(reason=completion["state"], instruction=completion["instruction"])
             prepare_stage("request_completion", completed=True)
             prepare_stage("followup_registration")
@@ -2735,7 +2748,8 @@ class HsrCompanionPlugin(NekoPluginBase):
                 "query_timing": {"refresh_wait_seconds": query_observation.wait_seconds,
                                  "refresh": query_observation.refresh},
                 "screen_identity_answer": {
-                    "requested": bool(query_plan.fields & {"characters", "controlled_character"}),
+                    "requested": identity_requested,
+                    **({"confirmation": identity_confirmation} if identity_requested and identity_confirmation else {}),
                     "allowed": bool(answer_characters),
                     "scope": "controlled_character" if controlled_request else "visible_identity",
                     "names": [item["name"] for item in answer_characters],
@@ -2746,7 +2760,11 @@ class HsrCompanionPlugin(NekoPluginBase):
                                            if current_visual.get("page_type") == "unknown" else ""),
                     "characters_complete": current_visual.get("characters_complete"),
                     "team_roster_known": current_visual.get("team_roster_known"),
-                    "unavailable_reply": ("目前尚未确认你正在操控哪一位角色。" if controlled_request else "目前无法确认画面中的角色。") if not answer_characters and not scene_only_request else "",
+                    "unavailable_reply": (
+                        identity_confirmation["message"] if identity_failed
+                        else "目前尚未确认你正在操控哪一位角色。" if controlled_request
+                        else "目前无法确认画面中的角色。"
+                    ) if not answer_characters and not scene_only_request else "",
                 },
                 "answer_policy": {
                     "screen_information_is_not_web_search": (
@@ -3350,7 +3368,6 @@ class HsrCompanionPlugin(NekoPluginBase):
             "local_vision": local_vision,
             "current_visual_evidence": observation_display["current"],
             "observation_display": observation_display,
-            "observation_health": observation_health(self, observation_display["current"]),
             "manual_refresh": public_manual_refresh(self),
             "vision_backend": await asyncio.to_thread(self._vision.status),
             "runtime": self._runtime.snapshot(),

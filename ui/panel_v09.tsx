@@ -14,6 +14,7 @@ type Diagnostic = {
   checks: { name: string; level: "info" | "success" | "warning"; detail: string }[]
   last_query?: { outcome?: string; wait_seconds?: number | null }
   copy_text: string
+  observation_health?: Record<string, unknown>
 }
 type DiagnosticExport = { path: string; filename: string; checked_at: string }
 type EquipmentCard = {
@@ -22,6 +23,7 @@ type EquipmentCard = {
   sub_stats?: { label: string; value: string }[]
 }
 type Visual = {
+  identity_confirmation?: { state: string; reason: string; message?: string }
   fresh?: boolean; status?: string; observed_at?: string; scene?: { label?: string; verified?: boolean }
   characters?: { name?: string }[]; controlled_character?: { name?: string }
   screen_facts?: { facts?: { kind?: string; label?: string; value?: string }[]; equipment_card?: EquipmentCard }
@@ -42,18 +44,7 @@ type UidImport = {
     summary?: { added: number; updated: number; unchanged: number; retained: number; total_after: number } } | null
   roster?: { characters: ImportedBuild[] }
 }
-type ObservationHealth = {
-  patrol?: { decision?: string; reason?: string; fallback?: boolean; suppressed?: number }
-  identity?: { required?: number; tracked_counts?: number[]; pending_count?: number; confirmed_count?: number
-    recent_resets?: { at: string; reason: string; slots_cleared: number; confirmed_cleared: number }[] }
-  recent_fulls?: { job_id: number; processing_seconds?: number | null; state: string }[]
-  discarded_for_query?: number
-  discarded_at_30s_gate?: number
-  current_age_seconds?: number | null
-  committed_age_seconds?: number | null
-}
 type CompanionState = {
-  observation_health?: ObservationHealth
   observer?: { enabled?: boolean; state?: string; message?: string; assistant?: Assistant; capture_backend?: string }
   vision_assistant?: Assistant
   current_visual_evidence?: Visual
@@ -148,7 +139,7 @@ export default function HsrCompanionPanel(props: PluginSurfaceProps<CompanionSta
   const assistant = state.vision_assistant || observer.assistant || {}
   const visual = state.observation_display?.current || state.current_visual_evidence || {}
   const history = state.observation_display?.last_successful
-  const health = state.observation_health
+  const identityFailed = observer.enabled && visual.identity_confirmation?.state === "failed"
   const manualRefresh = state.manual_refresh || {}
   const usable = observer.enabled === true && visual.fresh === true
   const roles = usable ? (visual.characters || []).map(item => item.name).filter(Boolean) : []
@@ -334,6 +325,9 @@ export default function HsrCompanionPanel(props: PluginSurfaceProps<CompanionSta
       statusKey = "panel.connecting"; statusTone = "warning"; explanation = t("panel.connectingHelp")
     } else if (!assistant.game?.running && observer.capture_backend !== "plugin_compatibility") {
       statusKey = "panel.waitingGame"; statusTone = "warning"; explanation = t("panel.waitingGameHelp")
+    } else if (identityFailed) {
+      statusKey = "panel.identityFailed"; statusTone = "warning"
+      explanation = visual.identity_confirmation?.message || t("panel.rolesUnconfirmed")
     } else if (usable && visual.scene?.verified) {
       statusKey = "panel.ready"; statusTone = "success"; explanation = visual.scene.label || t("panel.ready")
     } else {
@@ -354,7 +348,7 @@ export default function HsrCompanionPanel(props: PluginSurfaceProps<CompanionSta
           <Text>{explanation}</Text>
           {usable && roles.length ? <Text>{t("panel.roles", { names: roles.join("、") })}</Text> : null}
           {usable && visual.controlled_character?.name ? <Text>{t("panel.controlled", { name: visual.controlled_character.name })}</Text> : null}
-          {usable && visual.scene?.verified && !roles.length ? <Text>{t("panel.rolesUnconfirmed")}</Text> : null}
+          {usable && visual.scene?.verified && !roles.length && !identityFailed ? <Text>{t("panel.rolesUnconfirmed")}</Text> : null}
           {facts.filter(fact => ["current_location", "quest_objective"].includes(fact.kind || "")).slice(0, 2).map((fact, index) => (
             <Text key={index}>{fact.label}：{fact.value}</Text>
           ))}
@@ -370,33 +364,6 @@ export default function HsrCompanionPanel(props: PluginSurfaceProps<CompanionSta
             {history.scene?.verified ? <Text>{history.scene.label}</Text> : null}
             {history.characters?.length ? <Text>{t("panel.roles", { names: history.characters.map(item => item.name).filter(Boolean).join("、") })}</Text> : null}
             {(history.screen_facts?.facts || []).slice(0, 12).map((fact, index) => <Text key={index}>{fact.label}：{String(fact.value || "").slice(0, 160)}</Text>)}
-          </Accordion> : null}
-          {health ? <Accordion id="observation-health-v1" open={false} title={t("observationHealth.title")}>
-            <Text>{t("observationHealth.patrol", {
-              decision: t("observationHealth." + (health.patrol?.decision || "unknown")),
-              reason: health.patrol?.reason || "—",
-              fallback: health.patrol?.fallback ? t("observationHealth.fallback") : "",
-              count: health.patrol?.suppressed || 0,
-            })}</Text>
-            <Text>{t("observationHealth.age", {
-              current: health.current_age_seconds ?? "—", committed: health.committed_age_seconds ?? "—",
-            })}</Text>
-            <Text>{t("observationHealth.identity", {
-              counts: (health.identity?.tracked_counts || []).join(" / ") || "—",
-              required: health.identity?.required ?? "—", pending: health.identity?.pending_count ?? 0,
-              confirmed: health.identity?.confirmed_count ?? 0,
-            })}</Text>
-            <Text>{t("observationHealth.discards", {
-              yielded: health.discarded_for_query || 0, late: health.discarded_at_30s_gate || 0,
-            })}</Text>
-            <Text>{t("observationHealth.fulls", { samples: (health.recent_fulls || [])
-              .map(pass => String(pass.processing_seconds ?? "—") + (pass.state === "yielded" ? " ×" : ""))
-              .join(" / ") || "—" })}</Text>
-            {(health.identity?.recent_resets || []).slice(-5).reverse().map((entry, index) =>
-              <Text key={index}>{t("observationHealth.reset", {
-                time: new Date(entry.at).toLocaleTimeString(), reason: entry.reason,
-                slots: entry.slots_cleared, confirmed: entry.confirmed_cleared,
-              })}</Text>)}
           </Accordion> : null}
           <Button tone={observer.enabled ? "default" : "success"} disabled={!!running} onClick={() => call(
             observer.enabled ? "stop_auto_observation" : "start_auto_observation", {}, "companion",
@@ -520,6 +487,10 @@ export default function HsrCompanionPanel(props: PluginSurfaceProps<CompanionSta
             <Text>{t("diagnostics.checkedAt", { time: new Date(diagnostic.checked_at).toLocaleString() })}</Text>
             {diagnostic.checks.map((check, index) => <StatusBadge key={index} tone={check.level} label={t("diagnostics.check." + check.name) + "：" + t("diagnostics.detail." + check.detail)} />)}
             {diagnostic.last_query?.wait_seconds != null ? <Text>{t("diagnostics.queryTiming", { seconds: diagnostic.last_query.wait_seconds, outcome: t("diagnostics.outcome." + diagnostic.last_query.outcome) })}</Text> : null}
+            {diagnostic.observation_health ? <Stack>
+              <Text>{t("diagnostics.observationHealth")}</Text>
+              <Textarea value={JSON.stringify(diagnostic.observation_health, null, 2)} />
+            </Stack> : null}
             <Button disabled={!!running} onClick={copyDiagnostic}>{t("diagnostics.copy")}</Button>
             {manualCopy ? <Stack>
               <Alert tone="warning">{t("diagnostics.copyFailed")}</Alert>

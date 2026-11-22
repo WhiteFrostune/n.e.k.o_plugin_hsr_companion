@@ -10,11 +10,13 @@ from types import SimpleNamespace
 
 import pytest
 from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
+from plugin.plugins.hsr_companion.runtime import live_refresh, vision_scheduler
 from plugin.plugins.hsr_companion.runtime.grounding import build_grounding
 from plugin.plugins.hsr_companion.runtime.live_refresh import guarded_analysis, refresh_for_query
 from plugin.plugins.hsr_companion.runtime.observation_store import ObservationStore
 from plugin.plugins.hsr_companion.runtime.query_coordinator import answer_status, needs_followup
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
+from plugin.plugins.hsr_companion.tests.controlled_time import ManualClock, deadlock_guard
 from plugin.plugins.hsr_companion.tests.test_current_observation import analysis, plugin_fixture
 from plugin.plugins.hsr_companion.tests.test_delivery_fix_20261012 import CONTROL, TEXT, frame, picture
 from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner, request, visual
@@ -129,7 +131,10 @@ def test_same_page_preview_does_not_replace_full_read_during_query(tmp_path):
     asyncio.run(run())
 
 
-def test_changed_literal_rejects_full_cache(tmp_path):
+def test_changed_literal_rejects_full_cache(tmp_path, monkeypatch):
+    # The scenario verifies the changed frame before letting the query expire.
+    # Executor wall time must not decide whether this test saw that frame.
+    ManualClock().install(monkeypatch, live_refresh, vision_scheduler, expire_events=True)
     owner, _, _ = plugin_fixture(tmp_path)
     owner._vision = SimpleNamespace(analyze=lambda data: page_result())
     owner._assistant_client = SimpleNamespace(fetch_frame=lambda seq: frame(picture()))
@@ -145,7 +150,7 @@ def test_changed_literal_rejects_full_cache(tmp_path):
         assert current["fresh"] and not current["screen_facts"]["facts"]
         assert not current["screen_facts"]["visible_text"]
         assert (await ObservationStore(owner).display())["last_successful"]["screen_facts"]["facts"]
-    asyncio.run(run())
+    asyncio.run(deadlock_guard(run()))
 
 
 def test_transient_error_can_register_and_deliver_one_recovered_answer(monkeypatch):
