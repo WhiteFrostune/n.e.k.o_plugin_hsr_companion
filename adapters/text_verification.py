@@ -144,7 +144,7 @@ def verify_text_regions(backend, payload, proofs, *, cancelled=None, trace=None)
     return confirmed
 
 
-def verify_name_regions(backend, image, boxes, catalog, *, cancelled=None, read=None):
+def verify_name_regions(backend, image, boxes, catalog, *, cancelled=None, read=None, single_line=False):
     """Re-read canonical label pixels, not a second expensive full screenshot.
 
     Both reads must agree on a complete canonical name at high confidence.
@@ -175,6 +175,11 @@ def verify_name_regions(backend, image, boxes, catalog, *, cancelled=None, read=
     # Bounded atlases retain native pixels or enlarge them, including English
     # collab names. A long label must never trigger the backend's downsampling.
     pending = list(candidates[:32])
+    # A known, already detected line can be recognized without detecting its
+    # tight enlarged crop a second time. The agreement/quality checks below
+    # are shared with the atlas path; this never supplies a name itself.
+    line_reader = getattr(backend, "recognize_line", None) if single_line and len(candidates) == 1 else None
+    line_reader = line_reader if callable(line_reader) else None
     while pending:
         check_current(cancelled)
         batch, y = [], 24
@@ -186,19 +191,30 @@ def verify_name_regions(backend, image, boxes, catalog, *, cancelled=None, read=
                 pending.pop(0)
                 continue
             h = math.ceil((bottom - top) * scale)
-            if batch and y + h + 24 > 1500:
+            if batch and (line_reader is not None or y + h + 24 > 1500):
                 break
             pending.pop(0)
             batch.append((*candidate, scale, y, h))
             y += h + 24
         if not batch:
             break
-        atlas = Image.new("RGB", (max(math.ceil((b[2][2] - b[2][0]) * b[3]) for b in batch) + 48, y), "black")
-        for _, _, bounds, scale, atlas_y, h in batch:
+        if line_reader is not None:
+            _, _, bounds, scale, atlas_y, h = batch[0]
             crop = image.crop(bounds)
-            atlas.paste(crop.resize((math.ceil(crop.width * scale), h), Image.Resampling.LANCZOS), (24, atlas_y))
+            enlarged = crop.resize((math.ceil(crop.width * scale), h), Image.Resampling.LANCZOS)
+        else:
+            atlas = Image.new("RGB", (max(math.ceil((b[2][2] - b[2][0]) * b[3]) for b in batch) + 48, y), "black")
+            for _, _, bounds, scale, atlas_y, h in batch:
+                crop = image.crop(bounds)
+                atlas.paste(crop.resize((math.ceil(crop.width * scale), h), Image.Resampling.LANCZOS), (24, atlas_y))
         try:
-            _, values = read(atlas, "name_verification") if read else backend.extract_text_with_boxes(atlas)
+            if line_reader is not None:
+                check_current(cancelled)
+                values = [dict(text=text, score=score, left=24, top=atlas_y,
+                               right=24 + enlarged.width, bottom=atlas_y + h)
+                          for text, score in line_reader(enlarged)]
+            else:
+                _, values = read(atlas, "name_verification") if read else backend.extract_text_with_boxes(atlas)
             check_current(cancelled)
         except ObservationSuperseded:
             raise

@@ -111,7 +111,7 @@ def read_character_detail(backend, payload, catalog, *, fields, cancelled=None, 
     if (preview is None or preview["page"].get("page_type") != "character_detail"
             or not preview["scene"].get("verified") or not preview["recognition"].get("scene_regions")):
         return None
-    names,name_check = verify_name_regions(backend,image,names,catalog,cancelled=cancelled)
+    names,name_check = verify_name_regions(backend,image,names,catalog,cancelled=cancelled,single_line=True)
     actors = detect_characters_in_page(preview["page"],names,catalog,width=image.width,height=image.height)
     actors = [a for a in actors if a.get("identity_scope") == "detail_subject" and native_name_confirmed(a)]
     if len({a["entity_id"] for a in actors}) != 1:

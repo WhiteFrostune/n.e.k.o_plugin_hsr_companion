@@ -94,6 +94,11 @@ async def read_current_character(owner, plan, deadline):
                 or not _live(owner, generation, epoch, failure)):
             return None
         def controls_changed():
+            # Exact current/source bytes prove equality more strongly than a
+            # second decode of both control crops. Fresh capture, PID and all
+            # lifecycle guards above still apply; final review stays shared.
+            if source.image_bytes == latest.image_bytes:
+                return False
             return regions_changed(region_stamp(source.image_bytes, controls), region_stamp(latest.image_bytes, controls))
         if await asyncio.to_thread(controls_changed):
             return None
