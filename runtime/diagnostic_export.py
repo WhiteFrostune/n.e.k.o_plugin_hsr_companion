@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
 
 def export_diagnostic(directory: Path, report: dict) -> dict:
-    text = report["copy_text"]
-    if not isinstance(text, str) or len(text.encode("utf-8")) > 131072:
+    snapshot = report.get("snapshot")
+    if not isinstance(snapshot, dict) or snapshot.get("schema_version") != 2:
         raise ValueError("Invalid diagnostic snapshot")
-    if not isinstance(json.loads(text), dict):
+    from .diagnostic_snapshot import canonical_text, summaries
+    text = canonical_text(snapshot)
+    copied = "\n".join([*summaries(snapshot), text])
+    if (len(copied.encode("utf-8")) > 131072 or report.get("copy_text") != copied
+            or report.get("diagnostic_id") != snapshot.get("diagnostic_id")
+            or report.get("checked_at") != snapshot.get("checked_at")):
         raise ValueError("Invalid diagnostic snapshot")
     directory = Path(directory).resolve()
     directory.mkdir(parents=True, exist_ok=True)
@@ -23,4 +27,5 @@ def export_diagnostic(directory: Path, report: dict) -> dict:
     with target.open("x", encoding="utf-8", newline="\n") as output:
         output.write(text)
         output.write("\n")
-    return {"path": str(target), "filename": filename, "checked_at": report["checked_at"]}
+    return {"path": str(target), "filename": filename, "checked_at": report["checked_at"],
+            "diagnostic_id": snapshot["diagnostic_id"]}

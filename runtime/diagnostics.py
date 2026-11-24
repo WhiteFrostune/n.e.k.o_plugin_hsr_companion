@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
 import math
 import re
 from datetime import datetime, timezone
 from typing import Any
 
-from .build_info import BUILD_REVISION, PLUGIN_VERSION
+from .build_info import BUILD_COMMIT, BUILD_REVISION, PLUGIN_VERSION
+from .diagnostic_snapshot import finish
 from .equipment_view import equipment_card, handoff_receipt
 from .navigation import navigation_answer
 from .query_plan import SCREEN_FIELDS
@@ -23,7 +23,7 @@ def _number(value: Any) -> float | None:
 
 
 def _code(value: Any, allowed: set[str]) -> str:
-    return value if isinstance(value, str) and value in allowed else "unknown"
+    return value if isinstance(value, str) and value in allowed else None if value is None else "unmapped_code"
 
 
 def _timestamp(value: Any) -> str | None:
@@ -161,7 +161,9 @@ def build_diagnostic_report(*, observer: dict, assistant: dict, evidence: dict,
                             revocation_trace: list | None = None,
                             vision_trace: list | None = None,
                             frame_comparisons: dict | None = None,
-                            observation_health: dict | None = None) -> dict:
+                            observation_health: dict | None = None, query_timings: dict | None = None,
+                            session: dict | None = None, panel_witness: dict | None = None,
+                            source_build: dict | None = None, installation_stamp: dict | None = None, source_samples: dict | None = None) -> dict:
     """Project explicit safe fields, not arbitrary logs/config/raw errors."""
     checked_at = (now or datetime.now(timezone.utc)).isoformat()
     from .page_control_trace import sanitize_trace
@@ -268,7 +270,7 @@ def build_diagnostic_report(*, observer: dict, assistant: dict, evidence: dict,
     from .prepare_trace import public_records
     prepare_calls = prepare_calls if isinstance(prepare_calls, dict) else {}
     snapshot = {
-        "schema_version": 1, "plugin_version": PLUGIN_VERSION, "build_revision": BUILD_REVISION, "checked_at": checked_at,
+        "checks": checks, "schema_version": 1, "plugin_version": PLUGIN_VERSION, "build_revision": BUILD_REVISION, "checked_at": checked_at,
         "service_request": public_service_request(service_request),
         "prepare_calls": {"storage_read": _code(prepare_calls.get("storage_read"), {"available", "unavailable"}),
                           "records": public_records(prepare_calls.get("records"))},
@@ -303,7 +305,9 @@ def build_diagnostic_report(*, observer: dict, assistant: dict, evidence: dict,
                                                            if isinstance(f, str) and f in SCREEN_FIELDS}),
                        "outcome": _code(refresh.get("outcome"), {"reused", "ready", "partial", "timeout", "cancelled", "observer_unavailable", "not_requested"}),
                        "wait_seconds": _number(refresh.get("wait_seconds")), "stages": stages},
-        "explicit_followup": {"state": _code((followup_status or {}).get("state"),
+        "explicit_followup": {"request_id": public_correlation(followup_status).get("request_id"),
+                              "activity_attempt": _number((followup_status or {}).get("activity_attempt")),
+                              "state": _code((followup_status or {}).get("state"),
                                   {"pending", "cancelled", "submitted", "submission_failed", "expired", "ended_incomplete", "completed_silent"}),
                               "outcome": _code((followup_status or {}).get("outcome"), {"ready", "partial", "timeout", "transport_limited"}),
                               "result_ready": (followup_status or {}).get("result_ready") is True,
@@ -319,7 +323,7 @@ def build_diagnostic_report(*, observer: dict, assistant: dict, evidence: dict,
                               "ack_scope": "sdk_submission_only_not_host_speech"},
         "page_control_trace": sanitize_trace(page_control_trace),
         "revocation_trace": sanitize_revocations(revocation_trace),
-        "frame_comparisons": {key: _number((frame_comparisons or {}).get(key, 0))
+        "frame_comparisons": {key: _number((frame_comparisons or {}).get(key))
                               for key in ("calls", "total_seconds", "max_seconds")},
         "vision_trace": [
             {**public_correlation(event),
@@ -350,11 +354,10 @@ def build_diagnostic_report(*, observer: dict, assistant: dict, evidence: dict,
         "equipment_handoffs": [_handoff_summary(h)
             for h in (equipment_handoffs or [])[-8:] if isinstance(h, dict)],
         "speech": {"pending_count": _number(speech.get("pending_count")),
-                   "submitted_count": _number((speech.get("counts") or {}).get("submitted", 0)),
+                   "submitted_count": _number((speech.get("counts") or {}).get("submitted")),
                    "can_retract_submitted": False, "ack_scope": "sdk_submission_only"},
     }
-    if observation_health is not None:
-        snapshot["observation_health"] = observation_health  # Explicit server projection.
-    return {"checked_at": checked_at, "checks": checks, "last_query": snapshot["last_query"],
-            **({"observation_health": observation_health} if observation_health is not None else {}),
-            "copy_text": json.dumps(snapshot, ensure_ascii=False, indent=2)}
+    return finish(snapshot, query_timings=query_timings, observation_health=observation_health,
+                  session=session, panel_witness=panel_witness,
+                  source_build=source_build or {"version": PLUGIN_VERSION, "revision": BUILD_REVISION, "commit": BUILD_COMMIT},
+                  installation_stamp=installation_stamp, source_samples=source_samples)

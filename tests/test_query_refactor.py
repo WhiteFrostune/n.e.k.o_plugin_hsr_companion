@@ -104,7 +104,7 @@ def test_diagnostic_plan_only_exports_whitelisted_requirement_codes():
                                           "query": "PRIVATE_SECRET", "path": "PRIVATE_SECRET"}}
     report = build_diagnostic_report(**values)
     assert "PRIVATE_SECRET" not in report["copy_text"]
-    assert report["last_query"]["plan"] == {"screen": True, "read_path": "unknown", "fields": ["page", "visible_text"]}
+    assert report["last_query"]["plan"] == {"screen": True, "read_path": "unmapped_code", "fields": ["page", "visible_text"]}
 
 
 def test_snapshot_cannot_be_mutated_through_source_or_export_and_rejects_new_serial():

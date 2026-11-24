@@ -109,6 +109,8 @@ knowledge = [
   "data/**/*.py",
 ]
 trace = [
+  "runtime/diagnostic_session.py",
+  "runtime/diagnostic_snapshot.py",
   "runtime/diagnostic_export.py",
   "runtime/diagnostic_reader.py",
   "runtime/page_control_trace.py",

@@ -303,7 +303,7 @@ def test_diagnostic_keeps_probe_failure_cause_without_game_content():
     data['last_tool'] = {'refresh_diagnostics': {'stages': [
         {'stage': 'page_check_result', 'reason': 'unknown_page', 'attempt': 2, 'probe_seconds': .4,
          'raw': 'DO_NOT_EXPORT'}, {'stage': 'page_check_stopped', 'reason': 'attempt_limit'}]}}
-    result = json.loads(build_diagnostic_report(**data)['copy_text'])
+    result = json.loads(build_diagnostic_report(**data)["json_text"])
     assert result['last_query']['stages'][0]['reason'] == 'unknown_page'
     assert result['last_query']['stages'][0]['attempt'] == 2
     assert result['last_query']['stages'][1]['reason'] == 'attempt_limit'

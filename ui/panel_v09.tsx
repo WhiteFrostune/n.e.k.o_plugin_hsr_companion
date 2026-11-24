@@ -14,9 +14,14 @@ type Diagnostic = {
   checks: { name: string; level: "info" | "success" | "warning"; detail: string }[]
   last_query?: { outcome?: string; wait_seconds?: number | null }
   copy_text: string
-  observation_health?: Record<string, unknown>
+  diagnostic_id?: string
+  snapshot?: { diagnostic_id: string; floors: { floor: number; title: string; summary?: string;
+    health: { level: "green" | "yellow" | "red"; reason: string; as_of: string; scope: string };
+    metrics: Record<string, unknown>; recent_events: Record<string, unknown>[] }[] }
 }
-type DiagnosticExport = { path: string; filename: string; checked_at: string }
+type DiagnosticExport = { path: string; filename: string; checked_at: string; diagnostic_id?: string }
+type PanelWitness = { mount_id: string; panel_version?: string; events: { status_key: string; tone: string; reason: string; rendered_at: string;
+  context_at?: string; context_seq?: number; context_session_id?: string; sequence: number }[] }
 type EquipmentCard = {
   state?: string; name?: string; slot?: string; level?: string; complete?: boolean
   main_stat?: { label: string; value: string } | null
@@ -45,6 +50,8 @@ type UidImport = {
   roster?: { characters: ImportedBuild[] }
 }
 type CompanionState = {
+  version?: string
+  diagnostic_context?: { at: string; context_seq: number; session_id: string }
   observer?: { enabled?: boolean; state?: string; message?: string; assistant?: Assistant; capture_backend?: string }
   vision_assistant?: Assistant
   current_visual_evidence?: Visual
@@ -61,6 +68,16 @@ type CompanionState = {
   data_freshness?: { guidance?: { checked_at?: string; status?: string
     active_periods?: { id: string; name: string; ends_at: string }[] } }
 }
+function updatePanelWitness(previous: PanelWitness, statusKey: string, tone: string, reason: string,
+  context: CompanionState["diagnostic_context"], panelVersion?: string, now = new Date().toISOString()): PanelWitness {
+  const last = previous.events[previous.events.length - 1]
+  if (last?.status_key === statusKey) return { ...previous, panel_version: panelVersion }
+  return { ...previous, panel_version: panelVersion, events: [...previous.events, {
+    status_key: statusKey, tone, reason, rendered_at: now, context_at: context?.at,
+    context_seq: context?.context_seq, context_session_id: context?.session_id, sequence: (last?.sequence || 0) + 1,
+  }].slice(-16) }
+}
+
 function hasAction(actions: HostedAction[], id: string): boolean {
   return actions.some(action => action.id === id || action.entry_id === id)
 }
@@ -154,6 +171,9 @@ export default function HsrCompanionPanel(props: PluginSurfaceProps<CompanionSta
   const [running, setRunning] = props.useLocalState("hsr095Running", "")
   const [notice, setNotice] = props.useLocalState<{ tone: "info" | "success" | "danger"; text: string } | null>("hsr095Notice", null)
   const [diagnostic, setDiagnostic] = props.useLocalState<Diagnostic | null>("hsr095Diagnostic", null)
+  const [panelWitness, setPanelWitness] = props.useLocalState<PanelWitness>("hsrF1Witness", {
+    mount_id: Array.from({ length: 4 }, () => Math.floor(Math.random() * 0x100000000).toString(16).padStart(8, "0")).join(""), events: [],
+  })
   const [diagnosticError, setDiagnosticError] = props.useLocalState("hsr095DiagnosticError", "")
   const [manualCopy, setManualCopy] = props.useLocalState("hsr095ManualCopy", false)
   const [exported, setExported] = props.useLocalState<DiagnosticExport | null>("hsr095DiagnosticExport", null)
@@ -258,7 +278,9 @@ export default function HsrCompanionPanel(props: PluginSurfaceProps<CompanionSta
     try {
       if (!hasAction(actions, "diagnose_companion")) throw new Error(t("panel.actionUnavailable"))
       // No generic call()/refresh: diagnosis must not restore tasks or download.
-      const result = extractDiagnostic(await props.api.call("diagnose_companion", {}, { timeoutMs: 8000 }))
+      const witness = updatePanelWitness(panelWitness, statusKey, statusTone, visual.identity_confirmation?.reason || "none", state.diagnostic_context, state.version)
+      setPanelWitness(witness)
+      const result = extractDiagnostic(await props.api.call("diagnose_companion", { panel_witness: witness }, { timeoutMs: 8000 }))
       if (!result) throw new Error(t("diagnostics.invalidResult"))
       setDiagnostic(result)
     } catch (error) {
@@ -281,12 +303,12 @@ export default function HsrCompanionPanel(props: PluginSurfaceProps<CompanionSta
     setExported(null)
     try {
       if (!hasAction(actions, "export_companion_diagnostic")) throw new Error(t("panel.actionUnavailable"))
-      const response = await props.api.call("export_companion_diagnostic", {}, { timeoutMs: 10000 })
+      const response = await props.api.call("export_companion_diagnostic", diagnostic?.diagnostic_id ? { diagnostic_id: diagnostic.diagnostic_id } : {}, { timeoutMs: 10000 })
       const payload = response?.result || response?.data || response
       const report = extractDiagnostic(response)
       const file = payload?.export
       if (!report || typeof file?.path !== "string" || !file.path || typeof file?.filename !== "string"
-        || file.checked_at !== report.checked_at) throw new Error(t("diagnostics.exportInvalid"))
+        || file.checked_at !== report.checked_at || (report.diagnostic_id && file.diagnostic_id !== report.diagnostic_id)) throw new Error(t("diagnostics.exportInvalid"))
       setDiagnostic(report)
       setExported(file)
       toast.success(t("diagnostics.exported"))
@@ -334,6 +356,10 @@ export default function HsrCompanionPanel(props: PluginSurfaceProps<CompanionSta
       statusKey = "panel.confirming"; statusTone = "warning"; explanation = t("panel.confirmingHelp")
     }
   }
+  useEffect(() => {
+    const next = updatePanelWitness(panelWitness, statusKey, statusTone, visual.identity_confirmation?.reason || "none", state.diagnostic_context, state.version)
+    if (next !== panelWitness && next.events !== panelWitness.events) setPanelWitness(next)
+  }, [statusKey])
   const savedNotice = lastOperation.message ? {
     tone: lastOperation.state === "error" ? "danger" as const : lastOperation.state === "success" ? "success" as const : "info" as const,
     text: lastOperation.message,
@@ -485,21 +511,22 @@ export default function HsrCompanionPanel(props: PluginSurfaceProps<CompanionSta
           </Stack> : null}
           {diagnostic ? <Stack>
             <Text>{t("diagnostics.checkedAt", { time: new Date(diagnostic.checked_at).toLocaleString() })}</Text>
-            {diagnostic.checks.map((check, index) => <StatusBadge key={index} tone={check.level} label={t("diagnostics.check." + check.name) + "：" + t("diagnostics.detail." + check.detail)} />)}
-            {diagnostic.last_query?.wait_seconds != null ? <Text>{t("diagnostics.queryTiming", { seconds: diagnostic.last_query.wait_seconds, outcome: t("diagnostics.outcome." + diagnostic.last_query.outcome) })}</Text> : null}
-            {diagnostic.observation_health ? <Stack>
-              <Text>{t("diagnostics.observationHealth")}</Text>
-              <Textarea value={JSON.stringify(diagnostic.observation_health, null, 2)} />
-            </Stack> : null}
+            {diagnostic.diagnostic_id ? <Text>{t("diagnostics.id", { id: diagnostic.diagnostic_id })}</Text> : null}
+            {(diagnostic.snapshot?.floors || []).map(floor => <StatusBadge key={floor.floor}
+              tone={floor.health.level === "green" ? "success" : floor.health.level === "red" ? "danger" : "warning"}
+              label={floor.summary || `${floor.floor}F ${floor.title} · ${floor.health.reason} · ${floor.health.scope}`} />)}
+            {(diagnostic.snapshot?.floors || []).map(floor => <Accordion key={floor.floor} title={`${floor.floor}F ${floor.title}`}>
+              <Textarea value={JSON.stringify(floor, null, 2)} />
+            </Accordion>)}
             <Button disabled={!!running} onClick={copyDiagnostic}>{t("diagnostics.copy")}</Button>
             {manualCopy ? <Stack>
               <Alert tone="warning">{t("diagnostics.copyFailed")}</Alert>
               <Textarea value={diagnostic.copy_text} />
             </Stack> : null}
-            <Accordion title={t("diagnostics.report")}>
+            {!diagnostic.snapshot ? <Accordion title={t("diagnostics.report")}>
               <Textarea value={diagnostic.copy_text} />
-              <Tip>{t("diagnostics.privacy")}</Tip>
-            </Accordion>
+            </Accordion> : null}
+            <Tip>{t("diagnostics.privacy")}</Tip>
           </Stack> : <Text>{t("diagnostics.notRun")}</Text>}
         </Stack>
       </Card>

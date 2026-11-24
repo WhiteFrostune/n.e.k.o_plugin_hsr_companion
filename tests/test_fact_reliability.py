@@ -137,7 +137,7 @@ def test_diagnosis_does_not_wait_for_busy_sources_or_report_false_disconnection(
         result = build_diagnostic_report(**values, incomplete_sources=incomplete)
         assert next(c for c in result["checks"] if c["name"] == "assistant")["detail"] == "not_checked"
         import json
-        exported = json.loads(result["copy_text"])
+        exported = json.loads(result["json_text"])
         assert exported["assistant"]["connected"] is None
         assert not exported["diagnostic_read"]["complete"]
     asyncio.run(run())

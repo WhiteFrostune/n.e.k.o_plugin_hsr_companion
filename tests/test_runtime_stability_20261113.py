@@ -159,7 +159,7 @@ def test_read_only_trace_distinguishes_held_backend_return_and_verification_fail
             release.set()
             with pytest.raises(OSError, match="secret-value"):
                 await asyncio.wait_for(task, 1)
-            report = json.loads(build_diagnostic_report(**inputs(), vision_trace=public_trace(owner))["copy_text"])
+            report = json.loads(build_diagnostic_report(**inputs(), vision_trace=public_trace(owner))["json_text"])
             events = report["vision_trace"]
             assert [e["outcome"] for e in events if e["stage"] == "ocr_call"] == ["started", "returned"]
             assert any(e["stage"] == "ocr_verification" and e.get("error_type") == "OSError" for e in events)

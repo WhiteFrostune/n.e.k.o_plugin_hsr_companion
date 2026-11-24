@@ -189,7 +189,7 @@ def test_final_receipts_are_bounded_and_export_no_raw_game_or_chat_text(tmp_path
     assert "PRIVATE_TEST_TEXT" not in json.dumps(owner._answer_deliveries)
     latest = owner._answer_deliveries[-1]
     latest.update(query="PRIVATE_TEST_TEXT", confirmed_fields="PRIVATE_TEST_TEXT", equipment="PRIVATE_TEST_TEXT")
-    report = json.loads(build_diagnostic_report(**inputs(), answer_deliveries=owner._answer_deliveries)["copy_text"])
+    report = json.loads(build_diagnostic_report(**inputs(), answer_deliveries=owner._answer_deliveries)["json_text"])
     assert "PRIVATE_TEST_TEXT" not in json.dumps(report)
     assert len(report["answer_deliveries"]) == 8
 

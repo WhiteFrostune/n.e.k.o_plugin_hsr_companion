@@ -313,5 +313,5 @@ def test_message_projection_diagnostic_does_not_export_untrusted_text():
     value = _delivery_summary({"message_projection": {"mode": "private_path", "complete": "secret",
         "required_rows": "raw game text", "message_rows": -10, "text_sha256": "secret",
         "text": "private game/chat text"}})["message_projection"]
-    assert value == {"mode": "unknown", "complete": None, "required_rows": None,
+    assert value == {"mode": "unmapped_code", "complete": None, "required_rows": None,
                      "message_rows": None, "text_sha256": None}

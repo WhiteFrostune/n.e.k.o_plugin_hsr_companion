@@ -336,7 +336,7 @@ llm_result_schema = { "type" = "object", "properties" = { "profile" = {  }, "mem
 id = "diagnose_companion"
 name = { "$i18n" = "diagnostics.run" }
 description = { "$i18n" = "diagnostics.description" }
-input_schema = { "type" = "object", "properties" = { "delivery_trace_seconds" = { "type" = "integer", "minimum" = 0, "maximum" = 120, "description" = "仅明确排查转述错值时开启：短时内存记录必要装备字段，不保存截图；0关闭。默认不开启。" }, "include_delivery_trace" = { "type" = "boolean", "default" = false, "description" = "仅明确请求时读取短时装备交付追踪；默认支持诊断/导出不包含游戏字段。" } }, "additionalProperties" = false }
+input_schema = { "type" = "object", "properties" = { "delivery_trace_seconds" = { "type" = "integer", "minimum" = 0, "maximum" = 120, "description" = "仅明确排查转述错值时开启：短时内存记录必要装备字段，不保存截图；0关闭。默认不开启。" }, "include_delivery_trace" = { "type" = "boolean", "default" = false, "description" = "仅明确请求时读取短时装备交付追踪；默认支持诊断/导出不包含游戏字段。" }, "panel_witness" = { "type" = "object", "additionalProperties" = false, "properties" = { "mount_id" = { "type" = "string", "maxLength" = 32 }, "panel_version" = { "type" = "string", "maxLength" = 24 }, "events" = { "type" = "array", "maxItems" = 16, "items" = { "type" = "object", "additionalProperties" = false, "properties" = { "status_key" = { "type" = "string", "maxLength" = 48 }, "tone" = { "type" = "string", "maxLength" = 48 }, "reason" = { "type" = "string", "maxLength" = 48 }, "rendered_at" = { "type" = "string", "maxLength" = 48 }, "context_at" = { "type" = "string", "maxLength" = 48 }, "context_session_id" = { "type" = "string", "maxLength" = 48 }, "context_seq" = { "type" = "integer", "minimum" = 0 }, "sequence" = { "type" = "integer", "minimum" = 0 } } } } } } }, "additionalProperties" = false }
 kind = "action"
 auto_start = false
 model_validate = true
@@ -347,7 +347,7 @@ llm_result_schema = { "type" = "object", "properties" = { "diagnostic" = {} }, "
 id = "export_companion_diagnostic"
 name = { "$i18n" = "diagnostics.export" }
 description = { "$i18n" = "diagnostics.exportDescription" }
-input_schema = { "type" = "object", "properties" = {}, "additionalProperties" = false }
+input_schema = { type = "object", properties = { diagnostic_id = { type = "string", pattern = "^[a-f0-9]{32}$" } }, additionalProperties = false }
 kind = "action"
 auto_start = false
 model_validate = true
