@@ -11,6 +11,7 @@ import pytest
 from plugin.plugins.hsr_companion.runtime.guidance import build_guidance
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.tests import test_guidance as cases
+from plugin.plugins.hsr_companion.tests.diagnostic_sections import section as diagnostic_section
 from plugin.plugins.hsr_companion.tests.test_stage1_repairs import fact, visual
 
 book = cases.book
@@ -264,9 +265,9 @@ def test_diagnostic_separates_direct_timeout_and_submitted_equipment_followup():
     receipts = [handoff_receipt(equipment_card(relic()), channel="followup")]
     result = json.loads(build_diagnostic_report(**params, equipment_handoffs=receipts,
                         followup_status={"state": "submitted", "outcome": "ready"})["json_text"])
-    assert result["last_query"]["outcome"] == "timeout"
-    assert result["explicit_followup"]["outcome"] == "ready"
-    assert result["equipment_handoffs"][0]["sub_stat_count"] == 4
+    assert diagnostic_section(result, 'last_query')["outcome"] == "timeout"
+    assert diagnostic_section(result, 'explicit_followup')["outcome"] == "ready"
+    assert diagnostic_section(result, 'equipment_handoffs')[0]["sub_stat_count"] == 4
     assert "38.8" not in json.dumps(result)
 
 

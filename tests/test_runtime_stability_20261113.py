@@ -1,4 +1,6 @@
+
 """Fault injection at the same boundaries used by the observer and followup."""
+
 import asyncio
 import importlib
 import json
@@ -17,6 +19,7 @@ from plugin.plugins.hsr_companion.runtime.observation import public_visual_evide
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.runtime.vision_trace import public_trace
 from plugin.plugins.hsr_companion.tests import test_guidance as cases
+from plugin.plugins.hsr_companion.tests.diagnostic_sections import section as diagnostic_section
 from plugin.plugins.hsr_companion.tests.test_current_observation import analysis, plugin_fixture
 from plugin.plugins.hsr_companion.tests.test_diagnostics import inputs
 from plugin.plugins.hsr_companion.tests.test_page_followup import followup_owner
@@ -160,7 +163,7 @@ def test_read_only_trace_distinguishes_held_backend_return_and_verification_fail
             with pytest.raises(OSError, match="secret-value"):
                 await asyncio.wait_for(task, 1)
             report = json.loads(build_diagnostic_report(**inputs(), vision_trace=public_trace(owner))["json_text"])
-            events = report["vision_trace"]
+            events = diagnostic_section(report, 'vision_trace')
             assert [e["outcome"] for e in events if e["stage"] == "ocr_call"] == ["started", "returned"]
             assert any(e["stage"] == "ocr_verification" and e.get("error_type") == "OSError" for e in events)
             assert "secret-value" not in str(report) and "private-image" not in str(report)

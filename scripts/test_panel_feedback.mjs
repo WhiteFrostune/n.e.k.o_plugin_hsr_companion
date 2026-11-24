@@ -71,7 +71,7 @@ function panelFixture(state = {}) {
   let refreshSucceeds = true
   let uidReply = null
   const callArguments = []
-  let report = { checked_at: '2026-10-11T12:00:00+00:00', checks: [], copy_text: 'SAFE_REPORT' }
+  let report = { checked_at: '2026-10-11T12:00:00+00:00', schema_version: 2, diagnostic_id: 'a'.repeat(32), snapshot: { diagnostic_id: 'a'.repeat(32), floors: [] }, copy_text: 'SAFE_REPORT' }
   const names = ['Page', 'Card', 'Stack', 'Text', 'Tip', 'Alert', 'StatusBadge', 'Button', 'ButtonGroup', 'Accordion', 'Textarea', 'Input', 'Switch', 'Field', 'RadioGroup', 'ConfirmDialog', 'FileDownload', 'SavedPlayerBuilds']
   const kit = Object.fromEntries(names.map(name => [name, name]))
   kit.useEffect = () => {} // The polling timer is not part of a button invocation.
@@ -397,7 +397,7 @@ test('observation diagnostics move to one-click report and failed confirmation s
   assert.deepEqual(fixture.calls, [])
   const floors = [5,4,3,2,1].map(floor => ({ floor, title: floor === 4 ? '观察与确认' : '诊断层',
     health: { level: 'yellow', reason: 'not_recorded', scope: 'test' }, metrics: floor === 4 ? { observation_health: health } : {}, recent_events: [] }))
-  fixture.setReport({ checked_at: '2026-11-22T10:00:00Z', checks: [], copy_text: 'SAFE_REPORT', snapshot: { floors } })
+  fixture.setReport({ checked_at: '2026-11-22T10:00:00Z', schema_version: 2, diagnostic_id: 'a'.repeat(32), copy_text: 'SAFE_REPORT', snapshot: { diagnostic_id: 'a'.repeat(32), floors } })
   await fixture.button(before, '一键诊断').props.onClick()
   const after = fixture.render()
   assert.doesNotMatch(fixture.text(after), /观察诊断/)
@@ -435,7 +435,7 @@ test('F1 diagnosis passes only bounded display witness and copy performs no seco
 
 test('F1 export requests the same diagnosis ID instead of silently regenerating', async () => {
   const fixture = panelFixture()
-  fixture.setReport({ checked_at: '2026-11-24T12:00:00Z', checks: [], copy_text: 'SAFE_REPORT', diagnostic_id: 'a'.repeat(32) })
+  fixture.setReport({ checked_at: '2026-11-24T12:00:00Z', schema_version: 2, diagnostic_id: 'a'.repeat(32), snapshot: { diagnostic_id: 'a'.repeat(32), floors: [] }, copy_text: 'SAFE_REPORT' })
   await fixture.button(fixture.render(), '一键诊断').props.onClick()
   await fixture.button(fixture.render(), '导出诊断').props.onClick()
   assert.equal(fixture.callArguments[1].args.diagnostic_id, 'a'.repeat(32))

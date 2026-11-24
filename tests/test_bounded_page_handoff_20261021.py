@@ -1,8 +1,10 @@
+
 """C: real native checkpoint loop, synthetic frames/OCR; no live acceptance.
 
 The old task remains resident while a question arrives. Unknown/old first
 probes must not exhaust its only chance; cancellation and deadlines still win.
 """
+
 import asyncio
 import copy
 import socket
@@ -15,6 +17,7 @@ from plugin.plugins.hsr_companion.adapters.local_vision import LocalVisionAdapte
 from plugin.plugins.hsr_companion.adapters.text_reader import check_current
 from plugin.plugins.hsr_companion.adapters.text_verification import proof_key
 from plugin.plugins.hsr_companion.runtime import live_refresh, page_handoff
+from plugin.plugins.hsr_companion.tests.diagnostic_sections import section as diagnostic_section
 from plugin.plugins.hsr_companion.tests.test_delivery_fix_20261012 import CONTROL, frame, picture
 from plugin.plugins.hsr_companion.tests.test_review_policy_20261017 import resident_owner
 
@@ -304,9 +307,9 @@ def test_diagnostic_keeps_probe_failure_cause_without_game_content():
         {'stage': 'page_check_result', 'reason': 'unknown_page', 'attempt': 2, 'probe_seconds': .4,
          'raw': 'DO_NOT_EXPORT'}, {'stage': 'page_check_stopped', 'reason': 'attempt_limit'}]}}
     result = json.loads(build_diagnostic_report(**data)["json_text"])
-    assert result['last_query']['stages'][0]['reason'] == 'unknown_page'
-    assert result['last_query']['stages'][0]['attempt'] == 2
-    assert result['last_query']['stages'][1]['reason'] == 'attempt_limit'
+    assert diagnostic_section(result, 'last_query')['stages'][0]['reason'] == 'unknown_page'
+    assert diagnostic_section(result, 'last_query')['stages'][0]['attempt'] == 2
+    assert diagnostic_section(result, 'last_query')['stages'][1]['reason'] == 'attempt_limit'
     assert 'DO_NOT_EXPORT' not in json.dumps(result)
 
 

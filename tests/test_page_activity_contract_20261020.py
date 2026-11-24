@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import pytest
 from plugin.plugins.hsr_companion.runtime import followup_delivery as followup
 from plugin.plugins.hsr_companion.runtime.chat_activity import latest_user_activity
+from plugin.plugins.hsr_companion.tests.diagnostic_sections import section as diagnostic_section
 from plugin.plugins.hsr_companion.tests.test_diagnostics import inputs
 from plugin.plugins.hsr_companion.tests.test_experience_fixes import box
 from plugin.plugins.hsr_companion.tests.test_exploration_fields import classify, hud
@@ -154,8 +155,8 @@ def test_report_separates_result_readiness_from_activity_failure():
     values["page_control_trace"] = [{"stage": "staged", "origin": "native_layout", "control_count": 0,
                                      "condition": "chat_control", "raw": "PRIVATE"}]
     result = json.loads(build_diagnostic_report(**values)["json_text"])
-    assert result["explicit_followup"]["result_ready"] is True
-    assert result["page_control_trace"][-1]["condition"] == "chat_control"
+    assert diagnostic_section(result, 'explicit_followup')["result_ready"] is True
+    assert diagnostic_section(result, 'page_control_trace')[-1]["condition"] == "chat_control"
     assert "PRIVATE" not in json.dumps(result)
 
 

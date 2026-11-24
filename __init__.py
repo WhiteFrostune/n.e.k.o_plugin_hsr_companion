@@ -53,6 +53,7 @@ from .runtime.context_text import visual_context_text
 from .runtime.contracts import visual_fingerprints_match
 from .runtime.data_freshness import data_freshness
 from .runtime.diagnostic_export import export_diagnostic
+from .runtime.diagnostic_session import begin_auto_restore as diagnostic_begin_auto_restore
 from .runtime.diagnostic_session import (
     context_marker as diagnostic_context_marker,
 )
@@ -62,6 +63,7 @@ from .runtime.diagnostic_session import (
 from .runtime.diagnostic_session import (
     observe_enable,
 )
+from .runtime.diagnostic_session import observe_restore as diagnostic_observe_restore
 from .runtime.diagnostic_session import (
     safe_note as diagnostic_note,
 )
@@ -101,6 +103,8 @@ from .runtime.query_observation import resolve_query
 from .runtime.query_plan import SCREEN_FIELDS, SEMANTIC_INTENTS, build_query_plan
 from .runtime.query_status import answer_status, needs_followup
 from .runtime.recognition_metrics import observation_health, record_late_discard
+from .runtime.rejection_trace import emit as rejection_emit
+from .runtime.rejection_trace import snapshot as rejection_snapshot
 from .runtime.service_contract import (
     PREPARE_TOOL_DESCRIPTION,
     clear_discussion,
@@ -439,6 +443,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             self._announced_game_pid = pid
 
     @lifecycle(id="startup")
+    @diagnostic_observe_restore
     async def startup(self, **_):
         self.logger.info("hsr_companion version=%s commit=%s", PLUGIN_VERSION, BUILD_COMMIT)
         self._vision_closing = False
@@ -492,6 +497,7 @@ class HsrCompanionPlugin(NekoPluginBase):
         speech_settings = {key: observer_settings[key] for key in ("proactive_enabled", "idle_chatter_enabled")}
         self._observer_status.update(speech_settings)
         if observer_settings.get("enabled") is True:
+            diagnostic_begin_auto_restore(self)
             # startup is invoked through a transient asyncio.run() loop.  A
             # task created here would be cancelled as soon as startup returns;
             # restore it on the first panel/tool call instead.
@@ -758,6 +764,7 @@ class HsrCompanionPlugin(NekoPluginBase):
         epoch = getattr(self, "_observation_epoch", 0)
         corrections = await self._read_corrections()
         if epoch != getattr(self, "_observation_epoch", 0) or getattr(self, "_observer_stop_requested", False):
+            rejection_emit(self, "F18", "full", "discard", "commit_revoked")
             return {"delivery": {"submitted": False, "reason": "observation_revoked"}}
         recognition = analysis.get("recognition") or {}
         if (recognition.get("yielded_for_query") is True
@@ -768,6 +775,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             trace_refresh(self, "candidate_retained", reason="yielded_for_query")
             if hasattr(self, "_visual_update_event"):
                 self._visual_update_event.set()
+            rejection_emit(self, "F14", "full", "discard", "incomplete_read")
             return {"delivery": {"submitted": False, "reason": "analysis_yielded_incomplete"}}
         corrected_characters: list[dict[str, Any]] = []
         for candidate in list(analysis.get("characters") or []):
@@ -821,6 +829,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             record_controls(self, "retained", analysis=analysis)
             if hasattr(self, "_visual_update_event"):
                 self._visual_update_event.set()
+            rejection_emit(self, "F16", "full", "discard", "incomplete_read")
             return {"delivery": {"submitted": False, "reason": "same_page_incomplete_read"}}
         await self._store_value(
             "active_game_visual_request",
@@ -936,10 +945,12 @@ class HsrCompanionPlugin(NekoPluginBase):
         public_analysis["character_context"] = character_context
         await self._store_value("last_local_vision", public_analysis)
         if epoch != getattr(self, "_observation_epoch", 0) or getattr(self, "_observer_stop_requested", False):
+            rejection_emit(self, "F18", "full", "discard", "commit_revoked")
             return {"delivery": {"submitted": False, "reason": "observation_revoked"}}
         trace_refresh(self, "observation_committed", serial=public_analysis["observation_serial"])
         ObservationStore(self).commit(public_analysis)
         diagnostic_note(self, "first_commit", "completed")
+        rejection_emit(self, "F20", "full", "allow", "committed")
         record_candidate(self, "candidate_committed", public_analysis,
                          serial=public_analysis["observation_serial"],
                          **({"job_id": getattr(self, "_vision_job_id", 0),
@@ -966,6 +977,8 @@ class HsrCompanionPlugin(NekoPluginBase):
                            serial=self._observation_serial)
         if public_visual_evidence(public_analysis, {"enabled": True, "state": "observing"})["read_scope"] == "full":
             self._last_full_commit_serial = self._observation_serial
+        else:
+            rejection_emit(self, "F20", "full", "withhold", "full_scope_missing")
         self._scene_preview = None
         self._observation_invalidated = False
         self._accepted_frame_stamp = getattr(self, "_next_frame_stamp", None)
@@ -1324,6 +1337,7 @@ class HsrCompanionPlugin(NekoPluginBase):
                     diagnostic_note(self, "first_commit", "started")
                     analysis = await guarded_analysis(self, image_bytes, helper=helper_connected)
                     if analysis is None:
+                        rejection_emit(self, "F12", "full", "discard", "no_analysis")
                         self._set_observer_status("updating", "正在核对当前界面信息")
                         await asyncio.sleep(.1)
                         continue
@@ -1347,6 +1361,7 @@ class HsrCompanionPlugin(NekoPluginBase):
                             and check_window.public().get("pid") == public_window.get("pid")
                         )
                     if not still_current:
+                        rejection_emit(self, "F12", "full", "discard", "capture_failed")
                         if job := analysis.get("_relic_job"):
                             record_vision_event(self, "relic_job_ended", **job, outcome="rejected",
                                                 reason="capture_changed_during_analysis")
@@ -1361,6 +1376,7 @@ class HsrCompanionPlugin(NekoPluginBase):
                     if time.monotonic() - capture_started_at > 30:
                         from .runtime.fact_lifecycle import late_read_proved
                         if not late_read_proved(self, analysis):
+                            rejection_emit(self, "F13", "full", "discard", "late_result")
                             record_late_discard(self)
                             if job := analysis.get("_relic_job"):
                                 record_vision_event(self, "relic_job_ended", **job, outcome="rejected",
@@ -1407,6 +1423,7 @@ class HsrCompanionPlugin(NekoPluginBase):
                     if (local_result.get("delivery") or {}).get("reason") == "analysis_yielded_incomplete":
                         self._set_observer_status("updating", "提问优先，保留上一次完整画面，稍后补读")
                         await asyncio.sleep(.1)
+                        rejection_emit(self, "F14", "full", "discard", "incomplete_read")
                         continue
                     trace_refresh(self, "commit_finished", job_id=getattr(self, "_vision_job_id", 0),
                                   frame_seq=self._analysis_input_frame_seq)
@@ -2445,6 +2462,8 @@ class HsrCompanionPlugin(NekoPluginBase):
         **_,
     ):
         if pending_reply is not None:
+            rejection_emit(self, "X01", "pending", "defer", "pending_intercepted",
+                           related_request_id=dict.get(pending_reply, "request_id") if isinstance(pending_reply, dict) else None)
             prepare_stage("pending_reply")
             from .runtime.pending_handler import handle_pending_reply
             handled = await handle_pending_reply(self, pending_reply)
@@ -3232,7 +3251,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             revocation_trace=getattr(self, "_revocation_trace", []),
             vision_trace=public_vision_trace(self),
             frame_comparisons=frame_comparison_stats(self),
-            observation_health=health_metrics,
+            observation_health=health_metrics, rejection_trace=rejection_snapshot(self),
             prepare_calls=await read_records(self),
             query_timings=query_timings(self), session=diagnostic_session_snapshot(self),
             panel_witness=panel_witness, source_samples=diagnostic_samples,

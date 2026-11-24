@@ -119,10 +119,16 @@ class ObservationSnapshot:
     def matches(self, owner) -> bool:
         decision = self.delivery(owner)["delivery_boundary"]
         if "attributes" in self._fields and "characters" in decision["withheld_fields"]:
+            from .rejection_trace import emit
+            emit(owner, "B06", "boundary", "reject", "identity_withheld")
             return False  # A changed owner cannot certify the old assessment.
-        return decision["state"] != "rejected" and not set(decision["withheld_fields"]) & (
+        admitted = decision["state"] != "rejected" and not set(decision["withheld_fields"]) & (
             self._fields or {"page", "location", "quest", "characters", "controlled_character", "visible_text",
                              "equipment", "attributes", "skill", "enemy", "dialogue", "resource"})
+        if not admitted:
+            from .rejection_trace import emit
+            emit(owner, "B06", "boundary", "reject", "fields_withheld")
+        return admitted
 
     def delivery(self, owner, *, generation=None) -> dict:
         from .delivery_boundary import review

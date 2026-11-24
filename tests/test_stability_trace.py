@@ -1,4 +1,6 @@
+
 """S0 observability only: no live capture, deadline, routing, or speech changes."""
+
 import asyncio
 import json
 from types import SimpleNamespace
@@ -6,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 from plugin.plugins.hsr_companion.runtime import vision_trace
 from plugin.plugins.hsr_companion.runtime.diagnostics import build_diagnostic_report
+from plugin.plugins.hsr_companion.tests.diagnostic_sections import section as diagnostic_section
 from plugin.plugins.hsr_companion.tests.test_diagnostics import inputs
 
 REQUEST = "a" * 32
@@ -52,10 +55,10 @@ def test_export_retains_correlation_but_not_unknown_fields_or_bad_identifiers():
     events.append({"stage": "query_wait", "request_id": "private text", "job_id": True,
                    "frame_seq": float("inf"), "chat": "private text"})
     result = json.loads(build_diagnostic_report(**inputs(), vision_trace=events)["json_text"])
-    assert result["vision_trace"][0]["request_id"] == REQUEST
-    assert result["vision_trace"][0]["job_id"] == 7
-    assert result["vision_trace"][0]["frame_seq"] == 42
-    assert "request_id" not in result["vision_trace"][-1]
+    assert diagnostic_section(result, 'vision_trace')[0]["request_id"] == REQUEST
+    assert diagnostic_section(result, 'vision_trace')[0]["job_id"] == 7
+    assert diagnostic_section(result, 'vision_trace')[0]["frame_seq"] == 42
+    assert "request_id" not in diagnostic_section(result, 'vision_trace')[-1]
     assert "private text" not in json.dumps(result)
 
 

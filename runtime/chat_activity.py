@@ -95,15 +95,21 @@ def user_timestamp(record, *, target: str, now: float) -> float | None:
 
 async def latest_user_activity(bus, *, target: str, now: float | None = None, limit: int = 1,
                                transport_timeout: float = .25, wait_timeout: float = .35, include_identity=False):
+    from .rejection_trace import emit
     get = getattr(getattr(bus, "memory", None), "get", None)
     if not callable(get) or not target:
+        emit(None, "X05", "activity", "defer", "unsupported_activity")
         return "unsupported", None
 
+    failure_code = None
+
     async def read():
+        nonlocal failure_code
         records = get(bucket_id=target, limit=min(8, max(1, limit)), timeout=transport_timeout)
         if inspect.isawaitable(records):
             records = await records
         if isinstance(records, Err):
+            failure_code = "sdk_error"
             raise RuntimeError("Activity read failed")
         if isinstance(records, Ok):
             records = records.value
@@ -131,6 +137,7 @@ async def latest_user_activity(bus, *, target: str, now: float | None = None, li
                 # start its own read on the shared worker pool.
                 state.inflight = None
             else:
+                emit(None, "X05", "activity", "defer", "activity_busy")
                 return "unavailable", None
         state.inflight = _executor.submit(blocking_read)
         state.abandoned_at = 0.0
@@ -142,11 +149,13 @@ async def latest_user_activity(bus, *, target: str, now: float | None = None, li
         wrapped.add_done_callback(lambda task: None if task.cancelled() else task.exception())
         return "available", await asyncio.wait_for(asyncio.shield(wrapped), timeout=wait_timeout)
     except asyncio.CancelledError:
+        emit(None, "X05", "activity", "cancel", "cancelled")
         with state.lock:
             if state.inflight is future and not future.done():
                 state.abandoned_at = time.monotonic()
         raise
-    except Exception:
+    except Exception as exc:
+        emit(None, "X05", "activity", "defer", "timeout" if isinstance(exc, TimeoutError) else failure_code or "activity_error")
         with state.lock:
             if state.inflight is future and not future.done():
                 state.abandoned_at = time.monotonic()

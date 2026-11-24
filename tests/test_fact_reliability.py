@@ -1,4 +1,6 @@
+
 """Accuracy contracts for the new candidate, NOT real-game accuracy claims."""
+
 import asyncio
 from types import SimpleNamespace
 
@@ -17,6 +19,7 @@ from plugin.plugins.hsr_companion.runtime.observation_store import ObservationSn
 from plugin.plugins.hsr_companion.runtime.query_coordinator import needs_followup, satisfied_fields
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.runtime.screen_facts import extract_screen_facts
+from plugin.plugins.hsr_companion.tests.diagnostic_sections import section as diagnostic_section
 from plugin.plugins.hsr_companion.tests.test_current_observation import plugin_fixture
 from plugin.plugins.hsr_companion.tests.test_delivery_fix_20261012 import TEXT, frame, picture, text_result
 from plugin.plugins.hsr_companion.tests.test_diagnostics import inputs
@@ -135,11 +138,11 @@ def test_diagnosis_does_not_wait_for_busy_sources_or_report_false_disconnection(
         values = inputs()
         values.update(assistant=assistant, evidence=evidence)
         result = build_diagnostic_report(**values, incomplete_sources=incomplete)
-        assert next(c for c in result["checks"] if c["name"] == "assistant")["detail"] == "not_checked"
+        assert next(c for c in diagnostic_section(result, 'checks') if c["name"] == "assistant")["detail"] == "not_checked"
         import json
         exported = json.loads(result["json_text"])
-        assert exported["assistant"]["connected"] is None
-        assert not exported["diagnostic_read"]["complete"]
+        assert diagnostic_section(exported, 'assistant')["connected"] is None
+        assert not diagnostic_section(exported, 'diagnostic_read')["complete"]
     asyncio.run(run())
 
 
@@ -148,9 +151,9 @@ def test_diagnostic_audit_is_allowlisted_and_distinguishes_answer_from_refresh()
     values["last_tool"] = {"refresh_diagnostics": {"outcome": "ready"},
         "answer_status_at_audit": {"state": "unconfirmed", "missing_fields": ["quest", "private secret"], "secret": "private secret"}}
     result = build_diagnostic_report(**values)
-    assert result["last_query"]["outcome"] == "ready"
-    assert result["last_query"]["answer_state_at_audit"] == "unconfirmed"
-    assert result["last_query"]["missing_fields_at_audit"] == ["quest"]
+    assert diagnostic_section(result, 'last_query')["outcome"] == "ready"
+    assert diagnostic_section(result, 'last_query')["answer_state_at_audit"] == "unconfirmed"
+    assert diagnostic_section(result, 'last_query')["missing_fields_at_audit"] == ["quest"]
     assert "private secret" not in result["copy_text"]
 
 

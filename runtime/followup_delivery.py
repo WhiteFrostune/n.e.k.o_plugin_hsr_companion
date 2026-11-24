@@ -18,6 +18,7 @@ from .pending_contract import message_allows, relation_contract
 from .query_plan import QueryPlan, build_query_plan
 from .query_status import answer_status
 from .readiness import has_answerable_content, satisfied_fields
+from .rejection_trace import context, emit
 from .request_completion import evaluate_request
 from .service_contract import record_answer_delivery, response_contract
 
@@ -119,6 +120,7 @@ def cancel_followup(owner, reason: str) -> None:
     owner._followup_relation_hold = None
     owner._followup_message_wait = None
     if request is not None:
+        emit(owner, "X06", "followup", "cancel", reason, request_id=request.request_id)
         status = getattr(owner, "_followup_status", {})
         owner._followup_status = {"request_id": request.request_id, "state": "cancelled", "reason": reason,
                                   "result_ready": status.get("request_id") == request.request_id and status.get("result_ready") is True}
@@ -132,6 +134,8 @@ def _cancel_current(owner, request: AnswerRequest, reason: str) -> None:
     # The obsolete worker must never cancel the new worker's request.
     if getattr(owner, "_pending_answer", None) is request:
         cancel_followup(owner, reason)
+    else:
+        emit(owner, "X06", "followup", "discard", "request_replaced", request_id=request.request_id)
 
 
 def _can_observe(owner) -> bool:
@@ -158,29 +162,41 @@ async def checked_activity(owner, request: AnswerRequest, bus, *, allow_recovery
             owner._followup_status = {**getattr(owner, "_followup_status", {}),
                                       "request_id": request.request_id, "state": "pending",
                                       "reason": "activity_retry", "activity_attempt": used}
+            emit(owner, "X05", "activity", "defer", "retry_exhausted", request_id=request.request_id)
             return "unavailable", None
     for attempt in range(used, limit):
-        if (getattr(owner, "_pending_answer", None) is not request or not _can_observe(owner)
-                or owner._target_character() != request.target):
+        if getattr(owner, "_pending_answer", None) is not request:
+            emit(owner, "X05", "activity", "cancel", "request_replaced", request_id=request.request_id)
+            return "cancelled", None
+        if not _can_observe(owner):
+            emit(owner, "X05", "activity", "cancel", "observer_unavailable", request_id=request.request_id)
+            return "cancelled", None
+        if owner._target_character() != request.target:
+            emit(owner, "X05", "activity", "cancel", "target_changed", request_id=request.request_id)
             return "cancelled", None
         remaining = request.expires_at - time.monotonic()
         if remaining <= 0:
+            emit(owner, "X05", "activity", "defer", "deadline", request_id=request.request_id)
             return "unavailable", None
         if getattr(owner, "_followup_relation_hold", None) == request.request_id:
+            emit(owner, "X05", "activity", "defer", "relation_hold", request_id=request.request_id)
             return "awaiting_relation", None
         # This is the speech guard's IPC budget, not the OCR/query deadline.
         # Measured healthy reads can exceed .25s. One worker/no backlog remains.
-        activity, stamp = await latest_user_activity(bus, target=request.target, limit=8,
-            include_identity=True,
-            transport_timeout=min(ACTIVITY_TRANSPORT_SECONDS, remaining),
-            wait_timeout=min(ACTIVITY_TRANSPORT_SECONDS + .1, remaining))
+        with context(owner, request.request_id):
+            activity, stamp = await latest_user_activity(bus, target=request.target, limit=8,
+                include_identity=True,
+                transport_timeout=min(ACTIVITY_TRANSPORT_SECONDS, remaining),
+                wait_timeout=min(ACTIVITY_TRANSPORT_SECONDS + .1, remaining))
         request.activity_budget["attempts"] = attempt + 1
         if getattr(owner, "_pending_answer", None) is not request:
+            emit(owner, "X05", "activity", "cancel", "request_replaced", request_id=request.request_id)
             return "cancelled", None
         if activity != "unavailable":
             request.activity_budget["attempts"] = 0
             request.activity_budget["recovery_used"] = False
             return activity, stamp
+        emit(owner, "X05", "activity", "retry", "activity_retry", request_id=request.request_id)
         owner._followup_status = {**getattr(owner, "_followup_status", {}), "request_id": request.request_id, "state": "pending",
                                   "reason": "activity_retry", "activity_attempt": attempt + 1}
         if attempt + 1 == ACTIVITY_ATTEMPTS or time.monotonic() >= request.expires_at:
@@ -319,6 +335,7 @@ async def deliver_followup(owner, request: AnswerRequest) -> None:
                            "awaiting_message_relation": "message_relation_unresolved"}.get(previous.get("reason"))
                 reason = blocked or ("service_incomplete" if request.guidance_plan is not None and delivered >= request_plan(request).fields
                                      else "partial_delivered_missing_fields" if partial_sent else "no_new_verified_facts")
+                emit(owner, "X04", "followup", "discard", reason, request_id=request.request_id)
                 owner._followup_status = {"request_id": request.request_id, "state": "expired",
                     "outcome": "partial" if partial_sent else "timeout",
                     "reason": reason, "confirmed_fields": sorted(delivered), "result_ready": previous.get("result_ready") is True,
@@ -533,9 +550,14 @@ async def deliver_followup(owner, request: AnswerRequest) -> None:
                         and request.discussion_generation != getattr(owner, "_discussion_generation", 0)):
                     _cancel_current(owner, request, "discussion_changed")
                     return
-                if (epoch != getattr(owner, "_observation_epoch", 0)
-                              or getattr(owner, "_observation_invalidated", False)
-                              or recovered_snapshot is not None and not recovered_snapshot.matches(owner)):
+                if epoch != getattr(owner, "_observation_epoch", 0):
+                    emit(owner, "X06", "followup", "withhold", "epoch_changed", request_id=request.request_id)
+                    continue
+                if getattr(owner, "_observation_invalidated", False):
+                    emit(owner, "X06", "followup", "withhold", "observation_invalidated", request_id=request.request_id)
+                    continue
+                if recovered_snapshot is not None and not recovered_snapshot.matches(owner):
+                    emit(owner, "X06", "followup", "withhold", "snapshot_rejected", request_id=request.request_id)
                     continue
                 if silent:
                     # Same validated answer, now service-complete. End locally
@@ -573,6 +595,8 @@ async def deliver_followup(owner, request: AnswerRequest) -> None:
                                           "answer_complete": answer_complete,
                                           "outcome": outcome}
                 submitted = owner._followup_status["state"] == "submitted"
+                emit(owner, "X06", "followup", "allow" if submitted else "error",
+                     "submitted" if submitted else "submission_failed", request_id=request.request_id)
                 data["request_completion"] = state.public(body_complete=message_projection["complete"],
                     submitted=submitted, answer_complete=answer_complete)
                 owner._followup_status["request_completion"] = data["request_completion"]
@@ -601,6 +625,7 @@ async def deliver_followup(owner, request: AnswerRequest) -> None:
                                                confirmed_fields=sorted(delivered))
             await _wait_for_update(owner, request)
     except asyncio.CancelledError:
+        emit(owner, "X06", "followup", "cancel", "cancelled", request_id=request.request_id)
         raise
     except Exception:
         _cancel_current(owner, request, "followup_failed")

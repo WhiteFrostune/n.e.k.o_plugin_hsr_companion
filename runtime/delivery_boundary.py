@@ -75,6 +75,9 @@ def review(snapshot, owner, *, generation=None):
                 "invalidated": bool(getattr(owner, "_observation_invalidated", False))}
 
     def reject(reason):
+        from .rejection_trace import emit
+        emit(owner, "B02" if reason in {"page_changed", "revision_unproved", "unscoped_revision",
+             "page_proof_missing", "page_control_challenged"} else "B01", "boundary", "reject", reason)
         empty = public_visual_evidence({"invalidated": True, "source": "assistant_local_ocr"}, observer)
         empty["delivery_boundary"] = {**metadata, "state": "rejected", "reason": reason,
                                       "withheld_fields": sorted(snapshot._fields or represented_fields(selected))}
@@ -133,6 +136,7 @@ def review(snapshot, owner, *, generation=None):
     if challenged & page_dependencies:
         return reject("page_control_challenged")
 
+    from .rejection_trace import emit
     value = copy.deepcopy(selected)
     if challenged:
         source = raw.get("characters", []) if raw and snapshot.serial == serial else []
@@ -227,4 +231,6 @@ def review(snapshot, owner, *, generation=None):
     value["delivery_boundary"] = {**metadata, "state": "partial" if withheld else "retained",
         "reason": "object_replaced" if replaced_equipment else "fields_revoked" if withheld else "compatible",
         "withheld_fields": sorted(withheld - {None})}
+    if withheld:
+        emit(owner, "B05", "boundary", "withhold", "fields_withheld")
     return value

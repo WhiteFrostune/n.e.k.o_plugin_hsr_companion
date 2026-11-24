@@ -1,8 +1,10 @@
+
 """Recorded natural-question failures, not live OCR or cat-speech receipts.
 
 Keep the user's sequence and failed cases. Hints simulate the overly broad
 screen_fields seen in the effective audit, not a claim to know old call args.
 """
+
 import asyncio
 import copy
 import importlib
@@ -15,6 +17,7 @@ from plugin.plugins.hsr_companion.runtime.guidance import build_guidance, plan_g
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.tests import test_guidance as guidance_cases
 from plugin.plugins.hsr_companion.tests import test_moc_planning as moc_cases
+from plugin.plugins.hsr_companion.tests.diagnostic_sections import section as diagnostic_section
 from plugin.plugins.hsr_companion.tests.test_current_observation import plugin_fixture
 from plugin.plugins.hsr_companion.tests.test_d1_closeout import panel
 from plugin.plugins.hsr_companion.tests.test_diagnostics import inputs
@@ -154,7 +157,7 @@ def test_expired_followup_is_visible_in_safe_diagnostic():
     from plugin.plugins.hsr_companion.runtime.diagnostics import build_diagnostic_report
     report = build_diagnostic_report(**inputs(), followup_status={
         "state": "expired", "outcome": "timeout", "reason": "no_new_verified_facts"})
-    status = json.loads(report["json_text"])["explicit_followup"]
+    status = diagnostic_section(json.loads(report["json_text"]), 'explicit_followup')
     assert status["state"] == "expired" and status["reason"] == "no_new_verified_facts"
 
 

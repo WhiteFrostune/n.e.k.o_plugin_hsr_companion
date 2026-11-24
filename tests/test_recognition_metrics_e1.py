@@ -1,3 +1,4 @@
+
 import json
 from types import SimpleNamespace
 
@@ -9,6 +10,7 @@ from plugin.plugins.hsr_companion.runtime.recognition_metrics import (
     record_full,
     record_late_discard,
 )
+from plugin.plugins.hsr_companion.tests.diagnostic_sections import section as diagnostic_section
 
 
 def actor(entity_id):
@@ -77,5 +79,5 @@ def test_observation_metrics_export_is_bounded_and_distinguishes_discard_types()
         message_path={},
         observation_health=payload,
     )
-    assert json.loads(report["json_text"])["observation_health"] == payload
+    assert diagnostic_section(json.loads(report["json_text"]), 'observation_health') == payload
     assert "private" not in report["copy_text"]

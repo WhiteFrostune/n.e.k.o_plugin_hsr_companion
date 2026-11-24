@@ -15,6 +15,7 @@ from plugin.plugins.hsr_companion.runtime.service_contract import (
     public_service_request,
 )
 from plugin.plugins.hsr_companion.tests import test_guidance as guidance_cases
+from plugin.plugins.hsr_companion.tests.diagnostic_sections import section as diagnostic_section
 from plugin.plugins.hsr_companion.tests.test_current_observation import plugin_fixture
 from plugin.plugins.hsr_companion.tests.test_guidance import answer, plan
 
@@ -250,9 +251,9 @@ def test_diagnostics_distinguish_entry_status_from_old_audit_without_payload():
     values["service_request"] = {"state": "started", "generation": 7, "started_at": "2026-10-16T12:00:00+00:00",
                                  "query": "PRIVATE", "exception": "PRIVATE"}
     report = json.loads(build_diagnostic_report(**values)["json_text"])
-    assert report["service_request"]["state"] == "started"
-    assert report["service_request"]["started_at"] == "2026-10-16T12:00:00+00:00"
-    assert not report["service_request"]["tool_selection_enforced"]
+    assert diagnostic_section(report, 'service_request')["state"] == "started"
+    assert diagnostic_section(report, 'service_request')["started_at"] == "2026-10-16T12:00:00+00:00"
+    assert not diagnostic_section(report, 'service_request')["tool_selection_enforced"]
     assert "PRIVATE" not in str(report)
 
 

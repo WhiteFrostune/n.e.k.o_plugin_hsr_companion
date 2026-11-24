@@ -163,7 +163,7 @@ def build_diagnostic_report(*, observer: dict, assistant: dict, evidence: dict,
                             frame_comparisons: dict | None = None,
                             observation_health: dict | None = None, query_timings: dict | None = None,
                             session: dict | None = None, panel_witness: dict | None = None,
-                            source_build: dict | None = None, installation_stamp: dict | None = None, source_samples: dict | None = None) -> dict:
+                            source_build: dict | None = None, installation_stamp: dict | None = None, source_samples: dict | None = None, rejection_trace: dict | None = None) -> dict:
     """Project explicit safe fields, not arbitrary logs/config/raw errors."""
     checked_at = (now or datetime.now(timezone.utc)).isoformat()
     from .page_control_trace import sanitize_trace
@@ -360,4 +360,4 @@ def build_diagnostic_report(*, observer: dict, assistant: dict, evidence: dict,
     return finish(snapshot, query_timings=query_timings, observation_health=observation_health,
                   session=session, panel_witness=panel_witness,
                   source_build=source_build or {"version": PLUGIN_VERSION, "revision": BUILD_REVISION, "commit": BUILD_COMMIT},
-                  installation_stamp=installation_stamp, source_samples=source_samples)
+                  installation_stamp=installation_stamp, source_samples=source_samples, rejection_trace=rejection_trace)
