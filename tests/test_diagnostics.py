@@ -33,10 +33,10 @@ def test_report_allowlist_cannot_export_chat_game_names_paths_or_errors():
     before = copy.deepcopy(values)
     result = build_diagnostic_report(**values)
     assert secret not in json.dumps(result)
-    snapshot = json.loads(result["copy_text"])
+    snapshot = json.loads(result["json_text"])
     assert snapshot["last_query"]["wait_seconds"] is None
     assert snapshot["last_query"]["at"] is None
-    assert snapshot["last_query"]["stages"][0]["stage"] == "unknown"
+    assert snapshot["last_query"]["stages"][0]["stage"] == "unmapped_code"
     assert values["assistant"] == before["assistant"]
 
 
@@ -46,14 +46,14 @@ def test_stopped_observation_is_not_marked_as_a_fault_or_current_fact():
     result = build_diagnostic_report(**values)
     assert result["checks"][0] == {"name": "observation", "level": "info", "detail": "stopped"}
     assert next(check for check in result["checks"] if check["name"] == "facts")["detail"] == "unavailable"
-    assert not json.loads(result["copy_text"])["current_observation"]["fresh"]
+    assert not json.loads(result["json_text"])["current_observation"]["fresh"]
 
 
 def test_report_retains_bounded_timing_but_never_claims_playback():
     values = inputs()
     values["last_tool"] = {"refresh_diagnostics": {"outcome": "timeout", "wait_seconds": 20.031,
                                                    "stages": [{"stage": "analysis_finished", "processing_seconds": 10.922}] * 80}}
-    result = json.loads(build_diagnostic_report(**values)["copy_text"])
+    result = json.loads(build_diagnostic_report(**values)["json_text"])
     assert len(result["last_query"]["stages"]) == 48
     assert result["last_query"]["wait_seconds"] == 20.031
     assert result["speech"]["ack_scope"] == "sdk_submission_only"
@@ -66,10 +66,10 @@ def test_report_preserves_resident_worker_scope_without_raw_payload():
         {"stage": "query_joined_worker", "scope": "full", "worker_elapsed_seconds": 7.2, "raw": "PRIVATE"},
         {"stage": "analysis_finished", "scope": "PRIVATE", "health_polls": 4, "frame_transfers": 1},
     ]}}
-    result = json.loads(build_diagnostic_report(**values)["copy_text"])
+    result = json.loads(build_diagnostic_report(**values)["json_text"])
     stages = result["last_query"]["stages"]
     assert stages[0]["scope"] == "full" and stages[0]["worker_elapsed_seconds"] == 7.2
-    assert stages[1]["scope"] == "unknown"
+    assert stages[1]["scope"] == "unmapped_code"
     assert stages[1]["health_polls"] == 4 and stages[1]["frame_transfers"] == 1
     assert "PRIVATE" not in json.dumps(result)
 
@@ -109,7 +109,7 @@ def test_export_writes_utf8_json_without_overwriting_previous_files(tmp_path):
     assert first["path"] != second["path"]
     assert len(list(directory.glob("*.json"))) == 2
     assert Path(first["path"]).parent == directory.resolve()
-    assert json.loads(Path(first["path"]).read_text(encoding="utf-8")) == json.loads(report["copy_text"])
+    assert json.loads(Path(first["path"]).read_text(encoding="utf-8")) == json.loads(report["json_text"])
     assert first["checked_at"] == report["checked_at"]
     assert first["path"] not in Path(first["path"]).read_text(encoding="utf-8")
 
@@ -138,7 +138,7 @@ def test_export_action_uses_only_server_snapshot_and_plugin_data_directory(tmp_p
     result = unwrap(asyncio.run(owner.export_companion_diagnostic(path="outside", copy_text="PRIVATE")))
     from pathlib import Path
     content = Path(result["export"]["path"]).read_text(encoding="utf-8")
-    assert json.loads(content) == json.loads(report["copy_text"])
+    assert json.loads(content) == json.loads(report["json_text"])
     assert "PRIVATE" not in content
     assert values == before
     assert sent == []

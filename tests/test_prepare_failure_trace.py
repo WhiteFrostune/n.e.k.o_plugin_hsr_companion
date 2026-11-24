@@ -162,7 +162,7 @@ def test_diagnosis_recovers_failure_after_restart_without_ocr_or_messages(tmp_pa
         restored._assistant_status = health
         before = copy.deepcopy(restored_values)
         report = unwrap(await restored.diagnose_companion())["diagnostic"]
-        diagnostic = json.loads(report["copy_text"])
+        diagnostic = json.loads(report["json_text"])
         records = diagnostic["prepare_calls"]["records"]
         assert records[-1]["error_code"] == "invalid_response_detail"
         assert restored_values == before and not sent
@@ -178,7 +178,7 @@ def test_public_diagnostic_cannot_export_arbitrary_parameter_or_exception_text()
         "stage": "SECRET", "exception_type": "SECRET", "error_code": "SECRET",
         "arguments": {"intent": {"presence": "provided", "type": "str", "value": "SECRET"}},
         "origin": [{"file": "C:/SECRET.py", "function": "SECRET", "line": 1}],
-    }]} )["copy_text"])
+    }]} )["json_text"])
     assert "SECRET" not in json.dumps(report)
 
 

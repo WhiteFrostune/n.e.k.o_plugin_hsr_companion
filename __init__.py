@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import time
 from datetime import datetime, timezone
@@ -45,13 +46,32 @@ from .game_state import (
 )
 from .observer import capture_game_window, find_hsr_window, frame_difference
 from .runtime import CompanionRuntime, build_event_delivery
-from .runtime.build_info import BUILD_COMMIT, PLUGIN_VERSION
+from .runtime.build_info import BUILD_COMMIT, BUILD_REVISION, PLUGIN_VERSION
 from .runtime.chat_activity import latest_user_activity
 from .runtime.consultation_contract import CONSULTATION_SCHEMA, bound_followup_plan, normalize_model_consultation
 from .runtime.context_text import visual_context_text
 from .runtime.contracts import visual_fingerprints_match
 from .runtime.data_freshness import data_freshness
 from .runtime.diagnostic_export import export_diagnostic
+from .runtime.diagnostic_session import (
+    context_marker as diagnostic_context_marker,
+)
+from .runtime.diagnostic_session import (
+    initialize as diagnostic_initialize,
+)
+from .runtime.diagnostic_session import (
+    observe_enable,
+)
+from .runtime.diagnostic_session import (
+    safe_note as diagnostic_note,
+)
+from .runtime.diagnostic_session import (
+    snapshot as diagnostic_session_snapshot,
+)
+from .runtime.diagnostic_session import (
+    step as diagnostic_step,
+)
+from .runtime.diagnostic_snapshot import PANEL_WITNESS_SCHEMA
 from .runtime.diagnostics import build_diagnostic_report
 from .runtime.equipment import record_handoff
 from .runtime.equipment_view import equipment_card
@@ -154,6 +174,7 @@ class HsrCompanionPlugin(NekoPluginBase):
 
     def __init__(self, ctx: Any):
         super().__init__(ctx)
+        diagnostic_initialize(self, constructed=True)
         # These packaged resources are deliberately fixed and auditable. Runtime
         # configuration stays available for a later source-adapter phase, where
         # changes can be validated before replacing the audited seed catalog.
@@ -918,6 +939,7 @@ class HsrCompanionPlugin(NekoPluginBase):
             return {"delivery": {"submitted": False, "reason": "observation_revoked"}}
         trace_refresh(self, "observation_committed", serial=public_analysis["observation_serial"])
         ObservationStore(self).commit(public_analysis)
+        diagnostic_note(self, "first_commit", "completed")
         record_candidate(self, "candidate_committed", public_analysis,
                          serial=public_analysis["observation_serial"],
                          **({"job_id": getattr(self, "_vision_job_id", 0),
@@ -1077,11 +1099,14 @@ class HsrCompanionPlugin(NekoPluginBase):
                 # unavailable, the in-process compatibility path must also
                 # use isolated window capture. Never fall back to desktop
                 # pixels containing the character overlay or chat bubbles.
-                health = await asyncio.to_thread(self._assistant_client.health)
-                if not health.get("connected"):
-                    await asyncio.to_thread(self._assistant_process.start_if_due)
-                    await asyncio.sleep(0.25)
+                with diagnostic_step(self, "assistant_connection") as diagnostic_stage:
                     health = await asyncio.to_thread(self._assistant_client.health)
+                    if not health.get("connected"):
+                        await asyncio.to_thread(self._assistant_process.start_if_due)
+                        await asyncio.sleep(0.25)
+                        health = await asyncio.to_thread(self._assistant_client.health)
+                    diagnostic_stage["outcome"] = "connected" if health.get("connected") else "unavailable"
+                diagnostic_note(self, "first_observation", "started")
                 helper_connected = bool(health.get("connected"))
                 image_bytes: bytes
                 mime: str
@@ -1295,6 +1320,8 @@ class HsrCompanionPlugin(NekoPluginBase):
                     # independently recaptured compatibility frame still uses
                     # that connected helper to monitor transitions and publish
                     # early scene evidence; do not await the whole OCR pass.
+                    diagnostic_note(self, "first_observation", "completed")
+                    diagnostic_note(self, "first_commit", "started")
                     analysis = await guarded_analysis(self, image_bytes, helper=helper_connected)
                     if analysis is None:
                         self._set_observer_status("updating", "正在核对当前界面信息")
@@ -1428,15 +1455,21 @@ class HsrCompanionPlugin(NekoPluginBase):
                     )
                 await asyncio.sleep(0.25)
             except asyncio.CancelledError:
+                diagnostic_note(self, "first_observation", "cancelled")
+                diagnostic_note(self, "first_commit", "cancelled")
                 raise
             except VisionWorkerBusy as exc:
                 self._set_observer_status("updating", str(exc))
                 await self._wait_observer_tick(1)
             except RuntimeError as exc:
+                diagnostic_note(self, "first_observation", "failed", error=exc)
+                diagnostic_note(self, "first_commit", "failed", error=exc)
                 await self._invalidate_current_observation("capture_error")
                 self._set_observer_status("error", str(exc))
                 await self._wait_observer_tick(3)
             except Exception as exc:  # keep the plugin alive if capture fails
+                diagnostic_note(self, "first_observation", "failed", error=exc)
+                diagnostic_note(self, "first_commit", "failed", error=exc)
                 await self._invalidate_current_observation("capture_error")
                 self.logger.warning("HSR observer paused: %s", exc, exc_info=True)
                 self._set_observer_status("error", "暂时无法读取星铁窗口，插件会自动重试")
@@ -2851,6 +2884,7 @@ class HsrCompanionPlugin(NekoPluginBase):
         input_schema={"type": "object", "properties": {}},
         llm_result_fields=["observer", "session"],
     )
+    @observe_enable
     async def start_auto_observation(self, **_):
         try:
             self._observer_stop_requested = False
@@ -2869,8 +2903,10 @@ class HsrCompanionPlugin(NekoPluginBase):
                 "success",
                 "陪玩已开启。打开或切回《崩坏：星穹铁道》后会自动识别。",
             )
+            diagnostic_note(self, "initialization", "completed")
             return Ok({"observer": dict(self._observer_status), **context})
         except RuntimeError as exc:
+            diagnostic_note(self, "initialization", "failed", error=exc)
             await self._set_user_operation("companion", "error", "陪玩没有成功开启，请稍后重试。")
             return Err(SdkError(str(exc)))
 
@@ -3156,12 +3192,13 @@ class HsrCompanionPlugin(NekoPluginBase):
         input_schema={"type": "object", "properties": {
             "delivery_trace_seconds": {"type": "integer", "minimum": 0, "maximum": 120,
                 "description": "仅明确排查转述错值时开启：短时内存记录必要装备字段，不保存截图；0关闭。默认不开启。"},
+            "panel_witness": PANEL_WITNESS_SCHEMA,
             "include_delivery_trace": {"type": "boolean", "default": False,
                 "description": "仅明确请求时读取短时装备交付追踪；默认支持诊断/导出不包含游戏字段。"}},
             "additionalProperties": False},
         llm_result_fields=["diagnostic"],
     )
-    async def diagnose_companion(self, delivery_trace_seconds=None, include_delivery_trace=False, **_):
+    async def diagnose_companion(self, delivery_trace_seconds=None, include_delivery_trace=False, panel_witness=None, **_):
         # Do not reuse demo_ui_context: it can restore the observer/downloads.
         # Health + existing state only. No OCR, restart, settings write, speech
         # or tool audit (which would itself change the speech quiet window).
@@ -3171,9 +3208,14 @@ class HsrCompanionPlugin(NekoPluginBase):
         if type(delivery_trace_seconds) is int and 0 <= delivery_trace_seconds <= 120:
             configure_delivery_trace(self, seconds=delivery_trace_seconds)
 
-        assistant, audit, evidence, incomplete = await diagnostic_inputs(self)
+        diagnostic_samples = {}
+        assistant, audit, evidence, incomplete = await diagnostic_inputs(self, samples=diagnostic_samples)
         message_path = await self._check_message_path()
         from .runtime.review_policy import review_status
+        health_metrics = observation_health(self, evidence)
+        if not getattr(self, "_recognition_metrics", None):
+            health_metrics = {**health_metrics, **{key: None for key in (
+                "discarded_for_query", "discarded_at_30s_gate", "page_only_reuse_timeouts")}}
         report = build_diagnostic_report(
             observer=dict(self._observer_status), assistant=assistant,
             evidence=evidence,
@@ -3190,27 +3232,34 @@ class HsrCompanionPlugin(NekoPluginBase):
             revocation_trace=getattr(self, "_revocation_trace", []),
             vision_trace=public_vision_trace(self),
             frame_comparisons=frame_comparison_stats(self),
-            observation_health=observation_health(self, evidence),
+            observation_health=health_metrics,
             prepare_calls=await read_records(self),
+            query_timings=query_timings(self), session=diagnostic_session_snapshot(self),
+            panel_witness=panel_witness, source_samples=diagnostic_samples,
+            installation_stamp={"version": PLUGIN_VERSION, "revision": BUILD_REVISION, "commit": BUILD_COMMIT},
         )
-        report["query_timings"] = query_timings(self)
-        trace = delivery_value_trace(self)
+        self._diagnostic_report_cache = copy.deepcopy(report)
         if include_delivery_trace is True:
-            report["delivery_value_trace"] = trace
+            report["delivery_value_trace"] = delivery_value_trace(self)
         return Ok({"diagnostic": report})
 
     @ui.action(id="export_companion_diagnostic", label=tr("diagnostics.export"), refresh_context=False)
     @plugin_entry(
         id="export_companion_diagnostic", name=tr("diagnostics.export"),
         description=tr("diagnostics.exportDescription"),
-        input_schema={"type": "object", "properties": {}, "additionalProperties": False},
+        input_schema={"type": "object", "properties": {"diagnostic_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"}}, "additionalProperties": False},
         llm_result_fields=["diagnostic", "export"],
     )
-    async def export_companion_diagnostic(self, **_):
-        result = await self.diagnose_companion()
-        if isinstance(result, Err):
-            return result
-        report = unwrap_or(result, {})["diagnostic"]
+    async def export_companion_diagnostic(self, diagnostic_id=None, **_):
+        if diagnostic_id is not None:
+            report = getattr(self, "_diagnostic_report_cache", None)
+            if not isinstance(report, dict) or diagnostic_id != report.get("diagnostic_id"):
+                return Err(SdkError("该诊断快照已不可用，请重新运行一键诊断后再导出。"))
+        else:
+            result = await self.diagnose_companion()
+            if isinstance(result, Err):
+                return result
+            report = unwrap_or(result, {})["diagnostic"]
         try:
             saved = await asyncio.to_thread(export_diagnostic, self.data_path("diagnostics"), report)
         except (OSError, ValueError):
@@ -3333,6 +3382,7 @@ class HsrCompanionPlugin(NekoPluginBase):
         return {
             "status": "ready",
             "version": "0.9.7",
+            "diagnostic_context": diagnostic_context_marker(self),
             "catalog": self._catalog.meta,
             "record_count": self._catalog.record_count,
             "database_coverage": self._catalog.coverage,

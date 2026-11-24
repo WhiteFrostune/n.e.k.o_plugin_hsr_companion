@@ -263,7 +263,7 @@ def test_diagnostic_separates_direct_timeout_and_submitted_equipment_followup():
     params["now"] = datetime(2026, 11, 22, tzinfo=timezone.utc)
     receipts = [handoff_receipt(equipment_card(relic()), channel="followup")]
     result = json.loads(build_diagnostic_report(**params, equipment_handoffs=receipts,
-                        followup_status={"state": "submitted", "outcome": "ready"})["copy_text"])
+                        followup_status={"state": "submitted", "outcome": "ready"})["json_text"])
     assert result["last_query"]["outcome"] == "timeout"
     assert result["explicit_followup"]["outcome"] == "ready"
     assert result["equipment_handoffs"][0]["sub_stat_count"] == 4

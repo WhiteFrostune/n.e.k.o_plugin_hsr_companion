@@ -249,7 +249,7 @@ def test_diagnostics_distinguish_entry_status_from_old_audit_without_payload():
     values = inputs()
     values["service_request"] = {"state": "started", "generation": 7, "started_at": "2026-10-16T12:00:00+00:00",
                                  "query": "PRIVATE", "exception": "PRIVATE"}
-    report = json.loads(build_diagnostic_report(**values)["copy_text"])
+    report = json.loads(build_diagnostic_report(**values)["json_text"])
     assert report["service_request"]["state"] == "started"
     assert report["service_request"]["started_at"] == "2026-10-16T12:00:00+00:00"
     assert not report["service_request"]["tool_selection_enforced"]

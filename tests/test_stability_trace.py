@@ -51,7 +51,7 @@ def test_export_retains_correlation_but_not_unknown_fields_or_bad_identifiers():
     events = vision_trace.public_trace(owner)
     events.append({"stage": "query_wait", "request_id": "private text", "job_id": True,
                    "frame_seq": float("inf"), "chat": "private text"})
-    result = json.loads(build_diagnostic_report(**inputs(), vision_trace=events)["copy_text"])
+    result = json.loads(build_diagnostic_report(**inputs(), vision_trace=events)["json_text"])
     assert result["vision_trace"][0]["request_id"] == REQUEST
     assert result["vision_trace"][0]["job_id"] == 7
     assert result["vision_trace"][0]["frame_seq"] == 42

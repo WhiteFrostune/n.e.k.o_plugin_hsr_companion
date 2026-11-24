@@ -298,7 +298,7 @@
   "diagnostics.openExport": "打开导出文件",
   "diagnostics.openExportHelp": "打开文件需要桌面端支持；若没有打开，请按保存位置在文件管理器中查找。再次导出会生成新文件，不覆盖旧记录。",
   "diagnostics.checkedAt": "检查时间：{time}；结果是当时的快照，不会随面板自动刷新。",
-  "diagnostics.copy": "复制诊断结果",
+  "diagnostics.copy": "复制全部诊断",
   "diagnostics.copied": "诊断结果已复制",
   "diagnostics.queryTiming": "最近一次插件查询：{seconds} 秒，{outcome}；不包含猫娘生成回复的时间。",
   "diagnostics.outcome.ready": "取得可用结果",
@@ -348,5 +348,6 @@
   "equipmentCard.sub": "已读副词条",
   "equipmentCard.complete": "主词条与四项副词条已读全；不代表强化品质评价。",
   "equipmentCard.partial": "部分字段尚未确认，不补齐缺失词条。",
-  "equipmentCard.conflict": "读取字段存在冲突，暂不评价这件装备。"
+  "equipmentCard.conflict": "读取字段存在冲突，暂不评价这件装备。",
+  "diagnostics.id": "诊断编号：{id}"
 }

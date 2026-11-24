@@ -10,7 +10,7 @@ const ts = createRequire(resolve('package.json'))('typescript')
 const source = readFileSync(new URL('../ui/panel_v09.tsx', import.meta.url), 'utf8')
 const parsed = ts.createSourceFile('panel.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
 assert.equal(parsed.parseDiagnostics.length, 0, 'panel TSX must parse before behavioral tests')
-const names = ['friendlyError', 'runPanelAction', 'copyDiagnosticText']
+const names = ['friendlyError', 'runPanelAction', 'copyDiagnosticText', 'updatePanelWitness']
 const functions = parsed.statements.filter(node => ts.isFunctionDeclaration(node) && names.includes(node.name?.text))
 assert.equal(functions.length, names.length)
 const isolated = functions.map(node => node.getText(parsed)).join('\n')
@@ -99,7 +99,7 @@ function panelFixture(state = {}) {
         if (id === 'export_companion_diagnostic') {
           if (!exportSucceeds) throw new Error('诊断导出失败：磁盘空间不足')
           return { result: { diagnostic: report, export: {
-            path: 'C:\\plugin-data\\diagnostics\\report.json', filename: 'report.json', checked_at: report.checked_at,
+            path: 'C:\\plugin-data\\diagnostics\\report.json', filename: 'report.json', checked_at: report.checked_at, diagnostic_id: report.diagnostic_id,
           } } }
         }
         return { result: { diagnostic: report } }
@@ -175,12 +175,12 @@ test('failed export preserves diagnosis but clears the old saved-file success in
 
 test('diagnose and copy are separate; diagnosis does not refresh or speak', async () => {
   const fixture = panelFixture()
-  assert.equal(fixture.button(fixture.render(), '复制诊断结果'), undefined)
+  assert.equal(fixture.button(fixture.render(), '复制全部诊断'), undefined)
   await fixture.button(fixture.render(), '一键诊断').props.onClick()
   assert.deepEqual(fixture.calls, ['diagnose_companion'])
   assert.deepEqual(fixture.copied, [])
   assert.equal(fixture.refreshes(), 0)
-  await fixture.button(fixture.render(), '复制诊断结果').props.onClick()
+  await fixture.button(fixture.render(), '复制全部诊断').props.onClick()
   assert.deepEqual(fixture.calls, ['diagnose_companion'])
   assert.deepEqual(fixture.copied, ['SAFE_REPORT'])
 })
@@ -189,7 +189,7 @@ test('clipboard failure preserves a visible manual-copy report', async () => {
   const fixture = panelFixture()
   await fixture.button(fixture.render(), '一键诊断').props.onClick()
   fixture.failCopy()
-  await fixture.button(fixture.render(), '复制诊断结果').props.onClick()
+  await fixture.button(fixture.render(), '复制全部诊断').props.onClick()
   assert.match(fixture.notices.at(-1), /手动选择复制/)
   assert.ok(fixture.nodes(fixture.render()).some(node => node.type === 'Textarea' && node.props.value === 'SAFE_REPORT'))
 })
@@ -395,10 +395,48 @@ test('observation diagnostics move to one-click report and failed confirmation s
   assert.match(fixture.text(before), /确认期间有文字读取超时/)
   assert.doesNotMatch(fixture.text(before), /观察诊断/)
   assert.deepEqual(fixture.calls, [])
-  fixture.setReport({ checked_at: '2026-11-22T10:00:00Z', checks: [], copy_text: 'SAFE_REPORT', observation_health: health })
+  const floors = [5,4,3,2,1].map(floor => ({ floor, title: floor === 4 ? '观察与确认' : '诊断层',
+    health: { level: 'yellow', reason: 'not_recorded', scope: 'test' }, metrics: floor === 4 ? { observation_health: health } : {}, recent_events: [] }))
+  fixture.setReport({ checked_at: '2026-11-22T10:00:00Z', checks: [], copy_text: 'SAFE_REPORT', snapshot: { floors } })
   await fixture.button(before, '一键诊断').props.onClick()
   const after = fixture.render()
-  assert.match(fixture.text(after), /观察诊断/)
+  assert.doesNotMatch(fixture.text(after), /观察诊断/)
+  assert.equal(fixture.nodes(after).filter(node => node.type === 'StatusBadge' && /[1-5]F/.test(node.props.label)).length, 5)
   assert.ok(fixture.nodes(after).some(node =>
-    node.type === 'Textarea' && node.props.value === JSON.stringify(health, null, 2)))
+    node.type === 'Textarea' && node.props.value === JSON.stringify(floors[1], null, 2)))
+  assert.equal(fixture.nodes(after).some(node => node.type === 'Textarea' && node.props.value === JSON.stringify(health, null, 2)), false)
+})
+
+
+test('F1 render witness retains exactly 16 status changes without polling or source text', () => {
+  let witness = { mount_id: 'a'.repeat(32), events: [] }
+  const context = { at: '2026-11-24T12:00:00Z', context_seq: 7, session_id: 'b'.repeat(32), secret: 'PRIVATE' }
+  for (let i=0; i<25; i++) witness = sandbox.updatePanelWitness(witness, i%2 ? 'panel.ready' : 'panel.confirming', 'warning', 'none', context, '0.9.7', context.at)
+  assert.equal(witness.events.length, 16)
+  assert.equal(witness.events[0].sequence, 10)
+  const unchanged = sandbox.updatePanelWitness(witness, witness.events.at(-1).status_key, 'warning', 'none', context, '0.9.7')
+  assert.equal(unchanged.events.length, 16)
+  assert.equal(unchanged.events.at(-1).sequence, 25)
+  assert.doesNotMatch(JSON.stringify(witness), /PRIVATE|secret/)
+})
+
+test('F1 diagnosis passes only bounded display witness and copy performs no second call', async () => {
+  const fixture = panelFixture({ version: '0.9.7', observer: { enabled: false, state: 'stopped' },
+    diagnostic_context: { at: '2026-11-24T12:00:00Z', context_seq: 1, session_id: 'a'.repeat(32) } })
+  await fixture.button(fixture.render(), '一键诊断').props.onClick()
+  const args = fixture.callArguments[0].args
+  assert.deepEqual(Object.keys(args), ['panel_witness'])
+  assert.equal(args.panel_witness.events.length, 1)
+  assert.equal(args.panel_witness.events[0].status_key, 'panel.stopped')
+  await fixture.button(fixture.render(), '复制全部诊断').props.onClick()
+  assert.deepEqual(fixture.calls, ['diagnose_companion'])
+  assert.equal(fixture.refreshes(), 0)
+})
+
+test('F1 export requests the same diagnosis ID instead of silently regenerating', async () => {
+  const fixture = panelFixture()
+  fixture.setReport({ checked_at: '2026-11-24T12:00:00Z', checks: [], copy_text: 'SAFE_REPORT', diagnostic_id: 'a'.repeat(32) })
+  await fixture.button(fixture.render(), '一键诊断').props.onClick()
+  await fixture.button(fixture.render(), '导出诊断').props.onClick()
+  assert.equal(fixture.callArguments[1].args.diagnostic_id, 'a'.repeat(32))
 })

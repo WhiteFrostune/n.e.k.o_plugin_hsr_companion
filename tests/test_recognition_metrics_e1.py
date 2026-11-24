@@ -77,5 +77,5 @@ def test_observation_metrics_export_is_bounded_and_distinguishes_discard_types()
         message_path={},
         observation_health=payload,
     )
-    assert json.loads(report["copy_text"])["observation_health"] == payload
+    assert json.loads(report["json_text"])["observation_health"] == payload
     assert "private" not in report["copy_text"]

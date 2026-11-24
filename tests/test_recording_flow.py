@@ -154,7 +154,7 @@ def test_expired_followup_is_visible_in_safe_diagnostic():
     from plugin.plugins.hsr_companion.runtime.diagnostics import build_diagnostic_report
     report = build_diagnostic_report(**inputs(), followup_status={
         "state": "expired", "outcome": "timeout", "reason": "no_new_verified_facts"})
-    status = json.loads(report["copy_text"])["explicit_followup"]
+    status = json.loads(report["json_text"])["explicit_followup"]
     assert status["state"] == "expired" and status["reason"] == "no_new_verified_facts"
 
 
