@@ -1,0 +1,36 @@
+{
+  "F1_ci_main": "fed1687f8b34c60fe34f9de84f74257722e53289",
+  "F2_ci_main": "f665a41a3d2e00991e93a81085c6909374e5733e",
+  "files": [
+    {
+      "file": "plugin/neko_plugin_cli/commands/release_cmd.py",
+      "F1_ci_blob": "66bb258a8ff845e370992000d5c397efd35af1c6",
+      "F2_ci_blob": "66bb258a8ff845e370992000d5c397efd35af1c6",
+      "identical": true
+    },
+    {
+      "file": "plugin/conftest.py",
+      "F1_ci_blob": "cd7a018a917a7849e7df66d7d6c82cf89b0f0d45",
+      "F2_ci_blob": "cd7a018a917a7849e7df66d7d6c82cf89b0f0d45",
+      "identical": true
+    },
+    {
+      "file": "tests/clock_guard.py",
+      "F1_ci_blob": "721c9fb1125d5429d40e49649a6c6ed3aaa3fe0b",
+      "F2_ci_blob": "721c9fb1125d5429d40e49649a6c6ed3aaa3fe0b",
+      "identical": true
+    },
+    {
+      "file": "tests/fake_clock.py",
+      "F1_ci_blob": "b02f7ab2b03e014f0da1eb24335855b74fa30545",
+      "F2_ci_blob": "b02f7ab2b03e014f0da1eb24335855b74fa30545",
+      "identical": true
+    },
+    {
+      "file": "pytest.ini",
+      "F1_ci_blob": "d0e681a9e8168a0334165b5384af5b31fa522b81",
+      "F2_ci_blob": "d0e681a9e8168a0334165b5384af5b31fa522b81",
+      "identical": true
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+command: uv run python -m pytest <F1_SINGLE_TEST>
+N.E.K.O main: f665a41a3d2e00991e93a81085c6909374e5733e
+variant: F1
+[BEGIN COMPLETE OUTPUT]
+.                                                                        [100%]
+============================== warnings summary ===============================
+<FROZEN_TEST_ENV>\Lib\site-packages\_pytest\config\__init__.py:1428
+  <FROZEN_TEST_ENV>\Lib\site-packages\_pytest\config\__init__.py:1428: PytestConfigWarning: Unknown config option: timeout
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1 passed, 1 warning in 2.11s
+
+[END COMPLETE OUTPUT]
+exit_code: 0

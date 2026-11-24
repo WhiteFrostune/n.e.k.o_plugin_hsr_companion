@@ -1,0 +1,630 @@
+command: uv run python -m plugin.neko_plugin_cli.cli check -r hsr_companion
+N.E.K.O main: f665a41a3d2e00991e93a81085c6909374e5733e
+variant: F2
+[BEGIN COMPLETE OUTPUT]
+[ConfigManager] ✓ Using app data directory: <USER_HOME>\AppData\Local
+============================= test session starts =============================
+platform win32 -- Python 3.11.15, pytest-9.0.2, pluggy-1.6.0
+Using --randomly-seed=20260731
+rootdir: <NEKO_MAIN>
+configfile: pytest.ini
+plugins: hypothesis-6.155.2, asyncio-1.3.0, base-url-2.1.0, cov-7.1.0, playwright-0.7.2, randomly-4.1.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 2797 items
+
+tests\test_field_pipeline_probe.py ....                                  [  0%]
+tests\test_major_page_handoff_20261020.py .......                        [  0%]
+tests\test_relic_condition_trace.py ...........                          [  0%]
+tests\test_reply_delivery_closeout_20261022.py ......................... [  1%]
+.......                                                                  [  1%]
+tests\test_code_health_followup_contract.py ......                       [  2%]
+tests\test_blocking_pipeline_20261017.py .............                   [  2%]
+tests\test_experience_fixes.py ...................................       [  3%]
+tests\test_current_observation.py ...................................... [  5%]
+.........                                                                [  5%]
+tests\test_regional_poc.py ...........                                   [  5%]
+tests\test_relic_fields.py .....................................         [  7%]
+tests\test_manual_refresh.py ......                                      [  7%]
+tests\test_navigation_v1.py .................................            [  8%]
+tests\test_screen_facts.py ............................................. [ 10%]
+...........................                                              [ 11%]
+tests\test_native_recognition.py ...........                             [ 11%]
+tests\test_general_name_reader.py ...................................... [ 12%]
+........................................................                 [ 14%]
+tests\test_stage1_repairs.py ............................                [ 15%]
+tests\test_page_activity_contract_20261020.py ...............            [ 16%]
+tests\test_consultation_array_schema.py ......                           [ 16%]
+tests\test_roundtrip_c_acceptance_plan_20261021.py ........              [ 17%]
+tests\test_code_health_navigation_contract.py ..............             [ 17%]
+tests\test_3c_dialogue_20261116.py .......                               [ 17%]
+tests\test_request_timing_detail.py ...........                          [ 18%]
+tests\test_refresh_diagnostics.py ...                                    [ 18%]
+tests\test_background_perception.py ..................                   [ 18%]
+tests\test_stage2a_closeout_20261017.py ..................               [ 19%]
+tests\test_roundtrip_breakpoints_red_20261020.py sssssssss               [ 19%]
+tests\test_d1_subject_contract_20261020.py ............................. [ 20%]
+.....                                                                    [ 21%]
+tests\test_live_demo_fixes.py .........................                  [ 21%]
+tests\test_legacy_imports.py ........................................... [ 23%]
+.....................................                                    [ 24%]
+tests\test_layering.py .....                                             [ 25%]
+tests\test_review_scope_progress_20261020.py .....                       [ 25%]
+tests\test_stability_trace.py ............                               [ 25%]
+tests\test_avatar_pack.py ......s                                        [ 25%]
+tests\test_service_handoff.py ................................           [ 27%]
+tests\test_delivery_chain_20261017.py .................                  [ 27%]
+tests\test_runtime_stability_20261113.py ........                        [ 27%]
+tests\test_query_refactor.py ..............................              [ 28%]
+tests\test_code_health_stability_harness.py ..........                   [ 29%]
+tests\test_window_capture.py ....................                        [ 30%]
+tests\test_stage2a_contract.py ..............                            [ 30%]
+tests\test_page_body_r3_20261021.py s.sssssss.sss.sssssssssssss          [ 31%]
+tests\test_delivery_boundary_20261020.py .......................         [ 32%]
+tests\test_roundtrip_plan_20261020.py ..                                 [ 32%]
+tests\test_commit_activity_repair.py ................                    [ 32%]
+tests\test_cross_page_panel_delivery_20261020.py ..........              [ 33%]
+tests\test_equipment_turn_delivery.py ............                       [ 33%]
+tests\test_exploration_fields.py ........................                [ 34%]
+tests\test_f1_diagnostics.py ...............................             [ 35%]
+tests\test_stale_reuse_2c.py ..............                              [ 36%]
+tests\test_v095_runtime.py .......................................       [ 37%]
+tests\test_code_health_lifecycle.py ..........                           [ 38%]
+tests\test_player_builds.py .........................................    [ 39%]
+tests\test_contract_repairs_20261017.py .........................        [ 40%]
+tests\test_goal_recognition.py ......................................... [ 41%]
+........................................................................ [ 44%]
+.............                                                            [ 44%]
+tests\test_relic_label_contract.py ...........................           [ 45%]
+tests\test_foreground_query_admission.py .......                         [ 46%]
+tests\test_relic_request_checkpoint_20261114.py ....                     [ 46%]
+tests\test_page_followup.py ............................................ [ 47%]
+                                                                         [ 47%]
+tests\test_activity_scope_ci.py ...                                      [ 47%]
+tests\test_uid_import.py ............................................... [ 49%]
+..................                                                       [ 50%]
+tests\test_roundtrip_content_repair_20261020.py s.ss.s.ssssss...sss.ssss [ 51%]
+..ssssss                                                                 [ 51%]
+tests\test_reproduction_20261012.py .........                            [ 51%]
+tests\test_d1_player_equipment_reply.py ..........................       [ 52%]
+tests\test_static_patrol.py .......                                      [ 52%]
+tests\test_session_message_handoff.py ....................               [ 53%]
+tests\test_current_screen_consultation_20261116.py ......                [ 53%]
+tests\test_region_query_2b.py .......                                    [ 54%]
+tests\test_scene_latency.py ...............................              [ 55%]
+tests\test_dynamic_handoff_20261017.py ..............................    [ 56%]
+tests\test_r2_formatter_timing_20261021.py .                             [ 56%]
+tests\test_d1_closeout.py ............................                   [ 57%]
+tests\test_demo_d0_d1.py .........s.                                     [ 57%]
+tests\test_record_recording_trial.py .....                               [ 57%]
+tests\test_d1_handoff_closeout.py ..........................             [ 58%]
+tests\test_pipeline_state.py ................                            [ 59%]
+tests\test_e2_patrol_confirmation.py ........                            [ 59%]
+tests\test_team_slots_2c.py .....                                        [ 59%]
+tests\test_relic_evidence_repair.py .............                        [ 60%]
+tests\test_reader_budget_probe_20261020.py ..                            [ 60%]
+tests\test_assistant_supply_20261017.py ...s...s.                        [ 60%]
+tests\test_request_handoff_r2_20261021.py ..s.....s..                    [ 61%]
+tests\test_fact_reliability.py ..............................            [ 62%]
+tests\test_relic_region_first_20261115.py ...                            [ 62%]
+tests\test_cooperative_ocr_review.py ......                              [ 62%]
+tests\test_semantic_routing.py ......................................... [ 63%]
+....                                                                     [ 64%]
+tests\test_chain_audit_20261017.py ...........................           [ 65%]
+tests\test_page_first_protocol_20261020.py .................             [ 65%]
+tests\test_recognition_metrics_e1.py ..                                  [ 65%]
+tests\test_readiness_imports.py .....                                    [ 65%]
+tests\test_query_priority_2a.py .......                                  [ 66%]
+tests\test_navigation_evidence.py ...................................... [ 67%]
+.                                                                        [ 67%]
+tests\test_label_batch_acceptance.py .........                           [ 67%]
+tests\test_team_roster_2b1.py .....                                      [ 68%]
+tests\test_code_health_packaging.py ...........                          [ 68%]
+tests\test_diagnostics.py ...........                                    [ 68%]
+tests\test_reader_policy.py ...                                          [ 68%]
+tests\test_mechanics_progression.py ...............................      [ 70%]
+tests\test_d1_fit_repair.py ..s.........................                 [ 71%]
+tests\test_review_policy_20261017.py ...............................     [ 72%]
+tests\test_code_health_request_recovery.py ...                           [ 72%]
+tests\test_cached_page_controls_20261020.py ......                       [ 72%]
+tests\test_speech_arbitration.py ............................            [ 73%]
+tests\test_expression_relic_closeout_20261022.py .....................   [ 74%]
+tests\test_bounded_page_handoff_20261021.py ............................ [ 75%]
+...                                                                      [ 75%]
+tests\test_stage2a_transfer_20261017.py .......                          [ 75%]
+tests\test_guidance.py ................................................. [ 77%]
+..                                                                       [ 77%]
+tests\test_moc_planning.py ..............................                [ 78%]
+tests\test_query_yield_evidence_20261120.py ..                           [ 78%]
+tests\test_stage2_assessment.py ...........................              [ 79%]
+tests\test_delivery_races.py ........                                    [ 79%]
+tests\test_d1_turns.py .........................                         [ 80%]
+tests\test_controlled_time.py .....                                      [ 80%]
+tests\test_vision_runtime.py .......                                     [ 81%]
+tests\test_experiment_isolation_20261114.py ..........                   [ 81%]
+tests\test_smoke.py ...........                                          [ 81%]
+tests\test_s1_name_line_confirmation.py .............                    [ 82%]
+tests\test_current_character_regions.py .........................        [ 83%]
+tests\test_recording_stage3_cone_delivery.py ...........                 [ 83%]
+tests\test_query_reuse.py ..........................                     [ 84%]
+tests\test_f2_rejection_trace.py ....F..................F............... [ 85%]
+.....F..........F.............F..................F...................... [ 88%]
+..........................FF..............                               [ 90%]
+tests\test_followup_reader.py .......                                    [ 90%]
+tests\test_isolated_numeric_conditions.py .............................. [ 91%]
+....                                                                     [ 91%]
+tests\test_prepare_failure_trace.py .................................... [ 92%]
+..                                                                       [ 92%]
+tests\test_candidate_clock_contract.py ............                      [ 93%]
+tests\test_s1_preemption_closeout.py ......................              [ 94%]
+tests\test_prepare_delivery_contract_20261120.py ..                      [ 94%]
+tests\test_recording_flow.py .............................               [ 95%]
+tests\test_request_completion_r1_20261021.py sss.sssssssssssssssssssss   [ 96%]
+tests\test_assistant_binary_supply.py .......                            [ 96%]
+tests\test_resident_observer.py ...........                              [ 96%]
+tests\test_navigation_controls_regression.py ........................... [ 97%]
+.........                                                                [ 97%]
+tests\test_spoken_demand_20261023.py ...............                     [ 98%]
+tests\test_recording_stage3_sources.py ..................                [ 99%]
+tests\test_r1_handoff_isolation_20261021.py .....                        [ 99%]
+tests\test_delivery_fix_20261012.py ...............                      [ 99%]
+tests\test_dispatch_boundary.py s..                                      [100%]
+
+================================== FAILURES ===================================
+_ test_actual_compact_guard_and_fault_equivalence[False-review_expired-Q13-deadline] _
+plugin/plugins/hsr_companion/tests/test_f2_rejection_trace.py::test_actual_compact_guard_and_fault_equivalence[False-review_expired-Q13-deadline] 把 stdlib time 的 ['monotonic'] 换掉了——这是全进程生效的，任何后台线程都会读到假时钟；若假时钟有状态（迭代器/计数器），别人调一次就把它打乱。改用 tests.fake_clock.patch_module_clock(monkeypatch, <真正读时钟的模块>, monotonic=...)。
+__ test_instrumentation_erasure_matches_f1_business_ast[__init__.py-names3] ___
+
+file = '__init__.py', names = ['_observer_loop', '_apply_local_analysis']
+
+    @pytest.mark.parametrize(
+        "file,names",
+        [
+            ("runtime/live_refresh.py", ["_guarded_analysis"]),
+            ("runtime/query_reuse.py", ["review_snapshot"]),
+            ("runtime/delivery_boundary.py", ["review"]),
+            ("__init__.py", ["_observer_loop", "_apply_local_analysis"]),
+        ],
+    )
+    def test_instrumentation_erasure_matches_f1_business_ast(file, names):
+        """Every return/await/exception/condition is identical after passive calls erase."""
+>       baseline = subprocess.run(
+            ["git", "show", f"02610e6:{file}"], cwd=ROOT, capture_output=True, check=True
+        ).stdout.decode("utf-8-sig")
+
+tests\test_f2_rejection_trace.py:383: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['git', 'show', '02610e6:__init__.py'],)
+kwargs = {'cwd': WindowsPath('<NEKO_MAIN>/plugin/plugins/hsr_companion'), 'stderr': -1, 'stdout': -1}
+process = <Popen: returncode: 128 args: ['git', 'show', '02610e6:__init__.py']>
+stdout = b'', stderr = b"fatal: invalid object name '02610e6'.\n", retcode = 128
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout is given, and the process takes too long, a TimeoutExpired
+        exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['git', 'show', '02610e6:__init__.py']' returned non-zero exit status 128.
+
+<USER_HOME>\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\Lib\subprocess.py:571: CalledProcessError
+_ test_instrumentation_erasure_matches_f1_business_ast[runtime/delivery_boundary.py-names2] _
+
+file = 'runtime/delivery_boundary.py', names = ['review']
+
+    @pytest.mark.parametrize(
+        "file,names",
+        [
+            ("runtime/live_refresh.py", ["_guarded_analysis"]),
+            ("runtime/query_reuse.py", ["review_snapshot"]),
+            ("runtime/delivery_boundary.py", ["review"]),
+            ("__init__.py", ["_observer_loop", "_apply_local_analysis"]),
+        ],
+    )
+    def test_instrumentation_erasure_matches_f1_business_ast(file, names):
+        """Every return/await/exception/condition is identical after passive calls erase."""
+>       baseline = subprocess.run(
+            ["git", "show", f"02610e6:{file}"], cwd=ROOT, capture_output=True, check=True
+        ).stdout.decode("utf-8-sig")
+
+tests\test_f2_rejection_trace.py:383: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['git', 'show', '02610e6:runtime/delivery_boundary.py'],)
+kwargs = {'cwd': WindowsPath('<NEKO_MAIN>/plugin/plugins/hsr_companion'), 'stderr': -1, 'stdout': -1}
+process = <Popen: returncode: 128 args: ['git', 'show', '02610e6:runtime/delivery_boun...>
+stdout = b'', stderr = b"fatal: invalid object name '02610e6'.\n", retcode = 128
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout is given, and the process takes too long, a TimeoutExpired
+        exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['git', 'show', '02610e6:runtime/delivery_boundary.py']' returned non-zero exit status 128.
+
+<USER_HOME>\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\Lib\subprocess.py:571: CalledProcessError
+_ test_instrumentation_erasure_matches_f1_business_ast[runtime/query_reuse.py-names1] _
+
+file = 'runtime/query_reuse.py', names = ['review_snapshot']
+
+    @pytest.mark.parametrize(
+        "file,names",
+        [
+            ("runtime/live_refresh.py", ["_guarded_analysis"]),
+            ("runtime/query_reuse.py", ["review_snapshot"]),
+            ("runtime/delivery_boundary.py", ["review"]),
+            ("__init__.py", ["_observer_loop", "_apply_local_analysis"]),
+        ],
+    )
+    def test_instrumentation_erasure_matches_f1_business_ast(file, names):
+        """Every return/await/exception/condition is identical after passive calls erase."""
+>       baseline = subprocess.run(
+            ["git", "show", f"02610e6:{file}"], cwd=ROOT, capture_output=True, check=True
+        ).stdout.decode("utf-8-sig")
+
+tests\test_f2_rejection_trace.py:383: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['git', 'show', '02610e6:runtime/query_reuse.py'],)
+kwargs = {'cwd': WindowsPath('<NEKO_MAIN>/plugin/plugins/hsr_companion'), 'stderr': -1, 'stdout': -1}
+process = <Popen: returncode: 128 args: ['git', 'show', '02610e6:runtime/query_reuse.py']>
+stdout = b'', stderr = b"fatal: invalid object name '02610e6'.\n", retcode = 128
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout is given, and the process takes too long, a TimeoutExpired
+        exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['git', 'show', '02610e6:runtime/query_reuse.py']' returned non-zero exit status 128.
+
+<USER_HOME>\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\Lib\subprocess.py:571: CalledProcessError
+_ test_actual_compact_guard_and_fault_equivalence[False-worker_expired-Q02-deadline] _
+plugin/plugins/hsr_companion/tests/test_f2_rejection_trace.py::test_actual_compact_guard_and_fault_equivalence[False-worker_expired-Q02-deadline] 把 stdlib time 的 ['monotonic'] 换掉了——这是全进程生效的，任何后台线程都会读到假时钟；若假时钟有状态（迭代器/计数器），别人调一次就把它打乱。改用 tests.fake_clock.patch_module_clock(monkeypatch, <真正读时钟的模块>, monotonic=...)。
+_ test_actual_compact_guard_and_fault_equivalence[True-review_expired-Q13-deadline] _
+plugin/plugins/hsr_companion/tests/test_f2_rejection_trace.py::test_actual_compact_guard_and_fault_equivalence[True-review_expired-Q13-deadline] 把 stdlib time 的 ['monotonic'] 换掉了——这是全进程生效的，任何后台线程都会读到假时钟；若假时钟有状态（迭代器/计数器），别人调一次就把它打乱。改用 tests.fake_clock.patch_module_clock(monkeypatch, <真正读时钟的模块>, monotonic=...)。
+_ test_instrumentation_erasure_matches_f1_business_ast[runtime/live_refresh.py-names0] _
+
+file = 'runtime/live_refresh.py', names = ['_guarded_analysis']
+
+    @pytest.mark.parametrize(
+        "file,names",
+        [
+            ("runtime/live_refresh.py", ["_guarded_analysis"]),
+            ("runtime/query_reuse.py", ["review_snapshot"]),
+            ("runtime/delivery_boundary.py", ["review"]),
+            ("__init__.py", ["_observer_loop", "_apply_local_analysis"]),
+        ],
+    )
+    def test_instrumentation_erasure_matches_f1_business_ast(file, names):
+        """Every return/await/exception/condition is identical after passive calls erase."""
+>       baseline = subprocess.run(
+            ["git", "show", f"02610e6:{file}"], cwd=ROOT, capture_output=True, check=True
+        ).stdout.decode("utf-8-sig")
+
+tests\test_f2_rejection_trace.py:383: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['git', 'show', '02610e6:runtime/live_refresh.py'],)
+kwargs = {'cwd': WindowsPath('<NEKO_MAIN>/plugin/plugins/hsr_companion'), 'stderr': -1, 'stdout': -1}
+process = <Popen: returncode: 128 args: ['git', 'show', '02610e6:runtime/live_refresh....>
+stdout = b'', stderr = b"fatal: invalid object name '02610e6'.\n", retcode = 128
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout is given, and the process takes too long, a TimeoutExpired
+        exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['git', 'show', '02610e6:runtime/live_refresh.py']' returned non-zero exit status 128.
+
+<USER_HOME>\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\Lib\subprocess.py:571: CalledProcessError
+_ test_actual_compact_guard_and_fault_equivalence[True-worker_expired-Q02-deadline] _
+plugin/plugins/hsr_companion/tests/test_f2_rejection_trace.py::test_actual_compact_guard_and_fault_equivalence[True-worker_expired-Q02-deadline] 把 stdlib time 的 ['monotonic'] 换掉了——这是全进程生效的，任何后台线程都会读到假时钟；若假时钟有状态（迭代器/计数器），别人调一次就把它打乱。改用 tests.fake_clock.patch_module_clock(monkeypatch, <真正读时钟的模块>, monotonic=...)。
+============================== warnings summary ===============================
+<FROZEN_TEST_ENV>\Lib\site-packages\_pytest\config\__init__.py:1428
+  <FROZEN_TEST_ENV>\Lib\site-packages\_pytest\config\__init__.py:1428: PytestConfigWarning: Unknown config option: timeout
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+plugin/plugins/hsr_companion/tests/test_f2_rejection_trace.py::test_actual_compact_guard_and_fault_equivalence[False-review_expired-Q13-deadline]
+  <FROZEN_TEST_ENV>\Lib\site-packages\_pytest\runner.py:245: PluggyTeardownRaisedWarning: A plugin raised an exception during an old-style hookwrapper teardown.
+  Plugin: <NEKO_MAIN>\plugin\conftest.py, Hook: pytest_runtest_call
+  Failed: plugin/plugins/hsr_companion/tests/test_f2_rejection_trace.py::test_actual_compact_guard_and_fault_equivalence[False-review_expired-Q13-deadline] 把 stdlib time 的 ['monotonic'] 换掉了——这是全进程生效的，任何后台线程都会读到假时钟；若假时钟有状态（迭代器/计数器），别人调一次就把它打乱。改用 tests.fake_clock.patch_module_clock(monkeypatch, <真正读时钟的模块>, monotonic=...)。
+  For more information see https://pluggy.readthedocs.io/en/stable/api_reference.html#pluggy.PluggyTeardownRaisedWarning
+    lambda: runtest_hook(item=item, **kwds),
+
+plugin/plugins/hsr_companion/tests/test_f2_rejection_trace.py::test_actual_compact_guard_and_fault_equivalence[False-worker_expired-Q02-deadline]
+  <FROZEN_TEST_ENV>\Lib\site-packages\_pytest\runner.py:245: PluggyTeardownRaisedWarning: A plugin raised an exception during an old-style hookwrapper teardown.
+  Plugin: <NEKO_MAIN>\plugin\conftest.py, Hook: pytest_runtest_call
+  Failed: plugin/plugins/hsr_companion/tests/test_f2_rejection_trace.py::test_actual_compact_guard_and_fault_equivalence[False-worker_expired-Q02-deadline] 把 stdlib time 的 ['monotonic'] 换掉了——这是全进程生效的，任何后台线程都会读到假时钟；若假时钟有状态（迭代器/计数器），别人调一次就把它打乱。改用 tests.fake_clock.patch_module_clock(monkeypatch, <真正读时钟的模块>, monotonic=...)。
+  For more information see https://pluggy.readthedocs.io/en/stable/api_reference.html#pluggy.PluggyTeardownRaisedWarning
+    lambda: runtest_hook(item=item, **kwds),
+
+plugin/plugins/hsr_companion/tests/test_f2_rejection_trace.py::test_actual_compact_guard_and_fault_equivalence[True-review_expired-Q13-deadline]
+  <FROZEN_TEST_ENV>\Lib\site-packages\_pytest\runner.py:245: PluggyTeardownRaisedWarning: A plugin raised an exception during an old-style hookwrapper teardown.
+  Plugin: <NEKO_MAIN>\plugin\conftest.py, Hook: pytest_runtest_call
+  Failed: plugin/plugins/hsr_companion/tests/test_f2_rejection_trace.py::test_actual_compact_guard_and_fault_equivalence[True-review_expired-Q13-deadline] 把 stdlib time 的 ['monotonic'] 换掉了——这是全进程生效的，任何后台线程都会读到假时钟；若假时钟有状态（迭代器/计数器），别人调一次就把它打乱。改用 tests.fake_clock.patch_module_clock(monkeypatch, <真正读时钟的模块>, monotonic=...)。
+  For more information see https://pluggy.readthedocs.io/en/stable/api_reference.html#pluggy.PluggyTeardownRaisedWarning
+    lambda: runtest_hook(item=item, **kwds),
+
+plugin/plugins/hsr_companion/tests/test_f2_rejection_trace.py::test_actual_compact_guard_and_fault_equivalence[True-worker_expired-Q02-deadline]
+  <FROZEN_TEST_ENV>\Lib\site-packages\_pytest\runner.py:245: PluggyTeardownRaisedWarning: A plugin raised an exception during an old-style hookwrapper teardown.
+  Plugin: <NEKO_MAIN>\plugin\conftest.py, Hook: pytest_runtest_call
+  Failed: plugin/plugins/hsr_companion/tests/test_f2_rejection_trace.py::test_actual_compact_guard_and_fault_equivalence[True-worker_expired-Q02-deadline] 把 stdlib time 的 ['monotonic'] 换掉了——这是全进程生效的，任何后台线程都会读到假时钟；若假时钟有状态（迭代器/计数器），别人调一次就把它打乱。改用 tests.fake_clock.patch_module_clock(monkeypatch, <真正读时钟的模块>, monotonic=...)。
+  For more information see https://pluggy.readthedocs.io/en/stable/api_reference.html#pluggy.PluggyTeardownRaisedWarning
+    lambda: runtest_hook(item=item, **kwds),
+
+plugin/plugins/hsr_companion/tests/test_dispatch_boundary.py::test_host_background_assessment_excludes_this_manifest_without_llm
+  <NEKO_MAIN>\plugin\plugins\hsr_companion\tests\test_dispatch_boundary.py:25: PytestDeprecationWarning: 
+  Module 'brain.task_executor' was found, but when imported by pytest it raised:
+      ImportError("cannot import name 'AGENT_HISTORY_TURNS' from 'config' (<NEKO_MAIN>\\config\\__init__.py)")
+  In pytest 9.1 this warning will become an error by default.
+  You can fix the underlying problem, or alternatively overwrite this behavior and silence this warning by passing exc_type=ImportError explicitly.
+  See https://docs.pytest.org/en/stable/deprecations.html#pytest-importorskip-default-behavior-regarding-importerror
+    pytest.importorskip("brain.task_executor", reason="host brain module is not installed in this environment")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests\test_f2_rejection_trace.py::test_actual_compact_guard_and_fault_equivalence[False-review_expired-Q13-deadline]
+FAILED tests\test_f2_rejection_trace.py::test_instrumentation_erasure_matches_f1_business_ast[__init__.py-names3]
+FAILED tests\test_f2_rejection_trace.py::test_instrumentation_erasure_matches_f1_business_ast[runtime/delivery_boundary.py-names2]
+FAILED tests\test_f2_rejection_trace.py::test_instrumentation_erasure_matches_f1_business_ast[runtime/query_reuse.py-names1]
+FAILED tests\test_f2_rejection_trace.py::test_actual_compact_guard_and_fault_equivalence[False-worker_expired-Q02-deadline]
+FAILED tests\test_f2_rejection_trace.py::test_actual_compact_guard_and_fault_equivalence[True-review_expired-Q13-deadline]
+FAILED tests\test_f2_rejection_trace.py::test_instrumentation_erasure_matches_f1_business_ast[runtime/live_refresh.py-names0]
+FAILED tests\test_f2_rejection_trace.py::test_actual_compact_guard_and_fault_equivalence[True-worker_expired-Q02-deadline]
+===== 8 failed, 2701 passed, 88 skipped, 6 warnings in 229.66s (0:03:49) ======
+[FAIL] check --release: tests failed with exit code 1
+
+[END COMPLETE OUTPUT]
+exit_code: 1

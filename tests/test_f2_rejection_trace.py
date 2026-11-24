@@ -6,7 +6,6 @@ import ast
 import asyncio
 import copy
 import json
-import subprocess
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -161,6 +160,7 @@ def test_actual_compact_guard_and_fault_equivalence(tmp_path, monkeypatch, case,
     plan = build_query_plan("", "read_screen", screen_fields=["characters"])
     raw = raw_character()
     deadline = time.monotonic() + 30
+    real_monotonic = time.monotonic
     count = 0
 
     async def capture(*a, **kw):
@@ -187,7 +187,7 @@ def test_actual_compact_guard_and_fault_equivalence(tmp_path, monkeypatch, case,
         if case == "worker_not_live":
             owner._observer_stop_requested = True
         if case == "worker_expired":
-            monkeypatch.setattr(compact.time, "monotonic", lambda: deadline + 1)
+            monkeypatch.setattr(compact, "time", SimpleNamespace(monotonic=lambda: deadline + 1))
         if case == "no_analysis":
             return None
         if case == "wrong_page":
@@ -206,7 +206,7 @@ def test_actual_compact_guard_and_fault_equivalence(tmp_path, monkeypatch, case,
 
     def stamp(*a):
         if case == "review_expired":
-            monkeypatch.setattr(compact.time, "monotonic", lambda: deadline + 1)
+            monkeypatch.setattr(compact, "time", SimpleNamespace(monotonic=lambda: deadline + 1))
         if case == "guards_not_live":
             owner._observer_stop_requested = True
         return ()
@@ -251,6 +251,7 @@ def test_actual_compact_guard_and_fault_equivalence(tmp_path, monkeypatch, case,
 
         monkeypatch.setattr(trace, "_record", fail)
     result = asyncio.run(compact.read_current_character(owner, plan, deadline))
+    assert time.monotonic is real_monotonic
     assert (result is not None) == (case == "allow")
     selected = [e for e in events(owner) if e["branch_id"] == branch]
     if broken:
@@ -380,9 +381,11 @@ async def _cancel(owner, reason):
 )
 def test_instrumentation_erasure_matches_f1_business_ast(file, names):
     """Every return/await/exception/condition is identical after passive calls erase."""
-    baseline = subprocess.run(
-        ["git", "show", f"02610e6:{file}"], cwd=ROOT, capture_output=True, check=True
-    ).stdout.decode("utf-8-sig")
+    # Shallow CI checkouts and source archives lack the required F1 history.
+    # Keep the same five F1 function bodies as data; never skip comparison.
+    frozen = json.loads((ROOT / "tests/fixtures/f2_business_baseline_02610e6.json").read_text(encoding="utf-8"))
+    assert frozen["source_commit"] == "02610e61e4498cd5e67c67143a0fb5707891b2ba"
+    baseline = "\n\n".join(frozen["files"][file]["functions"][name] for name in names)
     before = ast.parse(baseline)
     after = ast.parse((ROOT / file).read_text(encoding="utf-8-sig"))
 
