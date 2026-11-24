@@ -10,6 +10,7 @@ from plugin.plugins.hsr_companion.runtime import prepare_trace as trace
 from plugin.plugins.hsr_companion.runtime.diagnostics import build_diagnostic_report
 from plugin.plugins.hsr_companion.runtime.observation_store import ObservationSnapshot
 from plugin.plugins.hsr_companion.runtime.query_coordinator import QueryObservation
+from plugin.plugins.hsr_companion.tests.diagnostic_sections import section as diagnostic_section
 from plugin.plugins.hsr_companion.tests.test_current_observation import plugin_fixture
 from plugin.plugins.hsr_companion.tests.test_diagnostics import inputs
 from plugin.plugins.hsr_companion.tests.test_stage2_assessment import relic
@@ -163,7 +164,7 @@ def test_diagnosis_recovers_failure_after_restart_without_ocr_or_messages(tmp_pa
         before = copy.deepcopy(restored_values)
         report = unwrap(await restored.diagnose_companion())["diagnostic"]
         diagnostic = json.loads(report["json_text"])
-        records = diagnostic["prepare_calls"]["records"]
+        records = diagnostic_section(diagnostic, "prepare_calls")["records"]
         assert records[-1]["error_code"] == "invalid_response_detail"
         assert restored_values == before and not sent
 

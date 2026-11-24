@@ -13,6 +13,7 @@ from plugin.plugins.hsr_companion.runtime import diagnostic_session as session
 from plugin.plugins.hsr_companion.runtime.diagnostic_export import export_diagnostic
 from plugin.plugins.hsr_companion.runtime.diagnostic_snapshot import MAX_BYTES, seal
 from plugin.plugins.hsr_companion.runtime.diagnostics import build_diagnostic_report
+from plugin.plugins.hsr_companion.tests.diagnostic_sections import section as diagnostic_section
 from plugin.plugins.hsr_companion.tests.test_current_observation import plugin_fixture
 from plugin.plugins.hsr_companion.tests.test_diagnostics import inputs
 from plugin.sdk.plugin import Err, Ok
@@ -38,7 +39,7 @@ def test_single_canonical_object_floors_copy_and_export(tmp_path):
     assert len(prefix) == 5 and prefix[0].startswith("5F") and prefix[-1].startswith("1F")
     assert prefix == [f["summary"] for f in canonical["floors"]]
     assert json.loads(body) == canonical == json.loads(report["json_text"])
-    assert report["query_timings"] == canonical["query_timings"]
+    assert "query_timings" not in report and "query_timings" not in canonical
     saved = export_diagnostic(tmp_path, report)
     assert saved["diagnostic_id"] == report["diagnostic_id"]
     assert json.loads(Path(saved["path"]).read_text(encoding="utf-8")) == canonical
@@ -46,14 +47,14 @@ def test_single_canonical_object_floors_copy_and_export(tmp_path):
 
 def test_no_records_are_yellow_null_not_zero_or_success():
     s = make(observer={"enabled": False, "state": "stopped"})["snapshot"]
-    assert s["current_runtime_health"]["reason"] == "not_running"
-    assert s["current_runtime_health"]["level"] == "yellow"
+    assert diagnostic_section(s, 'current_runtime_health')["reason"] == "not_running"
+    assert diagnostic_section(s, 'current_runtime_health')["level"] == "yellow"
     assert s["floors"][1]["health"]["level"] == "yellow"
     assert s["floors"][2]["metrics"]["detector_duration_ms"] is None
-    assert s["query_timings"]["duration_ms"] is None
-    assert s["panel_witness"]["state"] == "not_observed"
-    assert s["session"]["cross_process_restarts"] is None
-    assert s["session"]["restart_coverage"] == "coverage_unknown"
+    assert diagnostic_section(s, 'query_timings')["duration_ms"] is None
+    assert diagnostic_section(s, 'panel_witness')["state"] == "not_observed"
+    assert diagnostic_section(s, 'session')["cross_process_restarts"] is None
+    assert diagnostic_section(s, 'session')["restart_coverage"] == "coverage_unknown"
 
 
 def test_old_audit_does_not_become_current_request_or_runtime_health():
@@ -66,10 +67,10 @@ def test_old_audit_does_not_become_current_request_or_runtime_health():
             ]
         },
     )["snapshot"]
-    assert s["last_query"]["source_relation"] == "historical"
-    assert s["latest_request_health"]["level"] == "red"
-    assert s["latest_request_health"]["reason"] == "screen_intent_conflict"
-    assert s["current_runtime_health"]["level"] == "yellow"
+    assert diagnostic_section(s, 'last_query')["source_relation"] == "historical"
+    assert diagnostic_section(s, 'latest_request_health')["level"] == "red"
+    assert diagnostic_section(s, 'latest_request_health')["reason"] == "screen_intent_conflict"
+    assert diagnostic_section(s, 'current_runtime_health')["level"] == "yellow"
 
 
 def test_new_service_request_supersedes_older_prepare_record_without_inventing_success():
@@ -80,7 +81,7 @@ def test_new_service_request_supersedes_older_prepare_record_without_inventing_s
         },
     )["snapshot"]
     assert s["floors"][0]["metrics"]["selected_request_id"] == ID
-    assert s["latest_request_health"]["level"] == "yellow"
+    assert diagnostic_section(s, 'latest_request_health')["level"] == "yellow"
 
 
 def test_fresh_runtime_can_coexist_with_failed_request():
@@ -90,8 +91,8 @@ def test_fresh_runtime_can_coexist_with_failed_request():
             "records": [{"request_id": ID, "started_at": AT, "outcome": "failed", "error_code": "internal_exception"}]
         },
     )["snapshot"]
-    assert s["latest_request_health"]["level"] == "red"
-    assert s["current_runtime_health"]["level"] == "green"
+    assert diagnostic_section(s, 'latest_request_health')["level"] == "red"
+    assert diagnostic_section(s, 'current_runtime_health')["level"] == "green"
 
 
 def test_witness_is_bounded_private_and_non_authoritative():
@@ -115,7 +116,7 @@ def test_witness_is_bounded_private_and_non_authoritative():
             ],
         }
     )["snapshot"]
-    w = s["panel_witness"]
+    w = diagnostic_section(s, 'panel_witness')
     assert len(w["events"]) == 16 and w["events"][0]["sequence"] == 14
     assert w["events"][-1]["context_at"] == OLD and w["events"][-1]["rendered_at"] == AT
     assert w["authority"] == "display_only_not_answer_permission"
@@ -128,7 +129,7 @@ def test_build_sources_are_separate_and_do_not_repair_version():
         installation_stamp={"version": "0.9.8", "revision": "0.9.8-e2", "commit": "b" * 40},
         panel_witness={"panel_version": "0.9.7", "events": []},
     )["snapshot"]
-    b = s["build_identity"]
+    b = diagnostic_section(s, 'build_identity')
     assert b["source_constants"]["version"] == "0.9.7"
     assert b["installation_stamp"]["version"] == "0.9.8"
     assert b["panel_version"] == "0.9.7" and b["mismatch"]
@@ -148,7 +149,7 @@ def test_unknown_codes_are_counted_without_exporting_free_strings():
     )["snapshot"]
     assert "SECRET" not in json.dumps(s) and "SecretError" not in json.dumps(s)
     assert s["unmapped_codes"]["count"] >= 5
-    assert s["last_query"]["stages"][0]["stage"] == "unmapped_code"
+    assert diagnostic_section(s, 'last_query')["stages"][0]["stage"] == "unmapped_code"
 
 
 def test_default_projection_excludes_chat_game_names_ids_paths_and_hashes():
@@ -206,7 +207,7 @@ def test_maximum_timing_data_is_bounded_by_utf8_bytes_without_sliced_json():
 
 def test_oversized_unicode_is_explicitly_size_limited_not_silently_truncated():
     s = copy.deepcopy(make()["snapshot"])
-    s["query_timings"]["events"] = [
+    diagnostic_section(s, 'query_timings')["events"] = [
         {"stage": "ocr_call", "event": "returned", "safe_test_padding": "界" * 3000} for _ in range(256)
     ]
     report = seal(s)
@@ -315,7 +316,7 @@ def test_diagnostic_entry_is_read_only_includes_timing_and_does_not_read_value_t
     monkeypatch.setattr(service_contract, "delivery_value_trace", forbidden)
     before = copy.deepcopy(values)
     report = asyncio.run(owner.diagnose_companion()).value["diagnostic"]
-    assert report["snapshot"]["query_timings"]["state"] == "not_recorded"
+    assert diagnostic_section(report["snapshot"], 'query_timings')["state"] == "not_recorded"
     assert values == before and not sent
 
 
@@ -348,8 +349,8 @@ def test_source_sampling_has_time_and_safe_failure_class_without_business_side_e
     _, _, _, incomplete = asyncio.run(diagnostic_inputs(owner, samples=samples))
     report = make(source_samples=samples)
     assert incomplete == ["assistant"]
-    assert report["snapshot"]["sources"]["assistant"]["outcome"] == "error"
-    assert report["snapshot"]["sources"]["assistant"]["duration_ms"] >= 0
+    assert diagnostic_section(report["snapshot"], 'sources')["assistant"]["outcome"] == "error"
+    assert diagnostic_section(report["snapshot"], 'sources')["assistant"]["duration_ms"] >= 0
     assert "PRIVATE" not in report["copy_text"]
 
 
@@ -428,7 +429,7 @@ def test_source_alignment_compares_instants_not_timezone_string_order():
         service_request={"request_id": ID, "state": "started", "started_at": "2026-11-24T20:00:00+08:00"},
         last_tool={"at": "2026-11-24T12:01:00+00:00"},
     )["snapshot"]
-    assert s["last_query"]["source_relation"] == "unmatched"
+    assert diagnostic_section(s, 'last_query')["source_relation"] == "unmatched"
 
 
 def test_old_pending_request_id_is_kept_but_message_is_not():
@@ -485,7 +486,7 @@ def test_enable_error_is_red_in_floor_one_without_changing_observer():
     s = make(session=session.snapshot(owner))["snapshot"]
     assert s["floors"][-1]["health"]["level"] == "red"
     assert s["floors"][-1]["health"]["reason"] == "enable_stage_failed"
-    assert s["observer"]["state"] == "observing"
+    assert diagnostic_section(s, 'observer')["state"] == "observing"
 
 
 def test_five_summary_lines_include_numbers_without_inventing_missing_metrics():

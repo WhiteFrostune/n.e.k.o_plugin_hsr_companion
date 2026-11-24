@@ -1,3 +1,4 @@
+
 """Refactor contracts, not a game accuracy/latency benchmark.
 
 Known rephrasing failure, structured requirements, compound answers, detached
@@ -17,6 +18,7 @@ from plugin.plugins.hsr_companion.runtime.grounding import build_grounding
 from plugin.plugins.hsr_companion.runtime.observation_store import ObservationSnapshot, ObservationStore
 from plugin.plugins.hsr_companion.runtime.query_coordinator import answer_status, resolve_query, satisfied_fields
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
+from plugin.plugins.hsr_companion.tests.diagnostic_sections import section as diagnostic_section
 from plugin.plugins.hsr_companion.tests.test_current_observation import plugin_fixture
 from plugin.plugins.hsr_companion.tests.test_diagnostics import inputs
 from plugin.plugins.hsr_companion.tests.test_screen_facts import catalog
@@ -104,7 +106,7 @@ def test_diagnostic_plan_only_exports_whitelisted_requirement_codes():
                                           "query": "PRIVATE_SECRET", "path": "PRIVATE_SECRET"}}
     report = build_diagnostic_report(**values)
     assert "PRIVATE_SECRET" not in report["copy_text"]
-    assert report["last_query"]["plan"] == {"screen": True, "read_path": "unmapped_code", "fields": ["page", "visible_text"]}
+    assert diagnostic_section(report, 'last_query')["plan"] == {"screen": True, "read_path": "unmapped_code", "fields": ["page", "visible_text"]}
 
 
 def test_snapshot_cannot_be_mutated_through_source_or_export_and_rejects_new_serial():

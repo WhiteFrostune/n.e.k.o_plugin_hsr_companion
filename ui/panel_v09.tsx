@@ -11,8 +11,6 @@ type Assistant = {
 }
 type Diagnostic = {
   checked_at: string
-  checks: { name: string; level: "info" | "success" | "warning"; detail: string }[]
-  last_query?: { outcome?: string; wait_seconds?: number | null }
   copy_text: string
   diagnostic_id?: string
   snapshot?: { diagnostic_id: string; floors: { floor: number; title: string; summary?: string;
@@ -84,7 +82,8 @@ function hasAction(actions: HostedAction[], id: string): boolean {
 function extractDiagnostic(result: any): Diagnostic | null {
   const value = result?.diagnostic || result?.result?.diagnostic || result?.data?.diagnostic
   return value && typeof value.copy_text === "string" && value.copy_text.length > 0
-    && typeof value.checked_at === "string" && Array.isArray(value.checks) ? value : null
+    && typeof value.checked_at === "string" && value.schema_version === 2
+    && value.diagnostic_id === value.snapshot?.diagnostic_id && Array.isArray(value.snapshot?.floors) ? value : null
 }
 
 async function copyDiagnosticText(text: string): Promise<boolean> {
@@ -519,8 +518,8 @@ export default function HsrCompanionPanel(props: PluginSurfaceProps<CompanionSta
               <Textarea value={JSON.stringify(floor, null, 2)} />
             </Accordion>)}
             <Button disabled={!!running} onClick={copyDiagnostic}>{t("diagnostics.copy")}</Button>
-            {manualCopy ? <Stack>
-              <Alert tone="warning">{t("diagnostics.copyFailed")}</Alert>
+            {manualCopy || diagnosticError ? <Stack>
+              {manualCopy ? <Alert tone="warning">{t("diagnostics.copyFailed")}</Alert> : null}
               <Textarea value={diagnostic.copy_text} />
             </Stack> : null}
             {!diagnostic.snapshot ? <Accordion title={t("diagnostics.report")}>

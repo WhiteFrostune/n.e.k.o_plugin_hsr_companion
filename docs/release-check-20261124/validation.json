@@ -1,0 +1,31 @@
+{
+  "release_check": {
+    "exit_code": 0,
+    "seconds": 236.031,
+    "tests": "passed",
+    "payload_hash_verified": true
+  },
+  "pytest": {
+    "seed": 11222026,
+    "total": 2797,
+    "passed": 2787,
+    "skipped": 10,
+    "failures": 0,
+    "errors": 0,
+    "seconds": 265.175
+  },
+  "ruff": {
+    "exit_code": 0,
+    "issues": 0
+  },
+  "layering": {
+    "passed": 5,
+    "skipped": 0,
+    "failures": 0,
+    "seconds": 1.441,
+    "baseline_additions": 0
+  },
+  "production_changes": 0,
+  "source_commit_before_fix": "2ad3993b55788fd87ca212a16a7016c127d2fc80",
+  "neko_main": "f665a41a3d2e00991e93a81085c6909374e5733e"
+}

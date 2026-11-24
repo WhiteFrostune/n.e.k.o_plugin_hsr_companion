@@ -20,6 +20,8 @@ from ..detectors.exploration import generic_navigation
 from . import vision_scheduler
 from .query_reuse import LIVE_FRAME_MAX_AGE_SECONDS, region_stamp, regions_changed, text_pixel_differences, try_reuse
 from .recognition_metrics import record_full, record_page_only_timeout
+from .rejection_trace import context as rejection_context
+from .rejection_trace import emit as rejection_emit
 from .timing_detail import mark, phase, timed_callback
 from .vision_scheduler import VisionWorkerBusy, vision_turn
 from .vision_scheduler import drain_analysis_worker as drain_analysis_worker
@@ -261,6 +263,8 @@ def stable_screen_content(analysis: dict, original: bytes, latest: bytes, *, ver
                        "state": "confirmed" if accepted else "pending",
                        "reason": "text_revalidated" if accepted and any(proof_key(p) in verified for p in proof)
                        else "pixels_unchanged" if accepted else "missing_proof" if not proof else "text_not_revalidated"})
+    if len(retained_actors) < len(actors) or len(retained_facts) < len(facts) or len(retained) < len(rows):
+        rejection_emit(None, "F09", "full", "withhold", "fields_withheld")
     return {**analysis, "characters": retained_actors,
             "screen_facts": {**screen, "facts": retained_facts, "visible_text": retained, "unclassified_text": [],
                              "field_checks": checks},
@@ -626,17 +630,20 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
                 _full_yielded(owner, "ocr")
             mark(owner, "handoff_completed", **correlation())
             trace_refresh(owner, "producer_yielded", scope=scope)
+            rejection_emit(owner, "F02", scope, "discard", "preempted")
             return None
         except ObservationSuperseded:
             trace_refresh(owner, "old_worker_drained", scope=scope)
             if relic_requested:
                 record(owner, "relic_job_ended", **job, outcome="rejected", reason="analysis_superseded")
+            rejection_emit(owner, "F02", scope, "discard", "analysis_superseded")
             return None
         trace_refresh(owner, "analysis_finished", scope=scope,
                       processing_seconds=(analysis.get("recognition") or {}).get("processing_seconds") if isinstance(analysis, dict) else None,
                       health_polls=health_polls, frame_transfers=frame_transfers)
         if scope == "full":
             record_full(owner, job_id=owner._vision_job_id, state="parsed", analysis=analysis)
+        rejection_emit(owner, "F07", scope, "allow", "parsed")
         record_candidate(owner, "candidate_parsed", analysis, **job)
         if isinstance(analysis, dict) and ((analysis.get("page") or {}).get("page_type") == "relic_detail" or relic_requested):
             reader = (analysis.get("recognition") or {}).get("text_reader") or {}
@@ -653,6 +660,7 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
             if job:
                 record(owner, "relic_job_ended", **job, outcome="rejected", reason="analysis_superseded")
             trace_refresh(owner, "analysis_discarded", scope=scope, epoch_changed=epoch != getattr(owner, "_observation_epoch", 0))
+            rejection_emit(owner, "F07", scope, "discard", "analysis_superseded")
             return None
         if yield_requested():
             # OCR already finished. A waiting region query can use the native
@@ -662,6 +670,7 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
             trace_refresh(owner, "producer_yielded", scope=scope, checkpoint="post_ocr")
             if scope == "full":
                 _full_yielded(owner, "post_ocr")
+            rejection_emit(owner, "F07", scope, "discard", "yielded")
             return None
         live_validation = None
         delivery_guard = None
@@ -673,6 +682,7 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
                     or (getattr(owner, "_analysis_game_pid", 0) and latest.game.get("pid") != owner._analysis_game_pid)
                     or latest.capture.get("state") != "capturing" or latest.capture.get("isolated_window") is not True):
                 changed = True
+                rejection_emit(owner, "F08", scope, "discard", "capture_failed")
                 trace_refresh(owner, "analysis_rejected", reason="capture_unavailable_after_analysis", scope=scope)
                 await owner._invalidate_current_observation("capture_unavailable_during_analysis")
             else:
@@ -692,9 +702,10 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
                 def verify(*args, **kwargs):
                     with measure(owner, "producer_verification"):
                         return verifier(*args, **kwargs)
-                task = asyncio.create_task(asyncio.to_thread(
-                    stable_screen_content, analysis, payload, latest.image_bytes,
-                    verifier=verify if callable(verifier) else None, cancelled=checkpoint_stop))
+                with rejection_context(owner):
+                    task = asyncio.create_task(asyncio.to_thread(
+                        stable_screen_content, analysis, payload, latest.image_bytes,
+                        verifier=verify if callable(verifier) else None, cancelled=checkpoint_stop))
                 try:
                     analysis = await asyncio.shield(task)
                 except ObservationSuperseded as exc:
@@ -702,12 +713,14 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
                         _full_yielded(owner, "literal_review")
                     if job:
                         record(owner, "relic_job_ended", **job, outcome="rejected", reason="analysis_superseded")
+                    rejection_emit(owner, "F08", scope, "discard", "analysis_superseded")
                     return None
                 from .page_control_trace import record_controls
                 record_controls(owner, "validated", analysis=analysis)
                 if epoch != getattr(owner, "_observation_epoch", 0):
                     record_relic_stage(owner, "relic_verified", analysis, job,
                                        outcome="rejected", reason="analysis_superseded")
+                    rejection_emit(owner, "F08", scope, "discard", "epoch_changed")
                     return None
                 # Retained fields now have proof on this validation frame. Do not
                 # rebuild their guard from the older, background-mismatched image.
@@ -740,6 +753,7 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
                                               if regions_changed((before,), (after,))]
                     changed |= native_changed
                 if changed:
+                    rejection_emit(owner, "F10", scope, "discard", "controls_changed")
                     trace_refresh(owner, "analysis_rejected", reason="page_changed_after_analysis", scope=scope,
                                   native_regions_changed=native_changed, coarse_changed=coarse_changed,
                                   page_region_count=len(current_controls), guarded_region_count=len(delivery_regions),
@@ -762,6 +776,7 @@ async def _guarded_analysis(owner: Any, payload: bytes, *, helper: bool) -> dict
                                else "returned")
         if changed or epoch != getattr(owner, "_observation_epoch", 0):
             trace_refresh(owner, "analysis_discarded", scope=scope, epoch_changed=epoch != getattr(owner, "_observation_epoch", 0))
+            rejection_emit(owner, "F10", scope, "discard", "controls_changed")
             return None
         trace_refresh(owner, "capture_validated", scope=scope)
         # All retained literals and guards now describe guard_payload. Using
@@ -1219,32 +1234,40 @@ async def validated_delivery(owner: Any, evidence: dict, *, plan=None) -> dict |
                 and (evidence.get("screen_facts") or {}).get("observation_serial") == raw.get("observation_serial")):
             from .review_policy import review_current
             return await review_current(owner, plan=plan)
+        rejection_emit(owner, "D02", "verification", "reject", "source_unconfirmed")
         return None
     if getattr(owner, "_assistant_client", None) is None and query_pending(owner, {
         "observation_serial": (evidence.get("screen_facts") or {}).get("observation_serial"),
         "observed_at": evidence.get("observed_at"),
     }):
+        rejection_emit(owner, "D02", "verification", "reject", "revision_changed")
         return None  # No live helper exists to authorize a pre-question sample.
     from .review_policy import checked_receipt, observable
     if getattr(owner, "_assistant_client", None) is not None and not observable(owner):
+        rejection_emit(owner, "D02", "verification", "reject", "not_observable")
         return None
     if evidence.get("reuse"):
         # Do not recheck against a different/current OCR result. A revoked or
         # expired receipt must select anew, not quietly certify the old packet.
         if not checked_receipt(owner, evidence, plan=plan):
+            rejection_emit(owner, "D02", "verification", "reject", "receipt_rejected")
             return None
         from .delivery_scope import project_evidence
         return project_evidence(evidence, plan)
     epoch = getattr(owner, "_observation_epoch", 0)
     serial = (evidence.get("screen_facts") or {}).get("observation_serial")
     if serial and serial != getattr(owner, "_observation_serial", 0):
+        rejection_emit(owner, "D02", "verification", "reject", "revision_changed")
         return None
     selection = []
     if not await validate_before_delivery(owner, **({"plan": plan, "selection": selection} if plan is not None else {})):
+        rejection_emit(owner, "D02", "verification", "reject", "proof_rejected")
         return None
     if epoch != getattr(owner, "_observation_epoch", 0) or getattr(owner, "_observation_invalidated", False):
+        rejection_emit(owner, "D02", "verification", "reject", "epoch_changed")
         return None
     if serial and serial != getattr(owner, "_observation_serial", 0):
+        rejection_emit(owner, "D02", "verification", "reject", "revision_changed")
         return None
     from .delivery_scope import project_evidence
     selected = selection[0] if selection else project_evidence(evidence, plan)

@@ -110,6 +110,7 @@ knowledge = [
 ]
 trace = [
   "runtime/diagnostic_session.py",
+  "runtime/rejection_trace.py",
   "runtime/diagnostic_snapshot.py",
   "runtime/diagnostic_export.py",
   "runtime/diagnostic_reader.py",

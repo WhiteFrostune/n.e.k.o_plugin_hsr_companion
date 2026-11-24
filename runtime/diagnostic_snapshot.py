@@ -248,6 +248,9 @@ def session_projection(value, unknown):
             "started_at": stamp(e.get("started_at")),
             "at": stamp(e.get("at")),
             "elapsed_ms": number(e.get("elapsed_ms")),
+            "count": number(e.get("count")),
+            "first_at": stamp(e.get("first_at")),
+            "last_at": stamp(e.get("last_at")),
             "exception_type": code(e.get("exception_type"), ERRORS, unknown),
             "error_code": code(e.get("error_code"), {"cancelled", "stage_error"}, unknown),
         }
@@ -271,6 +274,7 @@ def session_projection(value, unknown):
         "attempts": [
             {
                 "attempt_id": opaque(a.get("attempt_id")),
+                "source": code(a.get("source"), {"manual", "auto_restore"}, unknown),
                 "started_at": stamp(a.get("started_at")),
                 "state": code(a.get("state"), OUTCOMES, unknown),
                 "stages": [event(e) for e in list(a.get("stages") or [])[:5] if isinstance(e, dict)],
@@ -490,6 +494,12 @@ def floor_projection(s):
             "selected_request_id": selected_id,
             "selected_request_at": selected_at,
             "pending_reply_path": pending_path,
+            "checks": s["checks"],
+            "service_request": s["service_request"],
+            "diagnostic_read": s["diagnostic_read"],
+            "sources": s["sources"],
+            "speech": s["speech"],
+            "equipment_handoffs": s["equipment_handoffs"],
             "last_query": last,
             "prepare_calls": s["prepare_calls"],
             "followup": s["explicit_followup"],
@@ -503,7 +513,9 @@ def floor_projection(s):
         4,
         "观察与确认",
         observation_health,
-        {"observation_health": h, "review": s["review"], "current_observation": current},
+        {"observation_health": h, "review": s["review"], "current_observation": current,
+         "observer": s["observer"], "page_control_trace": s["page_control_trace"],
+         "revocation_trace": s["revocation_trace"], "frame_comparisons": s["frame_comparisons"]},
         [*h.get("recent_fulls", []), *(h.get("identity") or {}).get("recent_resets", [])][-8:],
     )
     add(
@@ -515,6 +527,7 @@ def floor_projection(s):
             if s["vision_trace"]
             else None,
             "detector_duration_ms": None,
+            "vision_trace": s["vision_trace"],
             "candidate_count": next(
                 (e.get("character_count") for e in reversed(s["vision_trace"]) if e.get("stage") == "candidate_parsed"),
                 None,
@@ -536,6 +549,7 @@ def floor_projection(s):
                 default=None,
             ),
             "nested_spans_are_not_additive": True,
+            "query_timings": timings,
         },
         f2events,
     )
@@ -560,7 +574,7 @@ def floor_projection(s):
         1,
         "构建与生命周期",
         build_health,
-        {"build": build, "session": s["session"], "assistant": s["assistant"]},
+        {"build": build, "session": s["session"], "assistant": s["assistant"], "resources": s["resources"]},
         s["session"]["recent_events"][-6:],
     )
     s["latest_request_health"], s["current_runtime_health"] = request_health, runtime_health
@@ -603,7 +617,7 @@ def summaries(snapshot):
         h, metrics = f["health"], f["metrics"]
         floor = f["floor"]
         if floor == 5:
-            timing = snapshot["query_timings"]
+            timing = next((f["metrics"].get("query_timings", {}) for f in snapshot["floors"] if f["floor"] == 2), {})
             detail = "请求耗时=" + show(timing.get("duration_ms")) + "ms"
         elif floor == 4:
             health = metrics.get("observation_health") or {}
@@ -653,41 +667,32 @@ def seal(snapshot):
     }
     text, js = _wire(snapshot)
     if len(text.encode("utf-8")) > TARGET_BYTES:
-        # Drop only optional repeated details; preserve request status and all floors.
-        for key in ("vision_trace", "page_control_trace", "revocation_trace"):
-            snapshot["size_control"]["omitted_events"] += len(snapshot.get(key, []))
-            snapshot[key] = snapshot.get(key, [])[-8:]
-        events = snapshot["query_timings"]["events"]
-        snapshot["size_control"]["omitted_events"] += max(0, len(events) - 64)
-        snapshot["query_timings"]["events"] = events[-64:]
+        for f in snapshot["floors"]:
+            for key in ("vision_trace", "page_control_trace", "revocation_trace"):
+                if key in f["metrics"]:
+                    events = f["metrics"][key]
+                    snapshot["size_control"]["omitted_events"] += max(0, len(events)-8)
+                    f["metrics"][key] = events[-8:]
+            events = f["recent_events"]
+            snapshot["size_control"]["omitted_events"] += max(0, len(events)-24)
+            f["recent_events"] = events[-24:]
+            if "query_timings" in f["metrics"]:
+                events = f["metrics"]["query_timings"]["events"]
+                snapshot["size_control"]["omitted_events"] += max(0,len(events)-64)
+                f["metrics"]["query_timings"]["events"] = events[-64:]
         snapshot["size_control"]["state"] = "size_limited"
         text, js = _wire(snapshot)
     if len(text.encode("utf-8")) > MAX_BYTES:
         snapshot["size_control"]["state"] = "size_limited"
-        snapshot["query_timings"]["events"] = []
         for f in snapshot["floors"]:
             f["recent_events"] = []
+            if "query_timings" in f["metrics"]:
+                f["metrics"]["query_timings"]["events"] = []
             if f["floor"] == 5:
                 f["metrics"]["last_query"]["stages"] = []
         text, js = _wire(snapshot)
     if len(text.encode("utf-8")) > MAX_BYTES:
-        keep = {
-            k: snapshot[k]
-            for k in (
-                "schema_version",
-                "diagnostic_id",
-                "checked_at",
-                "checks",
-                "last_query",
-                "observation_health",
-                "query_timings",
-                "latest_request_health",
-                "current_runtime_health",
-            )
-        }
-        keep["last_query"] = {k: v for k, v in snapshot["last_query"].items() if k != "stages"}
-        keep["query_timings"] = {k: v for k, v in snapshot["query_timings"].items() if k != "events"}
-        keep["query_timings"]["events"] = []
+        keep = {k: snapshot[k] for k in ("schema_version", "diagnostic_id", "checked_at")}
         keep["floors"] = [
             {
                 "floor": f["floor"],
@@ -713,7 +718,7 @@ def seal(snapshot):
         "snapshot": snapshot,
         "schema_version": 2,
         "diagnostic_id": snapshot["diagnostic_id"],
-        **{k: snapshot[k] for k in ("checked_at", "checks", "last_query", "observation_health", "query_timings")},
+        "checked_at": snapshot["checked_at"],
         "copy_text": text,
         "json_text": js,
     }
@@ -730,6 +735,7 @@ def finish(
     installation_stamp=None,
     unknown_count=0,
     source_samples=None,
+    rejection_trace=None,
 ):
     unknown = {"count": unknown_count}
     snapshot = copy.deepcopy(snapshot)
@@ -790,7 +796,17 @@ def finish(
         for name, row in (source_samples or {}).items()
         if name in {"assistant", "query_audit", "observation"} and isinstance(row, dict)
     }
-    snapshot["floors"] = floor_projection(snapshot)
+    floors = floor_projection(snapshot)
+    from .rejection_trace import sanitize
+    trace = sanitize(rejection_trace)
+    for floor in floors:
+        n = floor["floor"]
+        if n in {4,5}:
+            floor["recent_events"].extend(e for e in trace["events"] if (e["branch_id"].startswith("X")) == (n == 5))
+        if n == 4:
+            floor["metrics"]["rejection_trace"] = {k:v for k,v in trace.items() if k != "events"}
+    snapshot = {k:snapshot[k] for k in ("schema_version", "diagnostic_id", "checked_at")}
+    snapshot["floors"] = floors
     snapshot["unmapped_codes"] = {"count": unknown["count"]}
     snapshot["default_payload_scope"] = "metadata_only_no_host_speech_receipt"
     return seal(snapshot)

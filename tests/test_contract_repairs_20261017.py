@@ -1,4 +1,6 @@
+
 """Negative/compatibility contracts for stage2a-20261017.2; no live host."""
+
 import asyncio
 import copy
 import hashlib
@@ -16,6 +18,7 @@ from plugin.plugins.hsr_companion.runtime.query_coordinator import (
 from plugin.plugins.hsr_companion.runtime.query_plan import build_query_plan
 from plugin.plugins.hsr_companion.runtime.service_contract import record_answer_delivery
 from plugin.plugins.hsr_companion.tests.controlled_time import ManualClock, deadlock_guard
+from plugin.plugins.hsr_companion.tests.diagnostic_sections import section as diagnostic_section
 from plugin.plugins.hsr_companion.tests.test_chain_audit_20261017 import SUBS, audit_owner, commit_raw, raw_page
 from plugin.plugins.hsr_companion.tests.test_current_observation import ROLE
 from plugin.plugins.hsr_companion.tests.test_delivery_fix_20261012 import CONTROL, frame, picture
@@ -191,7 +194,7 @@ def test_final_receipts_are_bounded_and_export_no_raw_game_or_chat_text(tmp_path
     latest.update(query="PRIVATE_TEST_TEXT", confirmed_fields="PRIVATE_TEST_TEXT", equipment="PRIVATE_TEST_TEXT")
     report = json.loads(build_diagnostic_report(**inputs(), answer_deliveries=owner._answer_deliveries)["json_text"])
     assert "PRIVATE_TEST_TEXT" not in json.dumps(report)
-    assert len(report["answer_deliveries"]) == 8
+    assert len(diagnostic_section(report, 'answer_deliveries')) == 8
 
 
 def test_stage_audit_ready_does_not_override_final_paused_receipt(tmp_path):

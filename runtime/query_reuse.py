@@ -15,6 +15,7 @@ from io import BytesIO
 
 from .contracts import FRESH_LIVE_AGE_SECONDS, LIVE_PAGE_TYPES, STALE_MAX_AGE_SECONDS
 from .navigation import navigation_answer
+from .rejection_trace import emit as rejection_emit
 from .vision_trace import traced_operation
 
 # Recognition age does not decide live-candidate admission. Fresh capture and
@@ -379,6 +380,7 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
 
     if not snapshot or getattr(owner, "_observation_invalidated", False):
         trace_refresh(owner, "reuse_miss", reason="candidate_missing" if not snapshot else "observation_invalidated")
+        rejection_emit(owner, "V07", "cache", "reject", "candidate_missing" if not snapshot else "observation_invalidated")
         return None
     pending_reason = getattr(owner, "_observation_pending_reason", "")
     recovering = pending_reason.startswith(("capture_unavailable", "capture_error"))
@@ -386,6 +388,7 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
             or owner._observer_status.get("state") not in {"observing", "updating"} and not (
             recovering and owner._observer_status.get("state") in {"error", "updating"})):
         trace_refresh(owner, "reuse_miss", reason="observer_not_observing")
+        rejection_emit(owner, "V07", "cache", "reject", "observer_not_observing")
         return None
     evidence = snapshot["evidence"]
     guard = snapshot["guard"]
@@ -394,6 +397,7 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
         selected = select_scoped_guard(owner, evidence, plan, [guard], proof_source=snapshot, allow_partial=allow_partial)
         if selected is None:
             trace_refresh(owner, "reuse_miss", reason="missing_proof")
+            rejection_emit(owner, "V07", "cache", "reject", "missing_proof")
             return None
         evidence, guard = selected
     epoch = getattr(owner, "_observation_epoch", 0)
@@ -408,19 +412,24 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
     try:
         age = observation_tick(time.time()) - datetime.fromisoformat(evidence["observed_at"]).timestamp()
     except (ValueError, TypeError, KeyError):
+        rejection_emit(owner, "V07", "cache", "reject", "invalid_timestamp")
         return None
     age_policy = stale_state(evidence.get("page_type"), age, allow_stale=allow_stale)
     if age_policy == "invalid" or snapshot["epoch"] != epoch:
         trace_refresh(owner, "reuse_miss", reason="candidate_epoch_mismatch" if snapshot["epoch"] != epoch else "invalid_timestamp")
+        rejection_emit(owner, "V07", "cache", "reject", "epoch_changed" if snapshot["epoch"] != epoch else "invalid_timestamp")
         return None
     if age_policy == "expired":
         trace_refresh(owner, "reuse_miss", reason="stale_expired", age_seconds=round(age, 1))
+        rejection_emit(owner, "V07", "cache", "reject", "expired")
         return None
     if age_policy == "not_allowed":
         trace_refresh(owner, "reuse_miss", reason="stale_not_allowed", age_seconds=round(age, 1))
+        rejection_emit(owner, "V08", "cache", "reject", "stale_not_allowed")
         return None
     client = getattr(owner, "_assistant_client", None)
     if client is None or not snapshot["game_pid"]:
+        rejection_emit(owner, "V08", "cache", "reject", "no_client" if client is None else "no_pid")
         return None
     # A single old transfer is not proof the game is unavailable. Retry the
     # capture sequence within the SAME caller deadline, not the whole OCR.
@@ -428,6 +437,7 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
     if not still_current():
         trace_refresh(owner, "reuse_superseded", serial=serial,
                       current_serial=getattr(owner, "_observation_serial", 0))
+        rejection_emit(owner, "V08", "cache", "discard", "superseded")
         return _SUPERSEDED
     if (latest is None or not 0 <= time.time() - latest.timestamp <= LIVE_FRAME_MAX_AGE_SECONDS
             or latest.game.get("pid") != snapshot["game_pid"] or latest.game.get("minimized")
@@ -435,6 +445,7 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
             or latest.capture.get("isolated_window") is not True):
         trace_refresh(owner, "reuse_miss", reason="capture_unavailable")
         await owner._invalidate_current_observation("capture_unavailable_for_reuse")
+        rejection_emit(owner, "V08", "cache", "reject", "capture_failed")
         return None
     regions, patches = guard
     try:
@@ -442,13 +453,16 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
         current_patches = await asyncio.to_thread(region_stamp, latest.image_bytes, regions)
     except (OSError, ValueError):
         if not still_current():
+            rejection_emit(owner, "V08", "cache", "discard", "superseded")
             return _SUPERSEDED
         trace_refresh(owner, "reuse_miss", reason="invalid_image")
         await owner._invalidate_current_observation("capture_unavailable_for_reuse")
+        rejection_emit(owner, "V08", "cache", "reject", "capture_failed")
         return None
     if not still_current():
         trace_refresh(owner, "reuse_superseded", serial=serial,
                       current_serial=getattr(owner, "_observation_serial", 0))
+        rejection_emit(owner, "V08", "cache", "discard", "superseded")
         return _SUPERSEDED
     # Global transitions plus native-resolution text/control checks. This is a
     # conservative heuristic, not proof that arbitrary unseen pixels are equal.
@@ -461,6 +475,7 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
     native_reviewed = False
     if pixel_only and (global_changed or text_changed):
         trace_refresh(owner, "native_review_deferred", reason="page_first", region_count=len(regions))
+        rejection_emit(owner, "V09", "cache", "reject", "native_review_deferred")
         return None  # Not a proof, not a revocation, and never an OCR queue job.
     if text_changed and not global_changed and len(patches) == len(current_patches):
         from .live_refresh import revalidate_guard_text
@@ -473,6 +488,7 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
             # deadline queued with a frame that will be stale on admission.
             # Pixel-only cache hits above remain usable during recognition.
             trace_refresh(owner, "delivery_deferred", reason="busy")
+            rejection_emit(owner, "V09", "cache", "reject", "busy")
             return None
         coordinates = {before[0] for before, after in zip(patches, current_patches)
                        if regions_changed((before,), (after,))}
@@ -482,6 +498,7 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
         if not still_current():
             trace_refresh(owner, "reuse_superseded", serial=serial,
                           current_serial=getattr(owner, "_observation_serial", 0))
+            rejection_emit(owner, "V09", "cache", "discard", "superseded")
             return _SUPERSEDED
         if same_text.capture is not None:
             # The producer admitted the queued review on a NEW capture. Bind
@@ -490,6 +507,7 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
             current_patches = await asyncio.to_thread(region_stamp, latest.image_bytes, regions)
             current_stamp = await asyncio.to_thread(frame_stamp, latest.image_bytes)
             if not still_current() or len(current_patches) != len(patches):
+                rejection_emit(owner, "V10", "cache", "reject", "proof_rejected")
                 return _SUPERSEDED if not still_current() else None
             coordinates = {a[0] for a, b in zip(patches, current_patches) if regions_changed((a,), (b,))}
             from .live_refresh import TextVerification
@@ -502,14 +520,18 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
             from .live_refresh import TextVerification
             newer = await fetch_recent_frame(owner)
             if not still_current():
+                rejection_emit(owner, "V10", "cache", "discard", "superseded")
                 return _SUPERSEDED
             if newer is None or newer.game.get("pid") != snapshot["game_pid"]:
+                rejection_emit(owner, "V10", "cache", "reject", "no_frame")
                 return None
             newer_patches = await asyncio.to_thread(region_stamp, newer.image_bytes, regions)
             if not still_current():
+                rejection_emit(owner, "V10", "cache", "discard", "superseded")
                 return _SUPERSEDED
             if (len(newer_patches) != len(current_patches)
                     or not 0 <= time.time() - newer.timestamp <= LIVE_FRAME_MAX_AGE_SECONDS):
+                rejection_emit(owner, "V10", "cache", "reject", "frame_stale")
                 return None
             unchanged = {a[0] for a, b in zip(current_patches, newer_patches) if not regions_changed((a,), (b,))}
             admitted = (coordinates if same_text else same_text.confirmed_coordinates) & unchanged
@@ -518,6 +540,7 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
             latest, current_patches = newer, newer_patches
             current_stamp = await asyncio.to_thread(frame_stamp, latest.image_bytes)
             if not still_current():
+                rejection_emit(owner, "V10", "cache", "discard", "superseded")
                 return _SUPERSEDED
             trace_refresh(owner, "verification_frame_advanced", region_count=len(admitted))
         if same_text:
@@ -540,6 +563,7 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
             if not owns_current and (plan is None or not allow_partial
                     or same_text.state not in {"unconfirmed", "missing_proof"}):
                 trace_refresh(owner, "reuse_miss", reason="retained_proof_rejected")
+                rejection_emit(owner, "V11", "cache", "reject", "retained_proof_rejected")
                 return None  # Old proofs cannot quarantine or revoke a newer commit.
             if same_text.confirmed_coordinates:
                 from .delivery_scope import update_checked_patches
@@ -560,6 +584,7 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
                 ObservationStore(owner).defer_regions(coordinates)
             trace_refresh(owner, "delivery_deferred", reason=same_text.state)
             if plan is None or not allow_partial or same_text.state not in {"unconfirmed", "missing_proof"}:
+                rejection_emit(owner, "V11", "cache", "reject", "deferred")
                 return None
             from .delivery_scope import coordinates as region_key
             from .delivery_scope import select_scoped_guard, withhold_regions
@@ -578,6 +603,7 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
                     {"page_type": evidence.get("page_type")}, controls,
                     lambda p: region_key(p) not in coordinates, width=width, height=height)
                 if not admitted_controls:
+                    rejection_emit(owner, "V12", "cache", "reject", "insufficient_controls")
                     return None
                 snapshot = {**snapshot, "page_controls": admitted_controls}
                 trace_refresh(owner, "delivery_page_controls_selected", input_count=len(controls),
@@ -585,11 +611,13 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
             pruned = withhold_regions(evidence, coordinates, identity_proofs=snapshot.get("identity_proofs", ()))
             partial = select_scoped_guard(owner, pruned, plan, [guard], proof_source=snapshot, allow_partial=True)
             if partial is None or any(p[0] in coordinates for p in partial[1][1]):
+                rejection_emit(owner, "V12", "cache", "reject", "missing_proof")
                 return None
             evidence, guard = partial
             regions, patches = guard
             current_patches = await asyncio.to_thread(region_stamp, latest.image_bytes, regions)
             if not still_current() or regions_changed(patches, current_patches):
+                rejection_emit(owner, "V12", "cache", "reject", "controls_changed")
                 return _SUPERSEDED if not still_current() else None
             text_changed = False
     if global_changed or text_changed:
@@ -597,6 +625,7 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
         if owns_current:
             await invalidate_frame_change(owner, snapshot["stamp"], current_stamp,
                                           getattr(owner, "_accepted_frame_page_regions", ()), "visual_snapshot_needs_refresh")
+        rejection_emit(owner, "V13", "cache", "reject", "pixels_changed")
         return None
     from .observation_store import ObservationStore
     if owns_current:
@@ -617,6 +646,7 @@ async def review_snapshot(owner, snapshot, *, navigation=False, full=True, plan=
             or owner._observer_status.get("state") in {"paused", "stopped"}
             or pending_reason != getattr(owner, "_observation_pending_reason", "") and not control_quarantine_only):
         trace_refresh(owner, "reuse_miss", reason="invalidated_during_check")
+        rejection_emit(owner, "V13", "cache", "reject", "invalidated_during_check")
         return None
     if recovering:
         # Only this scoped handoff is authorized. Keep pending_reason masking

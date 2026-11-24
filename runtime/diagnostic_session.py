@@ -62,13 +62,25 @@ def initialize(owner, *, constructed=False):
         return None
 
 
-def begin_enable(owner):
+def begin_enable(owner, *, source="manual"):
+    source = source if source in {"manual", "auto_restore"} else "unmapped_code"
     try:
         state = initialize(owner)
-        attempt = {"attempt_id": uuid4().hex, "started_at": utc(), "state": "started", "stages": {}}
+        attempt = {"source": source, "attempt_id": uuid4().hex, "started_at": utc(), "state": "started", "stages": {}}
         state["attempts"].append(attempt)
         note(owner, "enable_request", "started")
         note(owner, "initialization", "started")
+    except Exception:
+        pass
+
+
+def begin_auto_restore(owner):
+    """Observe restore without starting or altering it."""
+    try:
+        state = initialize(owner)
+        if not state["attempts"]:
+            begin_enable(owner, source="auto_restore")
+            safe_note(owner, "enable_request", "accepted")
     except Exception:
         pass
 
@@ -82,7 +94,10 @@ def note(owner, stage, outcome, *, error=None):
         attempt = state["attempts"][-1]
         rows = attempt["stages"]
         previous = rows.get(stage, {})
-        if previous.get("outcome") in {"completed", "connected"}:
+        if previous.get("outcome") in {"completed", "connected"} and previous.get("outcome") != outcome:
+            return
+        same = previous.get("outcome") == outcome
+        if outcome == "started" and previous:
             return
         now = time.monotonic()
         start = previous.get("_start", now)
@@ -93,6 +108,9 @@ def note(owner, stage, outcome, *, error=None):
             "outcome": outcome,
             "elapsed_ms": round(max(0, now - start) * 1000, 3),
             "_start": start,
+            "count": previous.get("count", 1)+1 if same else 1,
+            "first_at": previous.get("first_at", previous.get("at", utc())) if same else utc(),
+            "last_at": utc(),
         }
         if error is not None:
             kind = type(error).__name__
@@ -101,7 +119,13 @@ def note(owner, stage, outcome, *, error=None):
                 error_code="cancelled" if kind == "CancelledError" else "stage_error",
             )
         rows[stage] = row
-        state["events"].append({"attempt_id": attempt["attempt_id"], **{k: v for k, v in row.items() if k != "_start"}})
+        public = {"attempt_id": attempt["attempt_id"], **{k: v for k, v in row.items() if k != "_start"}}
+        prior = next((e for e in reversed(state["events"]) if e["attempt_id"] == attempt["attempt_id"]
+                      and e["stage"] == stage and e["outcome"] == outcome), None)
+        if same and prior is not None:
+            prior.update(public)
+        else:
+            state["events"].append(public)
         if stage == "enable_request":
             attempt["state"] = outcome
     except Exception:
@@ -186,3 +210,25 @@ def context_marker(owner):
         return {"session_id": state["session_id"], "context_seq": state["context_seq"], "at": utc()}
     except Exception:
         return {}
+
+
+def observe_restore(function):
+    """Finish only an actual auto-restore attempt when the original startup exits."""
+    def active(owner):
+        try:
+            state = getattr(owner, "_diagnostic_session", None)
+            return bool(state and state["attempts"] and state["attempts"][-1].get("source") == "auto_restore")
+        except Exception:
+            return False
+    @wraps(function)
+    async def call(owner, *args, **kwargs):
+        try:
+            result = await function(owner, *args, **kwargs)
+        except BaseException as exc:
+            if active(owner):
+                safe_note(owner, "initialization", "cancelled" if type(exc).__name__ == "CancelledError" else "failed", error=exc)
+            raise
+        if active(owner):
+            safe_note(owner, "initialization", "failed" if type(result).__name__ == "Err" else "completed")
+        return result
+    return call

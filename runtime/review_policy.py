@@ -8,6 +8,8 @@ from __future__ import annotations
 import time
 from datetime import datetime
 
+from .rejection_trace import emit
+
 
 def observable(owner):
     status = getattr(owner, "_observer_status", {})
@@ -64,17 +66,29 @@ def checked_receipt(owner, evidence, *, plan=None):
     from .fact_lifecycle import observation_tick
     from .observation_store import ObservationSnapshot
     receipt = evidence.get("reuse") or {}
-    if not observable(owner) or receipt.get("answer_generation") != getattr(owner, "_answer_query_generation", 0):
+    if not observable(owner):
+        emit(owner, "P01", "verification", "reject", "not_observable")
+        return False
+    if receipt.get("answer_generation") != getattr(owner, "_answer_query_generation", 0):
+        emit(owner, "P01", "verification", "reject", "generation_changed")
         return False
     fields = frozenset(plan.fields) if plan is not None else frozenset()
     reviewed = receipt.get("reviewed_fields")
     if reviewed is not None and (plan is None or not fields <= set(reviewed)):
+        emit(owner, "P01", "verification", "reject", "fields_missing")
         return False
     try:
         age = observation_tick(time.time()) - datetime.fromisoformat(receipt["validated_at"]).timestamp()
     except (ValueError, TypeError, KeyError):
+        emit(owner, "P01", "verification", "reject", "invalid_timestamp")
         return False
-    return bool(0 <= age <= 2.0 and ObservationSnapshot.select(owner, evidence, fields=fields).matches(owner))
+    if not 0 <= age <= 2.0:
+        emit(owner, "P01", "verification", "reject", "frame_stale")
+        return False
+    matched = ObservationSnapshot.select(owner, evidence, fields=fields).matches(owner)
+    if not matched:
+        emit(owner, "P01", "verification", "reject", "snapshot_rejected")
+    return bool(matched)
 
 
 async def review_current(owner, *, plan=None, allow_partial=True):
@@ -82,11 +96,16 @@ async def review_current(owner, *, plan=None, allow_partial=True):
     from .fact_lifecycle import candidate_evidence
     from .live_refresh import delivery_turn, mark_delivery_verified
     from .query_reuse import _SUPERSEDED, review_snapshot
-    if not observable(owner) or getattr(owner, "_scene_preview", None):
+    if not observable(owner):
+        emit(owner, "P02", "verification", "reject", "not_observable")
+        return None
+    if getattr(owner, '_scene_preview', None):
+        emit(owner, "P02", "verification", "reject", "preview_pending")
         return None
     raw = getattr(owner, "_committed_observation", None) or {}
     evidence = candidate_evidence(raw)
     if not evidence.get("fresh"):
+        emit(owner, "P02", "verification", "reject", "source_unconfirmed")
         return None
     guards = [getattr(owner, name, None) for name in (
         "_accepted_frame_delivery_guard", "_accepted_frame_full_query_guard", "_accepted_frame_query_guard")]
@@ -101,9 +120,11 @@ async def review_current(owner, *, plan=None, allow_partial=True):
                   *[p for f in screen.get("facts", []) for p in f.get("evidence", []) if p.get("validation_scope") != "control_presence"],
                   *screen.get("visible_text", []), *[(identity_literal(a) or a) for a in raw.get("characters", [])]]
         if any(not p.get("region") or coordinates(p) not in pairs for p in wanted):
+            emit(owner, "P02", "verification", "reject", "missing_proof")
             return None
         pairs = {coordinates(p): (p, pairs[coordinates(p)][1]) for p in wanted}
     if not pairs:
+        emit(owner, "P02", "verification", "reject", "missing_proof")
         return None
     snapshot = {"evidence": evidence, "guard": ([r for r, _ in pairs.values()], tuple(p for _, p in pairs.values())),
                 "stamp": getattr(owner, "_accepted_frame_stamp", None),
@@ -116,6 +137,7 @@ async def review_current(owner, *, plan=None, allow_partial=True):
         result = await review_snapshot(owner, snapshot, navigation=bool(plan and plan.navigation), full=True,
                                        plan=plan, allow_partial=allow_partial)
         if result is _SUPERSEDED:
+            emit(owner, "P03", "verification", "reject", "superseded")
             return None
         if result is not None:
             mark_delivery_verified(owner)
@@ -132,31 +154,66 @@ def producer_receipt(owner, evidence, *, plan=None):
     from .delivery_scope import coordinates, select_scoped_guard
     from .observation_store import ObservationSnapshot
     from .query_reuse import LIVE_FRAME_MAX_AGE_SECONDS
-    if (plan is None or not observable(owner) or getattr(owner, "_scene_preview", None)
-            or getattr(owner, "_answer_query_generation", 0) <= 0
-            or getattr(owner, "_query_refresh_generation", 0) <= 0):
+    if plan is None:
+        emit(owner, "P04", "verification", "reject", "no_plan")
+        return None
+    if not observable(owner):
+        emit(owner, "P04", "verification", "reject", "not_observable")
+        return None
+    if getattr(owner, '_scene_preview', None):
+        emit(owner, "P04", "verification", "reject", "preview_pending")
+        return None
+    if getattr(owner, '_answer_query_generation', 0) <= 0:
+        emit(owner, "P04", "verification", "reject", "answer_generation_missing")
+        return None
+    if getattr(owner, '_query_refresh_generation', 0) <= 0:
+        emit(owner, "P04", "verification", "reject", "refresh_generation_missing")
         return None
     raw = getattr(owner, "_committed_observation", None) or {}
     proof = getattr(owner, "_producer_validation", None) or {}
     epoch, serial = getattr(owner, "_observation_epoch", 0), getattr(owner, "_observation_serial", 0)
-    if (not evidence.get("fresh") or raw.get("observation_serial") != serial
-            or (evidence.get("screen_facts") or {}).get("observation_serial") != serial
-            or proof.get("epoch") != epoch
-            or proof.get("serial") != serial
-            or proof.get("capture_failure_revision") != getattr(owner, "_capture_failure_revision", 0)
-            or proof.get("query_generation") != getattr(owner, "_query_refresh_generation", 0)
-            or proof.get("answer_generation") != getattr(owner, "_answer_query_generation", 0)
-            or not isinstance(proof.get("checked_frame_at"), (int, float))
-            or not 0 <= time.time() - proof["checked_frame_at"] <= LIVE_FRAME_MAX_AGE_SECONDS
-            or getattr(owner, "_observation_pending_reason", "")):
+    if not evidence.get('fresh'):
+        emit(owner, "P04", "verification", "reject", "source_unconfirmed")
+        return None
+    if raw.get('observation_serial') != serial:
+        emit(owner, "P04", "verification", "reject", "raw_revision_changed")
+        return None
+    if (evidence.get('screen_facts') or {}).get('observation_serial') != serial:
+        emit(owner, "P04", "verification", "reject", "packet_revision_changed")
+        return None
+    if proof.get('epoch') != epoch:
+        emit(owner, "P04", "verification", "reject", "proof_epoch_changed")
+        return None
+    if proof.get('serial') != serial:
+        emit(owner, "P04", "verification", "reject", "proof_revision_changed")
+        return None
+    if proof.get('capture_failure_revision') != getattr(owner, '_capture_failure_revision', 0):
+        emit(owner, "P04", "verification", "reject", "capture_failed")
+        return None
+    if proof.get('query_generation') != getattr(owner, '_query_refresh_generation', 0):
+        emit(owner, "P04", "verification", "reject", "refresh_generation_changed")
+        return None
+    if proof.get('answer_generation') != getattr(owner, '_answer_query_generation', 0):
+        emit(owner, "P04", "verification", "reject", "generation_changed")
+        return None
+    if not isinstance(proof.get('checked_frame_at'), (int, float)):
+        emit(owner, "P04", "verification", "reject", "invalid_timestamp")
+        return None
+    if not 0 <= time.time() - proof['checked_frame_at'] <= LIVE_FRAME_MAX_AGE_SECONDS:
+        emit(owner, "P04", "verification", "reject", "frame_stale")
+        return None
+    if getattr(owner, '_observation_pending_reason', ''):
+        emit(owner, "P04", "verification", "reject", "pending_unproved")
         return None
     scoped = select_scoped_guard(owner, evidence, plan, [getattr(owner, name, None) for name in (
         "_accepted_frame_delivery_guard", "_accepted_frame_full_query_guard", "_accepted_frame_query_guard")], allow_partial=True)
     if scoped is None:
+        emit(owner, "P04", "verification", "reject", "missing_proof")
         return None
     value, guard = scoped
     deferred = getattr(owner, "_deferred_verification", None)
     if deferred and deferred[:2] == (epoch, serial) and deferred[2] & {p[0] for p in guard[1]}:
+        emit(owner, "P04", "verification", "reject", "deferred")
         return None
     page_dependencies = {coordinates(r) for r in getattr(owner, "_accepted_frame_page_regions", ())}
     value["reuse"] = {"validated_at": datetime.fromtimestamp(proof["checked_frame_at"]).astimezone().isoformat(),
@@ -167,6 +224,7 @@ def producer_receipt(owner, evidence, *, plan=None):
         "challenge_revision": getattr(owner, "_review_challenge_serial", 0),
         "capture_failure_revision": getattr(owner, "_capture_failure_revision", 0), "producer_proof": True}
     if not ObservationSnapshot.select(owner, value, fields=plan.fields).matches(owner):
+        emit(owner, "P05", "verification", "reject", "snapshot_rejected")
         return None
     from .live_refresh import trace_refresh
     trace_refresh(owner, "producer_proof_consumed", serial=serial)

@@ -1,0 +1,9 @@
+command: uv run python -m plugin.neko_plugin_cli.cli check -r hsr_companion
+N.E.K.O main: f665a41a3d2e00991e93a81085c6909374e5733e
+variant: F1
+[BEGIN COMPLETE OUTPUT]
+[ConfigManager] ✓ Using app data directory: <USER_HOME>\AppData\Local
+[FAIL] check --release: 'gbk' codec can't decode byte 0xaf in position 17499: illegal multibyte sequence
+
+[END COMPLETE OUTPUT]
+exit_code: 1

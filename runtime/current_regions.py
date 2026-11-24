@@ -13,6 +13,7 @@ from .fact_lifecycle import candidate_evidence
 from .live_refresh import _supports_kwarg, delivery_turn, fetch_recent_frame, frame_stamp, trace_refresh
 from .observation_store import ObservationSnapshot
 from .query_reuse import _SUPERSEDED, _remember_candidate, region_stamp, regions_changed, review_snapshot
+from .rejection_trace import emit
 from .review_policy import checked_receipt
 from .timing_detail import phase, timed
 from .vision_scheduler import run_query_worker
@@ -66,6 +67,7 @@ def supports_current_character(owner, plan):
 @timed("region_packet")
 async def read_current_character(owner, plan, deadline):
     if not supports_current_character(owner, plan):
+        emit(owner, "Q01", "compact", "not_applicable", "unsupported")
         return None
     reader = owner._vision.read_character_detail
     generation = getattr(owner, "_answer_query_generation", 0)
@@ -80,7 +82,11 @@ async def read_current_character(owner, plan, deadline):
             nonlocal source
             with phase("region_capture", owner):
                 source = await fetch_recent_frame(owner, wait_seconds=max(.001, min(2., deadline-time.monotonic())))
-            if source is None or not _live(owner, generation, epoch, failure):
+            if source is None:
+                emit(owner, "Q02", "compact", "reject", "no_source")
+                return None
+            if not _live(owner, generation, epoch, failure):
+                emit(owner, "Q02", "compact", "reject", "not_live")
                 return None
             bind_trace(frame_seq=getattr(source, "frame_seq", None))
             acquisition = _layout_regions(owner)
@@ -88,12 +94,24 @@ async def read_current_character(owner, plan, deadline):
             return (source.image_bytes,), {"fields": plan.fields, **options}
 
         analysis = await run_query_worker(owner, reader, deadline=deadline, prepare=prepare)
-        if (not isinstance(analysis, dict) or analysis.get("page", {}).get("page_type") != "character_detail"
-                or not analysis.get("scene", {}).get("verified")
-                or not _live(owner, generation, epoch, failure) or time.monotonic() >= deadline):
+        if not isinstance(analysis, dict):
+            emit(owner, "Q02", "compact", "reject", "no_analysis")
+            return None
+        if analysis.get("page", {}).get("page_type") != "character_detail":
+            emit(owner, "Q02", "compact", "reject", "wrong_page")
+            return None
+        if not analysis.get("scene", {}).get("verified"):
+            emit(owner, "Q02", "compact", "reject", "scene_unverified")
+            return None
+        if not _live(owner, generation, epoch, failure):
+            emit(owner, "Q02", "compact", "reject", "not_live")
+            return None
+        if time.monotonic() >= deadline:
+            emit(owner, "Q02", "compact", "reject", "deadline")
             return None
         controls = (analysis.get("recognition") or {}).get("scene_regions") or []
         if not controls:
+            emit(owner, "Q10", "compact", "reject", "no_controls")
             return None
         actors = [a for a in analysis.get("characters") or [] if native_name_confirmed(a)]
         raw = {**analysis, "source": "assistant_current_regions", "characters": actors,
@@ -103,8 +121,14 @@ async def read_current_character(owner, plan, deadline):
         # Check current controls before publishing even the PAGE. No native
         # facts are copied from the newer capture; its pixels only corroborate.
         latest = await fetch_recent_frame(owner, wait_seconds=max(.001, min(2., deadline-time.monotonic())))
-        if (latest is None or latest.game.get("pid") != source.game.get("pid")
-                or not _live(owner, generation, epoch, failure)):
+        if latest is None:
+            emit(owner, "Q10", "compact", "reject", "no_frame")
+            return None
+        if latest.game.get("pid") != source.game.get("pid"):
+            emit(owner, "Q10", "compact", "reject", "window_changed")
+            return None
+        if not _live(owner, generation, epoch, failure):
+            emit(owner, "Q10", "compact", "reject", "not_live")
             return None
         def controls_changed():
             # Exact current/source bytes prove equality more strongly than a
@@ -116,6 +140,7 @@ async def read_current_character(owner, plan, deadline):
         with phase("region_controls", owner):
             changed = await asyncio.to_thread(controls_changed)
         if changed:
+            emit(owner, "Q11", "compact", "reject", "controls_changed")
             return None
         publish = getattr(owner, "_publish_scene_preview", None)
         if callable(publish):
@@ -123,7 +148,11 @@ async def read_current_character(owner, plan, deadline):
                 "observed_at": raw["observed_at"],
                 "recognition": {**analysis["recognition"], "phase": "scene_only"}})
         next_epoch = getattr(owner, "_observation_epoch", 0)
-        if next_epoch not in {epoch, epoch+1} or not _live(owner, generation, next_epoch, failure):
+        if next_epoch not in {epoch, epoch+1}:
+            emit(owner, "Q12", "compact", "reject", "epoch_changed")
+            return None
+        if not _live(owner, generation, next_epoch, failure):
+            emit(owner, "Q12", "compact", "reject", "not_live")
             return None
         epoch = next_epoch  # The above current-page publication may revoke the old page.
         serial = getattr(owner, "_observation_serial", 0)
@@ -146,7 +175,11 @@ async def read_current_character(owner, plan, deadline):
         # fact. Re-select this same packet once, never merge/retimestamp it.
         result = None
         for _ in range(2):
-            if time.monotonic() >= deadline or not _live(owner, generation, epoch, failure):
+            if time.monotonic() >= deadline:
+                emit(owner, "Q13", "compact", "reject", "deadline")
+                return None
+            if not _live(owner, generation, epoch, failure):
+                emit(owner, "Q13", "compact", "reject", "not_live")
                 return None
             snapshot["evidence"]["screen_facts"]["observation_serial"] = getattr(owner, "_observation_serial", 0)
             with phase("region_snapshot_review", owner):
@@ -155,10 +188,22 @@ async def read_current_character(owner, plan, deadline):
                 break
             trace_refresh(owner, "region_review_reselected")
         with phase("region_receipt", owner):
-            if (result is None or result is _SUPERSEDED or not _live(owner, generation, epoch, failure)
-                    or not checked_receipt(owner, result, plan=plan)
-                    or not ObservationSnapshot.select(owner, result, fields=plan.fields).matches(owner)):
+            if result is None:
+                emit(owner, "Q14", "compact", "reject", "no_result")
                 return None
+            if result is _SUPERSEDED:
+                emit(owner, "Q14", "compact", "reject", "superseded")
+                return None
+            if not _live(owner, generation, epoch, failure):
+                emit(owner, "Q14", "compact", "reject", "not_live")
+                return None
+            if not checked_receipt(owner, result, plan=plan):
+                emit(owner, "Q14", "compact", "reject", "receipt_rejected")
+                return None
+            if not ObservationSnapshot.select(owner, result, fields=plan.fields).matches(owner):
+                emit(owner, "Q14", "compact", "reject", "snapshot_rejected")
+                return None
+            emit(owner, "Q14", "compact", "allow", "admitted")
         record_candidate(owner, "candidate_verified", result)
         _page_guard(owner, result, snapshot)
         snapshots = getattr(owner, "_reusable_observations", {})

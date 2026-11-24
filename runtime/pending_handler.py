@@ -5,22 +5,30 @@ import asyncio
 import time
 
 from .pending_contract import UserActivity, message_digest
+from .rejection_trace import context, emit
 
 
 async def handle_pending_reply(owner, payload):
     from .chat_activity import latest_user_activity
     from .followup_delivery import cancel_followup
-
+    from .prepare_trace import request_id
+    new_id = request_id(owner)
+    old_id = dict.get(payload, "request_id") if isinstance(payload, dict) else None
+    def record(reason, outcome="reject"):
+        emit(owner, "X01", "pending", outcome, reason, request_id=new_id, related_request_id=old_id)
     rejected = {"accepted": False, "instruction": "未绑定当前待办，不确认已继续或取消；有新问题请正常调用统一入口。"}
     if not isinstance(payload, dict):
+        record("invalid_relation")
         return {**rejected, "reason": "invalid_relation"}
     request = getattr(owner, "_pending_answer", None)
     if (request is None or payload.get("request_id") != request.request_id
             or time.monotonic() >= request.expires_at or owner._target_character() != request.target):
+        record("request_not_current")
         return {**rejected, "reason": "request_not_current"}
     relation = payload.get("relation")
     digest = message_digest(payload.get("player_message"))
     if relation not in {"confirm", "cancel", "new_request", "uncertain"} or not digest:
+        record("invalid_relation")
         return {**rejected, "reason": "invalid_relation"}
     # An in-flight cancel/confirmation cannot race submission while its SDK
     # identity is checked. Failure stays held inside the ORIGINAL deadline.
@@ -32,16 +40,19 @@ async def handle_pending_reply(owner, payload):
     state, activity = "unavailable", None
     while time.monotonic() < deadline and getattr(owner, "_pending_answer", None) is request:
         remaining = deadline - time.monotonic()
-        state, activity = await latest_user_activity(owner.bus, target=request.target, limit=8, include_identity=True,
-            transport_timeout=min(1.0, max(.001, remaining)), wait_timeout=max(.001, remaining))
+        with context(owner, request.request_id):
+            state, activity = await latest_user_activity(owner.bus, target=request.target, limit=8, include_identity=True,
+                transport_timeout=min(1.0, max(.001, remaining)), wait_timeout=max(.001, remaining))
         if state != "unavailable":
             break
         await asyncio.sleep(min(.05, max(0, deadline - time.monotonic())))
     if state != "available":
+        record("activity_unavailable")
         return {**rejected, "reason": "activity_unavailable"}
     if (getattr(owner, "_pending_answer", None) is not request or time.monotonic() >= request.expires_at
             or state != "available" or not isinstance(activity, UserActivity) or activity.digest != digest
             or activity.stamp <= request.asked_at or owner._target_character() != request.target):
+        record("message_not_current")
         return {**rejected, "reason": "message_not_current"}
     if relation in {"cancel", "new_request"}:
         cancel_followup(owner, "user_cancelled" if relation == "cancel" else "new_request")
@@ -56,6 +67,7 @@ async def handle_pending_reply(owner, payload):
     event = getattr(owner, "_visual_update_event", None)
     if event is not None:
         event.set()
+    record(relation, "allow")
     return {"accepted": True, "relation": relation, "request_id": request.request_id,
         "pending": relation not in {"cancel", "new_request"},
         "expires_in_seconds": round(max(0, request.expires_at - time.monotonic()), 3),

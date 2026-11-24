@@ -1,0 +1,206 @@
+command: uv run python -m plugin.neko_plugin_cli.cli check -r hsr_companion
+N.E.K.O main: f665a41a3d2e00991e93a81085c6909374e5733e
+variant: F1
+[BEGIN COMPLETE OUTPUT]
+[ConfigManager] ✓ Using app data directory: <USER_HOME>\AppData\Local
+============================= test session starts =============================
+platform win32 -- Python 3.11.15, pytest-9.0.2, pluggy-1.6.0
+Using --randomly-seed=20260731
+rootdir: <NEKO_MAIN>
+configfile: pytest.ini
+plugins: hypothesis-6.155.2, asyncio-1.3.0, base-url-2.1.0, cov-7.1.0, playwright-0.7.2, randomly-4.1.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 2644 items
+
+tests\test_field_pipeline_probe.py ....                                  [  0%]
+tests\test_major_page_handoff_20261020.py .......                        [  0%]
+tests\test_relic_condition_trace.py ...........                          [  0%]
+tests\test_reply_delivery_closeout_20261022.py ......................... [  1%]
+.......                                                                  [  2%]
+tests\test_code_health_followup_contract.py ......                       [  2%]
+tests\test_blocking_pipeline_20261017.py .............                   [  2%]
+tests\test_experience_fixes.py ...................................       [  4%]
+tests\test_current_observation.py ...................................... [  5%]
+.........                                                                [  5%]
+tests\test_regional_poc.py ...........                                   [  6%]
+tests\test_relic_fields.py .....................................         [  7%]
+tests\test_manual_refresh.py ......                                      [  7%]
+tests\test_navigation_v1.py .................................            [  9%]
+tests\test_screen_facts.py ............................................. [ 10%]
+...........................                                              [ 11%]
+tests\test_native_recognition.py ...........                             [ 12%]
+tests\test_general_name_reader.py ...................................... [ 13%]
+........................................................                 [ 15%]
+tests\test_stage1_repairs.py ............................                [ 16%]
+tests\test_page_activity_contract_20261020.py ...............            [ 17%]
+tests\test_consultation_array_schema.py ......                           [ 17%]
+tests\test_roundtrip_c_acceptance_plan_20261021.py ........              [ 18%]
+tests\test_code_health_navigation_contract.py ..............             [ 18%]
+tests\test_3c_dialogue_20261116.py .......                               [ 18%]
+tests\test_request_timing_detail.py ...........                          [ 19%]
+tests\test_refresh_diagnostics.py ...                                    [ 19%]
+tests\test_background_perception.py ..................                   [ 20%]
+tests\test_stage2a_closeout_20261017.py ..................               [ 20%]
+tests\test_roundtrip_breakpoints_red_20261020.py sssssssss               [ 21%]
+tests\test_d1_subject_contract_20261020.py ............................. [ 22%]
+.....                                                                    [ 22%]
+tests\test_live_demo_fixes.py .........................                  [ 23%]
+tests\test_legacy_imports.py ........................................... [ 24%]
+.....................................                                    [ 26%]
+tests\test_layering.py .....                                             [ 26%]
+tests\test_review_scope_progress_20261020.py .....                       [ 26%]
+tests\test_stability_trace.py ............                               [ 27%]
+tests\test_avatar_pack.py ......s                                        [ 27%]
+tests\test_service_handoff.py ................................           [ 28%]
+tests\test_delivery_chain_20261017.py .................                  [ 29%]
+tests\test_runtime_stability_20261113.py ........                        [ 29%]
+tests\test_query_refactor.py ..............................              [ 30%]
+tests\test_code_health_stability_harness.py ..........                   [ 31%]
+tests\test_window_capture.py ....................                        [ 31%]
+tests\test_stage2a_contract.py ..............                            [ 32%]
+tests\test_page_body_r3_20261021.py s.sssssss.sss.sssssssssssss          [ 33%]
+tests\test_delivery_boundary_20261020.py ...................F...         [ 34%]
+tests\test_roundtrip_plan_20261020.py ..                                 [ 34%]
+tests\test_commit_activity_repair.py ................                    [ 34%]
+tests\test_cross_page_panel_delivery_20261020.py ..........              [ 35%]
+tests\test_equipment_turn_delivery.py ............                       [ 35%]
+tests\test_exploration_fields.py ........................                [ 36%]
+tests\test_f1_diagnostics.py ...............................             [ 37%]
+tests\test_stale_reuse_2c.py ..............                              [ 38%]
+tests\test_v095_runtime.py .......................................       [ 39%]
+tests\test_code_health_lifecycle.py ..........                           [ 40%]
+tests\test_player_builds.py .........................................    [ 41%]
+tests\test_contract_repairs_20261017.py .........................        [ 42%]
+tests\test_goal_recognition.py ......................................... [ 44%]
+........................................................................ [ 46%]
+.............                                                            [ 47%]
+tests\test_relic_label_contract.py ...........................           [ 48%]
+tests\test_foreground_query_admission.py .......                         [ 48%]
+tests\test_relic_request_checkpoint_20261114.py ....                     [ 48%]
+tests\test_page_followup.py ............................................ [ 50%]
+                                                                         [ 50%]
+tests\test_activity_scope_ci.py ...                                      [ 50%]
+tests\test_uid_import.py ............................................... [ 52%]
+..................                                                       [ 53%]
+tests\test_roundtrip_content_repair_20261020.py s.ss.s.ssssss...sss.ssss [ 54%]
+..ssssss                                                                 [ 54%]
+tests\test_reproduction_20261012.py .........                            [ 54%]
+tests\test_d1_player_equipment_reply.py ..........................       [ 55%]
+tests\test_static_patrol.py .......                                      [ 55%]
+tests\test_session_message_handoff.py ....................               [ 56%]
+tests\test_current_screen_consultation_20261116.py ......                [ 56%]
+tests\test_region_query_2b.py .......                                    [ 57%]
+tests\test_scene_latency.py ...............................              [ 58%]
+tests\test_dynamic_handoff_20261017.py ..............................    [ 59%]
+tests\test_r2_formatter_timing_20261021.py .                             [ 59%]
+tests\test_d1_closeout.py ............................                   [ 60%]
+tests\test_demo_d0_d1.py .........s.                                     [ 61%]
+tests\test_record_recording_trial.py .....                               [ 61%]
+tests\test_d1_handoff_closeout.py ..........................             [ 62%]
+tests\test_pipeline_state.py ................                            [ 62%]
+tests\test_e2_patrol_confirmation.py ........                            [ 63%]
+tests\test_team_slots_2c.py .....                                        [ 63%]
+tests\test_relic_evidence_repair.py .............                        [ 63%]
+tests\test_reader_budget_probe_20261020.py ..                            [ 63%]
+tests\test_assistant_supply_20261017.py ...s...s.                        [ 64%]
+tests\test_request_handoff_r2_20261021.py ..s.....s..                    [ 64%]
+tests\test_fact_reliability.py ..............................            [ 65%]
+tests\test_relic_region_first_20261115.py ...                            [ 65%]
+tests\test_cooperative_ocr_review.py ......                              [ 66%]
+tests\test_semantic_routing.py ......................................... [ 67%]
+....                                                                     [ 67%]
+tests\test_chain_audit_20261017.py ...........................           [ 68%]
+tests\test_page_first_protocol_20261020.py .................             [ 69%]
+tests\test_recognition_metrics_e1.py ..                                  [ 69%]
+tests\test_readiness_imports.py .....                                    [ 69%]
+tests\test_query_priority_2a.py .......                                  [ 69%]
+tests\test_navigation_evidence.py ...................................... [ 71%]
+.                                                                        [ 71%]
+tests\test_label_batch_acceptance.py .........                           [ 71%]
+tests\test_team_roster_2b1.py .....                                      [ 71%]
+tests\test_code_health_packaging.py ...........                          [ 72%]
+tests\test_diagnostics.py ...........                                    [ 72%]
+tests\test_reader_policy.py ...                                          [ 72%]
+tests\test_mechanics_progression.py ...............................      [ 74%]
+tests\test_d1_fit_repair.py ..s.........................                 [ 75%]
+tests\test_review_policy_20261017.py ...............................     [ 76%]
+tests\test_code_health_request_recovery.py ...                           [ 76%]
+tests\test_cached_page_controls_20261020.py ......                       [ 76%]
+tests\test_speech_arbitration.py ............................            [ 77%]
+tests\test_expression_relic_closeout_20261022.py .....................   [ 78%]
+tests\test_bounded_page_handoff_20261021.py ............................ [ 79%]
+...                                                                      [ 79%]
+tests\test_stage2a_transfer_20261017.py .......                          [ 79%]
+tests\test_guidance.py ................................................. [ 81%]
+..                                                                       [ 81%]
+tests\test_moc_planning.py ..............................                [ 83%]
+tests\test_query_yield_evidence_20261120.py ..                           [ 83%]
+tests\test_stage2_assessment.py ...........................              [ 84%]
+tests\test_delivery_races.py ........                                    [ 84%]
+tests\test_d1_turns.py .........................                         [ 85%]
+tests\test_controlled_time.py .....                                      [ 85%]
+tests\test_vision_runtime.py .......                                     [ 85%]
+tests\test_experiment_isolation_20261114.py ..........                   [ 86%]
+tests\test_smoke.py ...........                                          [ 86%]
+tests\test_s1_name_line_confirmation.py .............                    [ 87%]
+tests\test_current_character_regions.py .........................        [ 88%]
+tests\test_recording_stage3_cone_delivery.py ...........                 [ 88%]
+tests\test_query_reuse.py ..........................                     [ 89%]
+tests\test_followup_reader.py .......                                    [ 89%]
+tests\test_isolated_numeric_conditions.py .............................. [ 90%]
+....                                                                     [ 90%]
+tests\test_prepare_failure_trace.py .................................... [ 92%]
+..                                                                       [ 92%]
+tests\test_candidate_clock_contract.py ............                      [ 92%]
+tests\test_s1_preemption_closeout.py ......................              [ 93%]
+tests\test_prepare_delivery_contract_20261120.py ..                      [ 93%]
+tests\test_recording_flow.py .............................               [ 94%]
+tests\test_request_completion_r1_20261021.py sss.sssssssssssssssssssss   [ 95%]
+tests\test_assistant_binary_supply.py .......                            [ 96%]
+tests\test_resident_observer.py ...........                              [ 96%]
+tests\test_navigation_controls_regression.py ........................... [ 97%]
+.........                                                                [ 97%]
+tests\test_spoken_demand_20261023.py ...............                     [ 98%]
+tests\test_recording_stage3_sources.py ..................                [ 99%]
+tests\test_r1_handoff_isolation_20261021.py .....                        [ 99%]
+tests\test_delivery_fix_20261012.py ...............                      [ 99%]
+tests\test_dispatch_boundary.py s..                                      [100%]
+
+================================== FAILURES ===================================
+______ test_final_receipt_reports_boundary_reason_not_just_empty_payload ______
+
+tmp_path = WindowsPath('<USER_HOME>/AppData/Local/Temp/pytest-of-<USER>/pytest-1057/test_final_receipt_reports_bou0')
+
+    def test_final_receipt_reports_boundary_reason_not_just_empty_payload(tmp_path):
+        packet, _, _ = asyncio.run(formal_case(tmp_path, "quest_changed"))
+        decision = packet["delivery_receipt"]["boundary"]
+>       assert decision["state"] == "partial"
+E       AssertionError: assert 'retained' == 'partial'
+E         
+E         - partial
+E         + retained
+
+tests\test_delivery_boundary_20261020.py:129: AssertionError
+============================== warnings summary ===============================
+<FROZEN_TEST_ENV>\Lib\site-packages\_pytest\config\__init__.py:1428
+  <FROZEN_TEST_ENV>\Lib\site-packages\_pytest\config\__init__.py:1428: PytestConfigWarning: Unknown config option: timeout
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+plugin/plugins/hsr_companion/tests/test_dispatch_boundary.py::test_host_background_assessment_excludes_this_manifest_without_llm
+  <NEKO_MAIN>\plugin\plugins\hsr_companion\tests\test_dispatch_boundary.py:25: PytestDeprecationWarning: 
+  Module 'brain.task_executor' was found, but when imported by pytest it raised:
+      ImportError("cannot import name 'AGENT_HISTORY_TURNS' from 'config' (<NEKO_MAIN>\\config\\__init__.py)")
+  In pytest 9.1 this warning will become an error by default.
+  You can fix the underlying problem, or alternatively overwrite this behavior and silence this warning by passing exc_type=ImportError explicitly.
+  See https://docs.pytest.org/en/stable/deprecations.html#pytest-importorskip-default-behavior-regarding-importerror
+    pytest.importorskip("brain.task_executor", reason="host brain module is not installed in this environment")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests\test_delivery_boundary_20261020.py::test_final_receipt_reports_boundary_reason_not_just_empty_payload
+===== 1 failed, 2555 passed, 88 skipped, 2 warnings in 314.65s (0:05:14) ======
+[FAIL] check --release: tests failed with exit code 1
+
+[END COMPLETE OUTPUT]
+exit_code: 1
