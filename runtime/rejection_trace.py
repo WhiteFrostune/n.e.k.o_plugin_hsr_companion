@@ -160,6 +160,21 @@ def _code(value, allowed):
     return value if isinstance(value, str) and value in allowed else "unmapped_code"
 
 
+Q11_PIXEL_RULES = frozenset({"missing_regions", "region_count", "geometry", "empty_pixels", "mean",
+                             "strong_fraction", "cell_strong", "cell_cluster", "not_observed"})
+Q11_REVIEW_RESULTS = frozenset({"unavailable", "deadline", "not_scheduled", "superseded", "error",
+                              "unreadable", "contradiction", "skipped", "frame_stale", "cancelled", "proof_limit"})
+
+
+def _q11_detail(value):
+    value = value if isinstance(value, dict) else {}
+    index = value.get("region_index")
+    return {"pixel_rule": _code(value.get("pixel_rule"), Q11_PIXEL_RULES),
+            "region_index": index if type(index) is int and 0 <= index < 48 else None,
+            "region_purpose": _code(value.get("region_purpose"), {"page_control"}),
+            "text_review": _code(value.get("text_review"), Q11_REVIEW_RESULTS)}
+
+
 def _id(value):
     return value if isinstance(value, str) and re.fullmatch(r"[a-f0-9]{32}", value) else None
 
@@ -197,7 +212,7 @@ def context(owner, request_id=None):
                 pass
 
 
-def _record(owner, branch, stage, outcome, reason, *, request_id=None, related_request_id=None, duration_ms=None):
+def _record(owner, branch, stage, outcome, reason, *, request_id=None, related_request_id=None, duration_ms=None, q11=None):
     active = _CONTEXT.get()
     if owner is None and active:
         owner = active[0]
@@ -230,6 +245,8 @@ def _record(owner, branch, stage, outcome, reason, *, request_id=None, related_r
         if type(duration_ms) in {int, float} and math.isfinite(duration_ms)
         else None,
     }
+    if branch == "Q11" and isinstance(q11, dict):
+        row["q11"] = _q11_detail(q11)
     row.update(
         {
             k: ids[k]
@@ -240,6 +257,7 @@ def _record(owner, branch, stage, outcome, reason, *, request_id=None, related_r
     with _LOCK:
         state = _state(owner)
         state["unmapped_count"] += sum(v == "unmapped_code" for v in row.values())
+        state["unmapped_count"] += sum(v == "unmapped_code" for v in row.get("q11", {}).values())
         # Only the same request/check/result can merge. Other checks interleaved
         # by polling do not evict the first refusal of this request.
         dependency = (
@@ -250,6 +268,7 @@ def _record(owner, branch, stage, outcome, reason, *, request_id=None, related_r
             "job_id",
             "frame_seq",
             "verification_frame_seq",
+            "q11",
         )
         prior = next((e for e in reversed(state["events"]) if all(e.get(k) == row.get(k) for k in dependency)), None)
         if prior is not None and (prior["outcome"], prior["reason"]) != (row["outcome"], row["reason"]):
@@ -335,6 +354,7 @@ def sanitize(value):
                 k: number(e.get(k))
                 for k in ("count", "duration_ms", "event_seq", "job_id", "frame_seq", "verification_frame_seq")
             },
+            **({"q11": _q11_detail(e["q11"])} if e.get("branch_id") == "Q11" and isinstance(e.get("q11"), dict) else {}),
             "first_at": stamp(e.get("first_at")),
             "last_at": stamp(e.get("last_at")),
         }

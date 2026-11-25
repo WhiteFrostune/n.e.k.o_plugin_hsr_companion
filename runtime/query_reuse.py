@@ -111,35 +111,44 @@ def text_pixel_differences(before: bytes, after: bytes) -> list[int]:
     return [abs(delta) for delta in signed]
 
 
-def regions_changed(before: tuple, after: tuple) -> bool:
-    if not before or len(before) != len(after):
-        return True
-    for (region_a, size_a, pixels_a), (region_b, size_b, pixels_b) in zip(before, after):
+def region_change_detail(before: tuple, after: tuple) -> dict | None:
+    """First existing pixel rule that fails; no pixels/text enter the result."""
+    def hit(rule, index=None):
+        return {"pixel_rule": rule, "region_index": index}
+    if not before:
+        return hit("missing_regions")
+    if len(before) != len(after):
+        return hit("region_count")
+    for index, ((region_a, size_a, pixels_a), (region_b, size_b, pixels_b)) in enumerate(zip(before, after)):
         if region_a != region_b or size_a != size_b:
-            return True
+            return hit("geometry", index)
         # Exact nonempty native bytes are stronger than the heuristic below.
         # Geometry was checked first; empty/failed crops are still not proof.
         if pixels_a and pixels_a == pixels_b:
             continue
         differences = text_pixel_differences(pixels_a, pixels_b)
-        if not differences or sum(differences) / len(differences) / 255 > .015:
-            return True
+        if not differences:
+            return hit("empty_pixels", index)
+        if sum(differences) / len(differences) / 255 > .015:
+            return hit("mean", index)
         if sum(d > 24 for d in differences) / len(differences) > .02:
-            return True
-        # A changed glyph can occupy far less than 2% of a wide OCR box.
-        # Check small cells too; background flicker may cause a safe cache miss.
+            return hit("strong_fraction", index)
+        # Keep the original glyph protection and exact thresholds/short circuit.
         width, height = size_a
         for top in range(0, height, 8):
             for left in range(0, width, 8):
                 cell = [differences[y * width + x]
                         for y in range(top, min(height, top + 8))
                         for x in range(left, min(width, left + 8))]
-                # A handful of low-amplitude antialias/background pixels is
-                # not a changed glyph. Strong tiny changes still revoke it;
-                # weaker changes need a larger local cluster.
-                if sum(d > 64 for d in cell) >= 3 or sum(d > 24 for d in cell) >= 8:
-                    return True
-    return False
+                if sum(d > 64 for d in cell) >= 3:
+                    return hit("cell_strong", index)
+                if sum(d > 24 for d in cell) >= 8:
+                    return hit("cell_cluster", index)
+    return None
+
+
+def regions_changed(before: tuple, after: tuple) -> bool:
+    return region_change_detail(before, after) is not None
 
 
 def _remember_candidate(snapshots, key, candidate):

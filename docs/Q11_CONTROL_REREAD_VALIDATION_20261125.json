@@ -1,0 +1,63 @@
+{
+  "base_commit": "a4e1b29a55e72987db8fc64319a7ea8dbdfea441",
+  "branch": "codex/0.9.8-q11-control-reread-20261125",
+  "new_tests": 39,
+  "red": {
+    "passed": 4,
+    "failed": 2,
+    "total": 6
+  },
+  "targeted": {
+    "passed": 269,
+    "skipped": 0,
+    "failed": 0,
+    "seconds": 11.139
+  },
+  "gates": {
+    "full": {
+      "tests": 2836,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 10,
+      "passed": 2826,
+      "seconds": 209.691,
+      "new_q11_cases": 39
+    },
+    "layer": {
+      "tests": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 5,
+      "seconds": 1.238
+    },
+    "ruff": {
+      "exit_code": 0,
+      "issues": 0
+    },
+    "seed": 11252026
+  },
+  "release_check": {
+    "command": [
+      "uv",
+      "run",
+      "python",
+      "-m",
+      "plugin.neko_plugin_cli.cli",
+      "check",
+      "-r",
+      "hsr_companion"
+    ],
+    "neko_main": "1c67f33d96b4915c2f55bb93062b1dc8a20e56b3",
+    "exit_code": 0,
+    "seconds": 289.015,
+    "log": "q11-release-check-20261125.txt",
+    "tests": "passed",
+    "payload_hash_verified": true,
+    "product_and_new_test_hashes_match": true,
+    "environment": "Windows Python 3.11.15; frozen dependencies; exact standard command in current-main isolated host"
+  },
+  "installed": false,
+  "runtime_helper_changed": false,
+  "old_test_assertions_changed": false
+}
