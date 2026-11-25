@@ -142,13 +142,19 @@ def test_same_frame_or_stale_capture_cannot_establish_stability(tmp_path):
     asyncio.run(check())
 
 
-def test_manual_followup_and_missing_coverage_still_get_full(tmp_path):
+def test_manual_followup_and_missing_coverage_still_get_full(tmp_path, monkeypatch):
+    from plugin.plugins.hsr_companion.runtime import patrol
     from plugin.plugins.hsr_companion.runtime.patrol import remember_capture, should_scan
     owner, data = static_owner(tmp_path)
+    origin, tick = time.time(), [0.]
+    # Distinct capture frames need distinct timestamps even on coarse wall clocks.
+    monkeypatch.setattr(patrol, "time", SimpleNamespace(time=lambda: origin + tick[0],
+                                                      monotonic=lambda: 100. + tick[0]))
 
     async def call(seq):
+        tick[0] = seq * .01
         return await should_scan(owner, data, requested=True, changed=False,
-            frame_seq=seq, captured_at=time.time(), pid=1)
+            frame_seq=seq, captured_at=origin + tick[0], pid=1)
 
     async def check():
         await remember_capture(owner, data)

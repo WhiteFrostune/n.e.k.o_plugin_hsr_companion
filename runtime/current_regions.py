@@ -22,7 +22,7 @@ from .query_reuse import (
     regions_changed,
     review_snapshot,
 )
-from .rejection_trace import emit
+from .rejection_trace import compact_read_trace, emit, note_compact_read
 from .review_policy import checked_receipt
 from .timing_detail import phase, timed
 from .vision_scheduler import VisionWorkerBusy, run_query_worker
@@ -158,31 +158,34 @@ async def read_current_character(owner, plan, deadline):
             with phase("region_capture", owner):
                 source = await fetch_recent_frame(owner, wait_seconds=max(.001, min(2., deadline-time.monotonic())))
             if source is None:
-                emit(owner, "Q02", "compact", "reject", "no_source")
+                note_compact_read(subcondition="prepare_empty")
+                emit(owner, "Q02", "compact", "reject", "no_source", q02=read_detail)
                 return None
             if not _live(owner, generation, epoch, failure):
-                emit(owner, "Q02", "compact", "reject", "not_live")
+                note_compact_read(subcondition="prepare_empty")
+                emit(owner, "Q02", "compact", "reject", "not_live", q02=read_detail)
                 return None
             bind_trace(frame_seq=getattr(source, "frame_seq", None))
             acquisition = _layout_regions(owner)
             options = {"layout_regions": acquisition} if acquisition and _supports_kwarg(reader, "layout_regions") else {}
             return (source.image_bytes,), {"fields": plan.fields, **options}
 
-        analysis = await run_query_worker(owner, reader, deadline=deadline, prepare=prepare)
+        with compact_read_trace() as read_detail:
+            analysis = await run_query_worker(owner, reader, deadline=deadline, prepare=prepare)
         if not isinstance(analysis, dict):
-            emit(owner, "Q02", "compact", "reject", "no_analysis")
+            emit(owner, "Q02", "compact", "reject", "no_analysis", q02=read_detail)
             return None
         if analysis.get("page", {}).get("page_type") != "character_detail":
-            emit(owner, "Q02", "compact", "reject", "wrong_page")
+            emit(owner, "Q02", "compact", "reject", "wrong_page", q02={**read_detail, "subcondition": "wrong_page"})
             return None
         if not analysis.get("scene", {}).get("verified"):
-            emit(owner, "Q02", "compact", "reject", "scene_unverified")
+            emit(owner, "Q02", "compact", "reject", "scene_unverified", q02={**read_detail, "subcondition": "scene_unverified"})
             return None
         if not _live(owner, generation, epoch, failure):
-            emit(owner, "Q02", "compact", "reject", "not_live")
+            emit(owner, "Q02", "compact", "reject", "not_live", q02={**read_detail, "subcondition": "other"})
             return None
         if time.monotonic() >= deadline:
-            emit(owner, "Q02", "compact", "reject", "deadline")
+            emit(owner, "Q02", "compact", "reject", "deadline", q02={**read_detail, "subcondition": "other"})
             return None
         controls = (analysis.get("recognition") or {}).get("scene_regions") or []
         if not controls:

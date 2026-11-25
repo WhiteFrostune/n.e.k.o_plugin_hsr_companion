@@ -3,6 +3,7 @@ import asyncio
 import copy
 import importlib
 import json
+from itertools import count
 from types import SimpleNamespace
 
 import pytest
@@ -18,6 +19,14 @@ from plugin.plugins.hsr_companion.tests.test_equipment_turn_delivery import cont
 ENTRY = importlib.import_module('plugin.plugins.hsr_companion')
 QUESTION = '真珠这面板怎么样，接下来先养哪儿？'
 SUBJECT = {'scope': 'current_panel', 'subject_state': 'specified', 'character': '真珠'}
+
+
+@pytest.fixture(autouse=True)
+def deterministic_request_ids(monkeypatch):
+    # The unchanged whole-packet assertion must not collide with random UUID digits.
+    from plugin.plugins.hsr_companion.runtime import prepare_trace
+    sequence = count(int("a" * 30 + "00", 16))
+    monkeypatch.setattr(prepare_trace, "uuid4", lambda: SimpleNamespace(hex=f"{next(sequence):032x}"))
 
 
 def saved_roster():
