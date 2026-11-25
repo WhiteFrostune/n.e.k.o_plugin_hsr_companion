@@ -6,17 +6,26 @@ import copy
 import time
 from datetime import datetime, timezone
 
-from ..adapters.text_verification import identity_literal
+from ..adapters.native_text import ObservationSuperseded
+from ..adapters.text_verification import identity_literal, proof_key
 from .contracts import native_name_confirmed
 from .delivery_scope import coordinates
 from .fact_lifecycle import candidate_evidence
 from .live_refresh import _supports_kwarg, delivery_turn, fetch_recent_frame, frame_stamp, trace_refresh
 from .observation_store import ObservationSnapshot
-from .query_reuse import _SUPERSEDED, _remember_candidate, region_stamp, regions_changed, review_snapshot
+from .query_reuse import (
+    _SUPERSEDED,
+    LIVE_FRAME_MAX_AGE_SECONDS,
+    _remember_candidate,
+    region_change_detail,
+    region_stamp,
+    regions_changed,
+    review_snapshot,
+)
 from .rejection_trace import emit
 from .review_policy import checked_receipt
 from .timing_detail import phase, timed
-from .vision_scheduler import run_query_worker
+from .vision_scheduler import VisionWorkerBusy, run_query_worker
 from .vision_trace import bind_trace, record_candidate
 
 
@@ -62,6 +71,72 @@ def supports_current_character(owner, plan):
     fields = getattr(plan, "fields", frozenset())
     return bool(fields <= {"page", "characters", "attributes"} and fields & {"characters", "attributes"}
                 and callable(getattr(getattr(owner, "_vision", None), "read_character_detail", None)))
+
+
+class _ControlReviewTrace:
+    """Consume only existing verifier outcome enums, never its text/details."""
+    outcome = "unreadable"
+
+    def append(self, event):
+        if event.get("stage") == "proof_decision" and event.get("reason") == "high_confidence_contradiction":
+            self.outcome = "contradiction"
+        elif event.get("stage") == "proof_skipped" and self.outcome != "contradiction":
+            self.outcome = "skipped"
+
+
+async def _reread_controls(owner, latest, proofs, deadline, generation, epoch, failure):
+    if not proofs:
+        return "unreadable"
+    verifier = getattr(owner._vision, "verify_text_regions", None)
+    if not callable(verifier):
+        return "unavailable"
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        return "deadline"
+    trace, started, preparation = _ControlReviewTrace(), False, None
+
+    async def prepare():
+        nonlocal preparation
+        if not _live(owner, generation, epoch, failure):
+            preparation = "superseded"
+            return None
+        if time.monotonic() >= deadline:
+            preparation = "deadline"
+            return None
+        if not 0 <= time.time() - latest.timestamp <= LIVE_FRAME_MAX_AGE_SECONDS:
+            preparation = "frame_stale"
+            return None
+        return (latest.image_bytes, proofs), {}
+
+    def read(payload, selected, *, cancelled):
+        nonlocal started
+        started = True
+        return verifier(payload, selected, cancelled=cancelled, trace=trace)
+
+    try:
+        # Same scheduler/backend and original caller deadline; cancellation
+        # leaves any running native job retained by run_query_worker.
+        verified = await asyncio.wait_for(
+            run_query_worker(owner, read, deadline=deadline, prepare=prepare), remaining)
+    except TimeoutError:
+        return "deadline" if started else "not_scheduled"
+    except VisionWorkerBusy:
+        return "not_scheduled"
+    except ObservationSuperseded:
+        return "deadline" if time.monotonic() >= deadline else "superseded"
+    except (RuntimeError, ValueError, OSError, ImportError, TypeError):
+        return "error"
+    if preparation:
+        return preparation
+    if time.monotonic() >= deadline:
+        return "deadline"
+    if not _live(owner, generation, epoch, failure):
+        return "superseded"
+    if not isinstance(verified, (set, frozenset)):
+        return "unreadable"
+    if all(proof_key(p) in verified for p in proofs):
+        return "confirmed"
+    return "proof_limit" if len(proofs) > 16 and trace.outcome != "contradiction" else trace.outcome
 
 
 @timed("region_packet")
@@ -131,17 +206,42 @@ async def read_current_character(owner, plan, deadline):
             emit(owner, "Q10", "compact", "reject", "not_live")
             return None
         def controls_changed():
-            # Exact current/source bytes prove equality more strongly than a
-            # second decode of both control crops. Fresh capture, PID and all
-            # lifecycle guards above still apply; final review stays shared.
             if source.image_bytes == latest.image_bytes:
-                return False
-            return regions_changed(region_stamp(source.image_bytes, controls), region_stamp(latest.image_bytes, controls))
+                return False, None, []
+            before = region_stamp(source.image_bytes, controls)
+            after = region_stamp(latest.image_bytes, controls)
+            if not regions_changed(before, after):
+                return False, None, []
+            try:
+                detail = region_change_detail(before, after)
+            except Exception:
+                detail = None  # Optional explanation cannot change admission.
+            detail = detail or {"pixel_rule": "not_observed", "region_index": None}
+            old, new = {p[0]: p for p in before}, {p[0]: p for p in after}
+            changed_controls = []
+            for control in controls:
+                coords = coordinates(control)
+                if coords not in old or coords not in new or regions_changed((old[coords],), (new[coords],)):
+                    changed_controls.append({**control, "control": True})
+            index = detail["region_index"]
+            if index is not None and index < len(before):
+                detail["region_index"] = next((i for i, p in enumerate(controls)
+                                               if coordinates(p) == before[index][0]), None)
+            detail["region_purpose"] = "page_control"
+            # Deduplicate exactly as the existing producer verifier does.
+            proofs = list({proof_key(p): p for p in changed_controls}.values())
+            return True, detail, proofs
         with phase("region_controls", owner):
-            changed = await asyncio.to_thread(controls_changed)
+            changed, detail, changed_controls = await asyncio.to_thread(controls_changed)
         if changed:
-            emit(owner, "Q11", "compact", "reject", "controls_changed")
-            return None
+            try:
+                outcome = await _reread_controls(owner, latest, changed_controls, deadline, generation, epoch, failure)
+            except asyncio.CancelledError:
+                emit(owner, "Q11", "compact", "reject", "controls_changed", q11={**detail, "text_review": "cancelled"})
+                raise
+            if outcome != "confirmed":
+                emit(owner, "Q11", "compact", "reject", "controls_changed", q11={**detail, "text_review": outcome})
+                return None
         publish = getattr(owner, "_publish_scene_preview", None)
         if callable(publish):
             await publish({**analysis, "characters": [], "screen_facts": {"facts": [], "visible_text": []},
