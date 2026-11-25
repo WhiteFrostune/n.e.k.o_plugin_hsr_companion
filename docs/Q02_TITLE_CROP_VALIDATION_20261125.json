@@ -1,0 +1,207 @@
+{
+  "base": "211a843d0196e10a662615e0de1a7084b594cd54",
+  "seed": 11252026,
+  "offline_summary": [
+    {
+      "mode": "default",
+      "arm": "before",
+      "page_ok": 4,
+      "samples": 4,
+      "confirmed_names": 3,
+      "seconds_min": 0.290327,
+      "seconds_max": 0.402891,
+      "seconds_median": 0.3283395,
+      "initial_ocr_calls_each": [
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "mode": "default",
+      "arm": "after",
+      "page_ok": 4,
+      "samples": 4,
+      "confirmed_names": 3,
+      "seconds_min": 0.268597,
+      "seconds_max": 0.349902,
+      "seconds_median": 0.29911600000000005,
+      "initial_ocr_calls_each": [
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "mode": "full_cache",
+      "arm": "before",
+      "page_ok": 4,
+      "samples": 4,
+      "confirmed_names": 3,
+      "seconds_min": 0.200529,
+      "seconds_max": 0.228034,
+      "seconds_median": 0.21978350000000002,
+      "initial_ocr_calls_each": [
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "mode": "full_cache",
+      "arm": "after",
+      "page_ok": 4,
+      "samples": 4,
+      "confirmed_names": 3,
+      "seconds_min": 0.257777,
+      "seconds_max": 0.291061,
+      "seconds_median": 0.27960850000000004,
+      "initial_ocr_calls_each": [
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "mode": "missing_title_cache",
+      "arm": "before",
+      "page_ok": 0,
+      "samples": 4,
+      "confirmed_names": 0,
+      "seconds_min": 0.189017,
+      "seconds_max": 0.22018,
+      "seconds_median": 0.193332,
+      "initial_ocr_calls_each": [
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "mode": "missing_title_cache",
+      "arm": "after",
+      "page_ok": 4,
+      "samples": 4,
+      "confirmed_names": 3,
+      "seconds_min": 0.227178,
+      "seconds_max": 0.290504,
+      "seconds_median": 0.274503,
+      "initial_ocr_calls_each": [
+        1,
+        1,
+        1,
+        1
+      ]
+    }
+  ],
+  "real_frames_committed": false,
+  "live_acceptance": false,
+  "red": {
+    "tests": 21,
+    "failures": 15,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 6
+  },
+  "targeted": {
+    "tests": 315,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 315
+  },
+  "initial_full": {
+    "tests": 2865,
+    "failures": 2,
+    "errors": 0,
+    "skipped": 10,
+    "passed": 2853,
+    "seconds": 158.133
+  },
+  "full": {
+    "tests": 2865,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 10,
+    "passed": 2855,
+    "seconds": 159.479
+  },
+  "layer": {
+    "tests": 5,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 5,
+    "seconds": 0.819,
+    "baseline_entries": 0
+  },
+  "test_isolation_targeted": {
+    "tests": 46,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 46,
+    "seconds": 3.58
+  },
+  "ruff": {
+    "exit_code": 0,
+    "issues": 0
+  },
+  "legacy_test_assertions_changed": false,
+  "existing_test_input_probes": {
+    "base_211a843": [
+      {
+        "arm": "before",
+        "input": "id_collision",
+        "result": "reproduced_assertion_failure",
+        "file": "test_cross_page_panel_delivery_20261020.py",
+        "line": 145
+      },
+      {
+        "arm": "before",
+        "input": "same_timestamp",
+        "result": "reproduced_assertion_failure",
+        "file": "test_static_patrol.py",
+        "line": 156
+      }
+    ],
+    "candidate": [
+      {
+        "arm": "after",
+        "input": "id_collision",
+        "result": "reproduced_assertion_failure",
+        "file": "test_cross_page_panel_delivery_20261020.py",
+        "line": 145
+      },
+      {
+        "arm": "after",
+        "input": "same_timestamp",
+        "result": "reproduced_assertion_failure",
+        "file": "test_static_patrol.py",
+        "line": 156
+      }
+    ]
+  },
+  "release_check": {
+    "command": [
+      "uv",
+      "run",
+      "python",
+      "-m",
+      "plugin.neko_plugin_cli.cli",
+      "check",
+      "-r",
+      "hsr_companion"
+    ],
+    "neko_main": "392c0f030fe65fc86b1e8459689ddffde8c0b987",
+    "exit_code": 0,
+    "seconds": 175.438,
+    "log": "q02-release-check-20261125.txt",
+    "console_wrapper_note": "check exit 0; final console print hit GBK UnicodeEncodeError; complete sanitized UTF-8 log retained"
+  }
+}

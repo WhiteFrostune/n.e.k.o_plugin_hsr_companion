@@ -175,6 +175,48 @@ def _q11_detail(value):
             "text_review": _code(value.get("text_review"), Q11_REVIEW_RESULTS)}
 
 
+Q02_CROP_SOURCES = frozenset({"default", "cached", "not_observed"})
+Q02_SUBCONDITIONS = frozenset({"preview_empty", "wrong_page", "scene_unverified", "no_controls", "prepare_empty", "other"})
+_Q02_CONTEXT = ContextVar("hsr_compact_read_detail", default=None)
+
+
+def _q02_detail(value):
+    value = value if isinstance(value, dict) else {}
+    def count(v):
+        return v if type(v) is int and 0 <= v <= 65536 else None
+    return {"crop_source": _code(value.get("crop_source", "not_observed"), Q02_CROP_SOURCES),
+            "title_covered": value.get("title_covered") if type(value.get("title_covered")) is bool else None,
+            "native_boxes": count(value.get("native_boxes")), "mapped_boxes": count(value.get("mapped_boxes")),
+            "subcondition": _code(value.get("subcondition", "other"), Q02_SUBCONDITIONS)}
+
+
+@contextmanager
+def compact_read_trace():
+    """Request-local counters cross to_thread without touching reader results."""
+    value, token = {}, None
+    try:
+        token = _Q02_CONTEXT.set(value)
+    except Exception:
+        pass
+    try:
+        yield value
+    finally:
+        if token is not None:
+            try:
+                _Q02_CONTEXT.reset(token)
+            except Exception:
+                pass
+
+
+def note_compact_read(**values):
+    try:
+        target = _Q02_CONTEXT.get()
+        if isinstance(target, dict):
+            target.update(_q02_detail({**target, **values}))
+    except Exception:
+        pass  # Recording cannot affect recognition, cancellation or returns.
+
+
 def _id(value):
     return value if isinstance(value, str) and re.fullmatch(r"[a-f0-9]{32}", value) else None
 
@@ -212,7 +254,7 @@ def context(owner, request_id=None):
                 pass
 
 
-def _record(owner, branch, stage, outcome, reason, *, request_id=None, related_request_id=None, duration_ms=None, q11=None):
+def _record(owner, branch, stage, outcome, reason, *, request_id=None, related_request_id=None, duration_ms=None, q11=None, q02=None):
     active = _CONTEXT.get()
     if owner is None and active:
         owner = active[0]
@@ -247,6 +289,8 @@ def _record(owner, branch, stage, outcome, reason, *, request_id=None, related_r
     }
     if branch == "Q11" and isinstance(q11, dict):
         row["q11"] = _q11_detail(q11)
+    if branch == "Q02" and isinstance(q02, dict):
+        row["q02"] = _q02_detail(q02)
     row.update(
         {
             k: ids[k]
@@ -258,6 +302,7 @@ def _record(owner, branch, stage, outcome, reason, *, request_id=None, related_r
         state = _state(owner)
         state["unmapped_count"] += sum(v == "unmapped_code" for v in row.values())
         state["unmapped_count"] += sum(v == "unmapped_code" for v in row.get("q11", {}).values())
+        state["unmapped_count"] += sum(v == "unmapped_code" for v in row.get("q02", {}).values())
         # Only the same request/check/result can merge. Other checks interleaved
         # by polling do not evict the first refusal of this request.
         dependency = (
@@ -269,6 +314,7 @@ def _record(owner, branch, stage, outcome, reason, *, request_id=None, related_r
             "frame_seq",
             "verification_frame_seq",
             "q11",
+            "q02",
         )
         prior = next((e for e in reversed(state["events"]) if all(e.get(k) == row.get(k) for k in dependency)), None)
         if prior is not None and (prior["outcome"], prior["reason"]) != (row["outcome"], row["reason"]):
@@ -294,6 +340,8 @@ def _record(owner, branch, stage, outcome, reason, *, request_id=None, related_r
             if row["outcome"] != "allow":
                 summary["first_rejection"] = summary["first_rejection"] or copy.deepcopy(row)
                 summary["last_rejection"] = copy.deepcopy(row)
+            if row["branch_id"] == "Q02" and "q02" in row:
+                summary["last_q02"] = copy.deepcopy(row)
             while len(summaries) > REQUEST_LIMIT:
                 summaries.popitem(last=False)
 
@@ -355,6 +403,7 @@ def sanitize(value):
                 for k in ("count", "duration_ms", "event_seq", "job_id", "frame_seq", "verification_frame_seq")
             },
             **({"q11": _q11_detail(e["q11"])} if e.get("branch_id") == "Q11" and isinstance(e.get("q11"), dict) else {}),
+            **({"q02": _q02_detail(e["q02"])} if e.get("branch_id") == "Q02" and isinstance(e.get("q02"), dict) else {}),
             "first_at": stamp(e.get("first_at")),
             "last_at": stamp(e.get("last_at")),
         }
@@ -371,6 +420,8 @@ def sanitize(value):
                 "last_at": stamp(r.get("last_at")),
                 "event_count": number(r.get("event_count")),
                 **{k: event(r[k]) if r.get(k) else None for k in ("first_rejection", "last_rejection", "last_event")},
+                **({"last_q02": event(r["last_q02"])} if isinstance(r.get("last_q02"), dict)
+                   and r["last_q02"].get("branch_id") == "Q02" and isinstance(r["last_q02"].get("q02"), dict) else {}),
             }
             for r in list(value.get("requests") or [])[-REQUEST_LIMIT:]
             if isinstance(r, dict)

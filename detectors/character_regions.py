@@ -9,6 +9,7 @@ from PIL import Image, ImageOps
 from ..adapters.native_text import _box_value, check_current, read_region
 from ..adapters.text_verification import verify_name_regions
 from ..runtime.contracts import native_name_confirmed
+from ..runtime.rejection_trace import note_compact_read
 from ..runtime.screen_facts import extract_screen_facts
 from ..runtime.timing_detail import phase
 from .layout import detect_characters_in_page
@@ -28,17 +29,30 @@ def _valid(region):
 
 def _acquisition(image, layout):
     fallback = [dict(zip(_KEYS, a)) for a in _CONTROL_AREAS]
-    controls, names = fallback, []
+    controls, names, source = fallback, [], "default"
     if isinstance(layout, dict) and layout.get("source_size") == list(image.size):
         proposed = [p.get("region") for p in layout.get("page_controls", []) if isinstance(p, dict)]
         labels = [p.get("region") for p in layout.get("name_regions", []) if isinstance(p, dict)]
         if 0 < len(proposed) <= 8 and len(labels) <= 8 and all(_valid(p) for p in [*proposed, *labels]):
-            controls, names = proposed, labels
+            # Cached controls optimize acquisition, but cannot remove the
+            # current title required by the unchanged scene_preview gate.
+            controls, names, source = [fallback[0]], labels, "cached"
+            for area in proposed:
+                if any(a["left"] <= area["left"] and a["top"] <= area["top"]
+                       and a["right"] >= area["right"] and a["bottom"] >= area["bottom"] for a in controls):
+                    continue
+                controls.append(area)
+            if len(controls) > 8:
+                controls, source = fallback, "default"  # Keep the existing bound, not an arbitrary cached subset.
     # A prior narrow name box cannot hide another plausible subject in the same header.
     name = dict(zip(_KEYS, _NAME_AREA))
     for area in names:
         name = {"left": min(name["left"], area["left"]), "top": min(name["top"], area["top"]),
                 "right": max(name["right"], area["right"]), "bottom": max(name["bottom"], area["bottom"])}
+    title = fallback[0]
+    covered = any(a["left"] <= title["left"] and a["top"] <= title["top"]
+                  and a["right"] >= title["right"] and a["bottom"] >= title["bottom"] for a in controls)
+    note_compact_read(crop_source=source, title_covered=covered)
     return [("control", a) for a in controls] + [("name", name)]
 
 
@@ -84,8 +98,9 @@ def _compact_read(backend, image, layout, cancelled):
     else:
         _, values = backend.extract_text_with_boxes(atlas)
     check_current(cancelled)
-    boxes, names = [], []
+    boxes, names, native_count = [], [], 0
     for value in values:
+        native_count += 1
         box = _box_value(value)
         try:
             left,top,right,bottom = [float(box[k]) for k in _KEYS]
@@ -101,6 +116,7 @@ def _compact_read(backend, image, layout, cancelled):
                 if kind == "name":
                     names.append(mapped)
                 break
+    note_compact_read(native_boxes=native_count, mapped_boxes=len(boxes))
     return boxes,names,{"atlas_size":[width,height],"source_size":list(image.size),"crop_count":len(chips)}
 
 
@@ -115,8 +131,12 @@ def read_character_detail(backend, payload, catalog, *, fields, cancelled=None, 
         boxes,names,acquisition = _compact_read(backend,image,layout_regions,cancelled)
     with phase("region_page"):
         preview = scene_preview(boxes,width=image.width,height=image.height)
-    if (preview is None or preview["page"].get("page_type") != "character_detail"
-            or not preview["scene"].get("verified") or not preview["recognition"].get("scene_regions")):
+    failure = ("preview_empty" if preview is None else
+               "wrong_page" if preview["page"].get("page_type") != "character_detail" else
+               "scene_unverified" if not preview["scene"].get("verified") else
+               "no_controls" if not preview["recognition"].get("scene_regions") else None)
+    if failure:
+        note_compact_read(subcondition=failure)
         return None
     with phase("region_name_confirmation"):
         names,name_check = verify_name_regions(backend,image,names,catalog,cancelled=cancelled,single_line=True)
